@@ -1,0 +1,1229 @@
+<FrameModellerDocument>
+  <object classname="FrameModeller.Data.Node">
+    <Number>0</Number>
+    <Select>False</Select>
+    <Number>0</Number>
+    <Pos>0 0 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>1</Number>
+    <Select>False</Select>
+    <Number>1</Number>
+    <Pos>200 300 275</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>2</Number>
+    <Select>False</Select>
+    <Number>2</Number>
+    <Pos>200 250 312.5</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>3</Number>
+    <Select>False</Select>
+    <Number>3</Number>
+    <Pos>0 -200 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>4</Number>
+    <Select>False</Select>
+    <Number>4</Number>
+    <Pos>0 350 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>5</Number>
+    <Select>False</Select>
+    <Number>5</Number>
+    <Pos>200 350 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>6</Number>
+    <Select>False</Select>
+    <Number>6</Number>
+    <Pos>180 0 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>7</Number>
+    <Select>False</Select>
+    <Number>7</Number>
+    <Pos>0 500 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>8</Number>
+    <Select>False</Select>
+    <Number>8</Number>
+    <Pos>200 100 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>9</Number>
+    <Select>False</Select>
+    <Number>9</Number>
+    <Pos>200 400 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>10</Number>
+    <Select>False</Select>
+    <Number>10</Number>
+    <Pos>0 200 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>11</Number>
+    <Select>False</Select>
+    <Number>11</Number>
+    <Pos>90 0 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>12</Number>
+    <Select>False</Select>
+    <Number>12</Number>
+    <Pos>200 70 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>13</Number>
+    <Select>False</Select>
+    <Number>13</Number>
+    <Pos>200 250 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>14</Number>
+    <Select>False</Select>
+    <Number>14</Number>
+    <Pos>0 300 275</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>15</Number>
+    <Select>False</Select>
+    <Number>15</Number>
+    <Pos>200 -200 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>16</Number>
+    <Select>False</Select>
+    <Number>16</Number>
+    <Pos>120 200 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>17</Number>
+    <Select>False</Select>
+    <Number>17</Number>
+    <Pos>130 200 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>18</Number>
+    <Select>False</Select>
+    <Number>18</Number>
+    <Pos>0 400 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>19</Number>
+    <Select>False</Select>
+    <Number>19</Number>
+    <Pos>90 200 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>20</Number>
+    <Select>False</Select>
+    <Number>20</Number>
+    <Pos>200 0 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>21</Number>
+    <Select>False</Select>
+    <Number>21</Number>
+    <Pos>200 100 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>22</Number>
+    <Select>False</Select>
+    <Number>22</Number>
+    <Pos>0 100 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>23</Number>
+    <Select>False</Select>
+    <Number>23</Number>
+    <Pos>325 0 131.25</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>24</Number>
+    <Select>False</Select>
+    <Number>24</Number>
+    <Pos>-100 250 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>25</Number>
+    <Select>False</Select>
+    <Number>25</Number>
+    <Pos>200 -100 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>26</Number>
+    <Select>False</Select>
+    <Number>26</Number>
+    <Pos>300 350 100</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>27</Number>
+    <Select>False</Select>
+    <Number>27</Number>
+    <Pos>400 -200 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>28</Number>
+    <Select>False</Select>
+    <Number>28</Number>
+    <Pos>340 -200 186.6667</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>29</Number>
+    <Select>False</Select>
+    <Number>29</Number>
+    <Pos>300 -200 175</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>30</Number>
+    <Select>False</Select>
+    <Number>30</Number>
+    <Pos>200 100 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>31</Number>
+    <Select>False</Select>
+    <Number>31</Number>
+    <Pos>250 0 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>32</Number>
+    <Select>True</Select>
+    <Number>32</Number>
+    <Pos>500 -200 0</Pos>
+    <Select>True</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>33</Number>
+    <Select>False</Select>
+    <Number>33</Number>
+    <Pos>0 200 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>34</Number>
+    <Select>False</Select>
+    <Number>34</Number>
+    <Pos>0 250 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>35</Number>
+    <Select>False</Select>
+    <Number>35</Number>
+    <Pos>200 350 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>36</Number>
+    <Select>False</Select>
+    <Number>36</Number>
+    <Pos>-100 350 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>37</Number>
+    <Select>False</Select>
+    <Number>37</Number>
+    <Pos>100 400 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>38</Number>
+    <Select>False</Select>
+    <Number>38</Number>
+    <Pos>300 250 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>39</Number>
+    <Select>False</Select>
+    <Number>39</Number>
+    <Pos>0 500 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>40</Number>
+    <Select>False</Select>
+    <Number>40</Number>
+    <Pos>0 450 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>41</Number>
+    <Select>False</Select>
+    <Number>41</Number>
+    <Pos>0 -100 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>42</Number>
+    <Select>False</Select>
+    <Number>42</Number>
+    <Pos>-100 400 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>43</Number>
+    <Select>False</Select>
+    <Number>43</Number>
+    <Pos>0 -200 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>44</Number>
+    <Select>False</Select>
+    <Number>44</Number>
+    <Pos>200 200 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>45</Number>
+    <Select>False</Select>
+    <Number>45</Number>
+    <Pos>90 200 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>46</Number>
+    <Select>False</Select>
+    <Number>46</Number>
+    <Pos>180 0 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>47</Number>
+    <Select>False</Select>
+    <Number>47</Number>
+    <Pos>90 0 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>48</Number>
+    <Select>False</Select>
+    <Number>48</Number>
+    <Pos>-100 300 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>49</Number>
+    <Select>False</Select>
+    <Number>49</Number>
+    <Pos>200 350 237.5</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>50</Number>
+    <Select>False</Select>
+    <Number>50</Number>
+    <Pos>100 400 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>51</Number>
+    <Select>False</Select>
+    <Number>51</Number>
+    <Pos>200 250 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>52</Number>
+    <Select>False</Select>
+    <Number>52</Number>
+    <Pos>90 200 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>53</Number>
+    <Select>False</Select>
+    <Number>53</Number>
+    <Pos>200 200 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>54</Number>
+    <Select>False</Select>
+    <Number>54</Number>
+    <Pos>200 0 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>55</Number>
+    <Select>False</Select>
+    <Number>55</Number>
+    <Pos>0 -200 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>56</Number>
+    <Select>False</Select>
+    <Number>56</Number>
+    <Pos>120 200 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>57</Number>
+    <Select>False</Select>
+    <Number>57</Number>
+    <Pos>200 400 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>58</Number>
+    <Select>False</Select>
+    <Number>58</Number>
+    <Pos>0 350 237.5</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>59</Number>
+    <Select>False</Select>
+    <Number>59</Number>
+    <Pos>200 70 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>60</Number>
+    <Select>False</Select>
+    <Number>60</Number>
+    <Pos>200 300 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>61</Number>
+    <Select>False</Select>
+    <Number>61</Number>
+    <Pos>200 200 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>62</Number>
+    <Select>False</Select>
+    <Number>62</Number>
+    <Pos>180 0 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>63</Number>
+    <Select>False</Select>
+    <Number>63</Number>
+    <Pos>200 -200 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>64</Number>
+    <Select>False</Select>
+    <Number>64</Number>
+    <Pos>90 0 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>65</Number>
+    <Select>False</Select>
+    <Number>65</Number>
+    <Pos>200 -100 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>66</Number>
+    <Select>False</Select>
+    <Number>66</Number>
+    <Pos>200 -200 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>67</Number>
+    <Select>False</Select>
+    <Number>67</Number>
+    <Pos>200 300 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>68</Number>
+    <Select>False</Select>
+    <Number>68</Number>
+    <Pos>500 0 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>69</Number>
+    <Select>False</Select>
+    <Number>69</Number>
+    <Pos>200 0 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>70</Number>
+    <Select>False</Select>
+    <Number>70</Number>
+    <Pos>0 0 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>71</Number>
+    <Select>False</Select>
+    <Number>71</Number>
+    <Pos>0 -100 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>72</Number>
+    <Select>False</Select>
+    <Number>72</Number>
+    <Pos>0 200 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>73</Number>
+    <Select>False</Select>
+    <Number>73</Number>
+    <Pos>0 0 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>74</Number>
+    <Select>False</Select>
+    <Number>74</Number>
+    <Pos>0 100 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>75</Number>
+    <Select>False</Select>
+    <Number>75</Number>
+    <Pos>0 250 312.5</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>76</Number>
+    <Select>False</Select>
+    <Number>76</Number>
+    <Pos>120 200 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>77</Number>
+    <Select>False</Select>
+    <Number>77</Number>
+    <Pos>500 200 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>78</Number>
+    <Select>False</Select>
+    <Number>78</Number>
+    <Pos>300 -200 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>79</Number>
+    <Select>False</Select>
+    <Number>79</Number>
+    <Pos>0 300 200</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>80</Number>
+    <Select>False</Select>
+    <Number>80</Number>
+    <Pos>500 400 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>81</Number>
+    <Select>False</Select>
+    <Number>81</Number>
+    <Pos>500 250 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>82</Number>
+    <Select>False</Select>
+    <Number>82</Number>
+    <Pos>300 250 100</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>83</Number>
+    <Select>False</Select>
+    <Number>83</Number>
+    <Pos>130 200 350</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>84</Number>
+    <Select>False</Select>
+    <Number>84</Number>
+    <Pos>300 350 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>85</Number>
+    <Select>False</Select>
+    <Number>85</Number>
+    <Pos>400 -200 116.6667</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>86</Number>
+    <Select>False</Select>
+    <Number>86</Number>
+    <Pos>250 0 262.5</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Node">
+    <Number>87</Number>
+    <Select>False</Select>
+    <Number>87</Number>
+    <Pos>340 -200 0</Pos>
+    <Select>False</Select>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>0</Number>
+    <Select>False</Select>
+    <NodeI>18</NodeI>
+    <NodeJ>33</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>1</Number>
+    <Select>False</Select>
+    <NodeI>15</NodeI>
+    <NodeJ>20</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>2</Number>
+    <Select>False</Select>
+    <NodeI>70</NodeI>
+    <NodeJ>69</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>3</Number>
+    <Select>False</Select>
+    <NodeI>54</NodeI>
+    <NodeJ>77</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>4</Number>
+    <Select>False</Select>
+    <NodeI>18</NodeI>
+    <NodeJ>10</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>5</Number>
+    <Select>False</Select>
+    <NodeI>43</NodeI>
+    <NodeJ>15</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>6</Number>
+    <Select>False</Select>
+    <NodeI>0</NodeI>
+    <NodeJ>43</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>7</Number>
+    <Select>False</Select>
+    <NodeI>55</NodeI>
+    <NodeJ>66</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>8</Number>
+    <Select>False</Select>
+    <NodeI>20</NodeI>
+    <NodeJ>68</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>9</Number>
+    <Select>False</Select>
+    <NodeI>81</NodeI>
+    <NodeJ>51</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>10</Number>
+    <Select>False</Select>
+    <NodeI>10</NodeI>
+    <NodeJ>70</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>11</Number>
+    <Select>False</Select>
+    <NodeI>20</NodeI>
+    <NodeJ>53</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>12</Number>
+    <Select>False</Select>
+    <NodeI>69</NodeI>
+    <NodeJ>44</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>13</Number>
+    <Select>False</Select>
+    <NodeI>66</NodeI>
+    <NodeJ>69</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>14</Number>
+    <Select>False</Select>
+    <NodeI>61</NodeI>
+    <NodeJ>72</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>15</Number>
+    <Select>False</Select>
+    <NodeI>3</NodeI>
+    <NodeJ>73</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>16</Number>
+    <Select>False</Select>
+    <NodeI>53</NodeI>
+    <NodeJ>33</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>17</Number>
+    <Select>False</Select>
+    <NodeI>73</NodeI>
+    <NodeJ>54</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>18</Number>
+    <Select>False</Select>
+    <NodeI>77</NodeI>
+    <NodeJ>32</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>19</Number>
+    <Select>False</Select>
+    <NodeI>70</NodeI>
+    <NodeJ>55</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>20</Number>
+    <Select>False</Select>
+    <NodeI>44</NodeI>
+    <NodeJ>10</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>21</Number>
+    <Select>False</Select>
+    <NodeI>44</NodeI>
+    <NodeJ>9</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>22</Number>
+    <Select>False</Select>
+    <NodeI>9</NodeI>
+    <NodeJ>53</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>23</Number>
+    <Select>False</Select>
+    <NodeI>9</NodeI>
+    <NodeJ>18</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>24</Number>
+    <Select>False</Select>
+    <NodeI>3</NodeI>
+    <NodeJ>63</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>25</Number>
+    <Select>False</Select>
+    <NodeI>77</NodeI>
+    <NodeJ>53</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>26</Number>
+    <Select>False</Select>
+    <NodeI>0</NodeI>
+    <NodeJ>20</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>27</Number>
+    <Select>False</Select>
+    <NodeI>32</NodeI>
+    <NodeJ>15</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>28</Number>
+    <Select>False</Select>
+    <NodeI>54</NodeI>
+    <NodeJ>63</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>29</Number>
+    <Select>False</Select>
+    <NodeI>33</NodeI>
+    <NodeJ>0</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>30</Number>
+    <Select>False</Select>
+    <NodeI>33</NodeI>
+    <NodeJ>7</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Beam">
+    <Number>31</Number>
+    <Select>False</Select>
+    <NodeI>57</NodeI>
+    <NodeJ>39</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>32</Number>
+    <Select>False</Select>
+    <NodeI>44</NodeI>
+    <NodeJ>53</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>33</Number>
+    <Select>False</Select>
+    <NodeI>57</NodeI>
+    <NodeJ>9</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>34</Number>
+    <Select>False</Select>
+    <NodeI>17</NodeI>
+    <NodeJ>83</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>35</Number>
+    <Select>False</Select>
+    <NodeI>84</NodeI>
+    <NodeJ>26</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>36</Number>
+    <Select>False</Select>
+    <NodeI>34</NodeI>
+    <NodeJ>75</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>37</Number>
+    <Select>False</Select>
+    <NodeI>54</NodeI>
+    <NodeJ>69</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>38</Number>
+    <Select>False</Select>
+    <NodeI>35</NodeI>
+    <NodeJ>49</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>39</Number>
+    <Select>False</Select>
+    <NodeI>3</NodeI>
+    <NodeJ>55</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>40</Number>
+    <Select>False</Select>
+    <NodeI>70</NodeI>
+    <NodeJ>0</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>41</Number>
+    <Select>False</Select>
+    <NodeI>66</NodeI>
+    <NodeJ>15</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>42</Number>
+    <Select>False</Select>
+    <NodeI>69</NodeI>
+    <NodeJ>20</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>43</Number>
+    <Select>False</Select>
+    <NodeI>87</NodeI>
+    <NodeJ>28</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>44</Number>
+    <Select>False</Select>
+    <NodeI>55</NodeI>
+    <NodeJ>43</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>45</Number>
+    <Select>False</Select>
+    <NodeI>78</NodeI>
+    <NodeJ>29</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>46</Number>
+    <Select>False</Select>
+    <NodeI>51</NodeI>
+    <NodeJ>2</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>47</Number>
+    <Select>False</Select>
+    <NodeI>48</NodeI>
+    <NodeJ>79</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>48</Number>
+    <Select>False</Select>
+    <NodeI>36</NodeI>
+    <NodeJ>4</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>49</Number>
+    <Select>False</Select>
+    <NodeI>79</NodeI>
+    <NodeJ>14</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>50</Number>
+    <Select>False</Select>
+    <NodeI>60</NodeI>
+    <NodeJ>1</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>51</Number>
+    <Select>False</Select>
+    <NodeI>4</NodeI>
+    <NodeJ>58</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>52</Number>
+    <Select>False</Select>
+    <NodeI>38</NodeI>
+    <NodeJ>82</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>53</Number>
+    <Select>False</Select>
+    <NodeI>67</NodeI>
+    <NodeJ>60</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>54</Number>
+    <Select>False</Select>
+    <NodeI>39</NodeI>
+    <NodeJ>7</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>55</Number>
+    <Select>False</Select>
+    <NodeI>37</NodeI>
+    <NodeJ>50</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>56</Number>
+    <Select>False</Select>
+    <NodeI>74</NodeI>
+    <NodeJ>22</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>57</Number>
+    <Select>False</Select>
+    <NodeI>59</NodeI>
+    <NodeJ>12</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>58</Number>
+    <Select>False</Select>
+    <NodeI>24</NodeI>
+    <NodeJ>34</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>59</Number>
+    <Select>False</Select>
+    <NodeI>45</NodeI>
+    <NodeJ>19</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>60</Number>
+    <Select>False</Select>
+    <NodeI>5</NodeI>
+    <NodeJ>35</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>61</Number>
+    <Select>False</Select>
+    <NodeI>42</NodeI>
+    <NodeJ>18</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>62</Number>
+    <Select>False</Select>
+    <NodeI>63</NodeI>
+    <NodeJ>66</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>63</Number>
+    <Select>False</Select>
+    <NodeI>10</NodeI>
+    <NodeJ>33</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>64</Number>
+    <Select>False</Select>
+    <NodeI>21</NodeI>
+    <NodeJ>8</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>65</Number>
+    <Select>False</Select>
+    <NodeI>30</NodeI>
+    <NodeJ>21</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>66</Number>
+    <Select>False</Select>
+    <NodeI>13</NodeI>
+    <NodeJ>51</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>67</Number>
+    <Select>False</Select>
+    <NodeI>31</NodeI>
+    <NodeJ>86</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.Pillar">
+    <Number>68</Number>
+    <Select>False</Select>
+    <NodeI>27</NodeI>
+    <NodeJ>85</NodeJ>
+  </object>
+  <object classname="FrameModeller.Data.BearWall">
+    <Number>0</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>54</Node0>
+    <Node1>63</Node1>
+    <Node2>66</Node2>
+    <Node3>69</Node3>
+  </object>
+  <object classname="FrameModeller.Data.BearWall">
+    <Number>1</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>54</Node0>
+    <Node1>73</Node1>
+    <Node2>70</Node2>
+    <Node3>69</Node3>
+  </object>
+  <object classname="FrameModeller.Data.BearWall">
+    <Number>2</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>3</Node0>
+    <Node1>63</Node1>
+    <Node2>66</Node2>
+    <Node3>55</Node3>
+  </object>
+  <object classname="FrameModeller.Data.BearWall">
+    <Number>3</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>73</Node0>
+    <Node1>3</Node1>
+    <Node2>55</Node2>
+    <Node3>70</Node3>
+  </object>
+  <object classname="FrameModeller.Data.Wall">
+    <Number>4</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>69</Node0>
+    <Node1>66</Node1>
+    <Node2>15</Node2>
+    <Node3>20</Node3>
+    <Weight>0</Weight>
+  </object>
+  <object classname="FrameModeller.Data.Wall">
+    <Number>5</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>72</Node0>
+    <Node1>61</Node1>
+    <Node2>44</Node2>
+    <Node3>10</Node3>
+    <Weight>0</Weight>
+  </object>
+  <object classname="FrameModeller.Data.Wall">
+    <Number>6</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>70</Node0>
+    <Node1>55</Node1>
+    <Node2>43</Node2>
+    <Node3>0</Node3>
+    <Weight>0</Weight>
+  </object>
+  <object classname="FrameModeller.Data.Wall">
+    <Number>7</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>55</Node0>
+    <Node1>66</Node1>
+    <Node2>15</Node2>
+    <Node3>43</Node3>
+    <Weight>0</Weight>
+  </object>
+  <object classname="FrameModeller.Data.Wall">
+    <Number>8</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>61</Node0>
+    <Node1>54</Node1>
+    <Node2>69</Node2>
+    <Node3>44</Node3>
+    <Weight>0</Weight>
+  </object>
+  <object classname="FrameModeller.Data.Floor">
+    <Number>9</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>70</Node0>
+    <Node1>69</Node1>
+    <Node2>44</Node2>
+    <Node3>10</Node3>
+    <Weight>0</Weight>
+    <Direction>X</Direction>
+  </object>
+  <object classname="FrameModeller.Data.Floor">
+    <Number>10</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>54</Node0>
+    <Node1>68</Node1>
+    <Node2>77</Node2>
+    <Node3>61</Node3>
+    <Weight>0</Weight>
+    <Direction>X</Direction>
+  </object>
+  <object classname="FrameModeller.Data.Floor">
+    <Number>11</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>72</Node0>
+    <Node1>61</Node1>
+    <Node2>67</Node2>
+    <Node3>48</Node3>
+    <Weight>0</Weight>
+    <Direction>X</Direction>
+  </object>
+  <object classname="FrameModeller.Data.Floor">
+    <Number>12</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>43</Node0>
+    <Node1>15</Node1>
+    <Node2>20</Node2>
+    <Node3>0</Node3>
+    <Weight>0</Weight>
+    <Direction>X</Direction>
+  </object>
+  <object classname="FrameModeller.Data.Floor">
+    <Number>13</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>0</Node0>
+    <Node1>20</Node1>
+    <Node2>53</Node2>
+    <Node3>33</Node3>
+    <Weight>0</Weight>
+    <Direction>X</Direction>
+  </object>
+  <object classname="FrameModeller.Data.Floor">
+    <Number>14</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>10</Node0>
+    <Node1>44</Node1>
+    <Node2>9</Node2>
+    <Node3>18</Node3>
+    <Weight>0</Weight>
+    <Direction>X</Direction>
+  </object>
+  <object classname="FrameModeller.Data.Floor">
+    <Number>15</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>55</Node0>
+    <Node1>66</Node1>
+    <Node2>69</Node2>
+    <Node3>70</Node3>
+    <Weight>0</Weight>
+    <Direction>X</Direction>
+  </object>
+  <object classname="FrameModeller.Data.Floor">
+    <Number>16</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>61</Node0>
+    <Node1>77</Node1>
+    <Node2>80</Node2>
+    <Node3>57</Node3>
+    <Weight>0</Weight>
+    <Direction>X</Direction>
+  </object>
+  <object classname="FrameModeller.Data.Floor">
+    <Number>17</Number>
+    <Select>False</Select>
+    <NodeCount>4</NodeCount>
+    <Node0>48</Node0>
+    <Node1>67</Node1>
+    <Node2>57</Node2>
+    <Node3>42</Node3>
+    <Weight>0</Weight>
+    <Direction>X</Direction>
+  </object>
+  <object classname="FrameModeller.UI.Layer">
+    <Name>新規レイヤー</Name>
+    <PosZ>0</PosZ>
+  </object>
+  <object classname="FrameModeller.UI.Layer">
+    <Name>新規レイヤー</Name>
+    <PosZ>200</PosZ>
+  </object>
+  <object classname="FrameModeller.UI.Layer">
+    <Name>新規レイヤー</Name>
+    <PosZ>350</PosZ>
+  </object>
+</FrameModellerDocument>

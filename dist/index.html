@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FrameModeler Web</title>
+  <script type="module" crossorigin src="./assets/index-BIfhyyo3.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-CImKqVgk.css">
+</head>
+<body>
+  <div id="app">
+    <!-- ツールバー -->
+    <div id="toolbar">
+      <div class="toolbar-group">
+        <button id="btn-new" title="新規作成">新規</button>
+        <button id="btn-open" title="開く">開く</button>
+        <button id="btn-save" title="保存">保存</button>
+      </div>
+      <div class="toolbar-separator"></div>
+      <div class="toolbar-group">
+        <button id="btn-select" class="tool-btn active" title="選択">選択</button>
+        <button id="btn-move" class="tool-btn" title="移動">移動</button>
+        <button id="btn-add-node" class="tool-btn" title="節点追加">節点</button>
+        <button id="btn-add-beam" class="tool-btn" title="梁追加">梁</button>
+        <button id="btn-add-pillar" class="tool-btn" title="柱追加">柱</button>
+        <button id="btn-add-floor" class="tool-btn" title="床追加">床</button>
+        <button id="btn-add-wall" class="tool-btn" title="壁追加">壁</button>
+        <button id="btn-add-bearwall" class="tool-btn" title="耐力壁追加">耐力壁</button>
+      </div>
+      <div class="toolbar-separator"></div>
+      <div class="toolbar-group">
+        <label><input type="checkbox" id="chk-grid" checked /> グリッド</label>
+        <label><input type="checkbox" id="chk-snap" checked /> スナップ</label>
+        <label><input type="checkbox" id="chk-3d" /> 3D表示</label>
+      </div>
+      <div class="toolbar-group">
+        <label>グリッド幅: <input type="number" id="input-grid-width" value="100" min="5" step="10" /></label>
+        <label>スナップ幅: <input type="number" id="input-snap-width" value="10" min="1" step="5" /></label>
+      </div>
+      <div class="toolbar-group">
+        <button id="btn-delete" title="選択要素を削除">削除</button>
+      </div>
+    </div>
+
+    <!-- メインコンテンツ -->
+    <div id="main-content">
+      <!-- レイヤーパネル -->
+      <div id="layer-panel">
+        <div id="layer-header">
+          <span>レイヤー</span>
+          <button id="btn-add-layer" title="レイヤー追加">+</button>
+          <button id="btn-remove-layer" title="レイヤー削除">-</button>
+        </div>
+        <ul id="layer-list"></ul>
+      </div>
+
+      <!-- CADビュー -->
+      <div id="cad-view-container">
+        <canvas id="cad-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- ステータスバー -->
+    <div id="status-bar">
+      <span id="status-coord">(0.00, 0.00, 0.00)</span>
+      <span id="status-info"></span>
+    </div>
+  </div>
+
+  <!-- ファイル入力（非表示） -->
+  <input type="file" id="file-input" accept=".xml" style="display:none" />
+
+</body>
+</html>
