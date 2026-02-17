@@ -1,4 +1,5 @@
 import { Layer } from '../Layer';
+import { t } from '../../i18n';
 import {
   createModalOverlay, createDialogBox, addFormRow, addButtonRow,
   showDialog, closeDialog,
@@ -7,10 +8,10 @@ import {
 /** レイヤー追加/編集ダイアログ */
 export async function showLayerDialog(layer?: Layer): Promise<Layer | null> {
   const overlay = createModalOverlay();
-  const box = createDialogBox(layer ? 'レイヤー編集' : 'レイヤー追加');
+  const box = createDialogBox(layer ? t('dialog.layerEdit') : t('dialog.layerAdd'));
 
-  const inputName = addFormRow(box, '名前', 'text', layer?.name ?? '新規レイヤー');
-  const inputPosZ = addFormRow(box, 'Z位置', 'number', String(layer?.posZ ?? 0));
+  const inputName = addFormRow(box, t('name'), 'text', layer?.name ?? t('msg.defaultLayerName'));
+  const inputPosZ = addFormRow(box, t('zPosition'), 'number', String(layer?.posZ ?? 0));
 
   const { okBtn, cancelBtn } = addButtonRow(box);
   overlay.appendChild(box);
@@ -22,7 +23,7 @@ export async function showLayerDialog(layer?: Layer): Promise<Layer | null> {
   okBtn.addEventListener('click', () => {
     const posZ = parseFloat(inputPosZ.value);
     if (!isNaN(posZ)) {
-      result = new Layer(posZ, inputName.value || '新規レイヤー');
+      result = new Layer(posZ, inputName.value || t('msg.defaultLayerName'));
       closeDialog(overlay);
       resolve(true);
     }

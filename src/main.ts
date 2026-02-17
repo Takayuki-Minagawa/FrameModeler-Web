@@ -21,12 +21,52 @@ import { showNodeDialog } from './ui/dialogs/NodeDialog';
 import { showMemberDialog } from './ui/dialogs/MemberDialog';
 import { showPlaneDialog } from './ui/dialogs/PlaneDialog';
 import { showLayerDialog } from './ui/dialogs/LayerDialog';
+import { showHelpDialog } from './ui/dialogs/HelpDialog';
+import { t, initI18n, toggleLocale, getLocale, setOnLocaleChanged } from './i18n';
+import { APP_VERSION } from './version';
+
+// ========== テーマ管理 ==========
+
+const THEME_KEY = 'framemodeler-theme';
+
+function initTheme(): void {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved === 'dark') {
+    document.documentElement.dataset.theme = 'dark';
+  }
+  updateThemeButton();
+}
+
+function toggleTheme(): void {
+  const isDark = document.documentElement.dataset.theme === 'dark';
+  if (isDark) {
+    delete document.documentElement.dataset.theme;
+    localStorage.removeItem(THEME_KEY);
+  } else {
+    document.documentElement.dataset.theme = 'dark';
+    localStorage.setItem(THEME_KEY, 'dark');
+  }
+  updateThemeButton();
+}
+
+function updateThemeButton(): void {
+  const btn = document.getElementById('btn-theme');
+  if (btn) {
+    const isDark = document.documentElement.dataset.theme === 'dark';
+    btn.textContent = isDark ? '\u2600' : '\u263E';
+  }
+}
 
 // ========== アプリケーション初期化 ==========
 
 const doc = Document.instance;
 const canvas = document.getElementById('cad-canvas') as HTMLCanvasElement;
 const cadView = new CadView(canvas);
+
+// テーマ・i18n 初期化
+initTheme();
+initI18n();
+updateLangButton();
 
 // ========== ダイアログ表示関数 ==========
 
@@ -118,7 +158,7 @@ for (const id of toolBtnIds) {
 
 // 新規ボタン
 document.getElementById('btn-new')?.addEventListener('click', () => {
-  if (confirm('現在のデータを破棄して新規作成しますか？')) {
+  if (confirm(t('msg.confirmNew'))) {
     doc.init();
     doc.filename = '';
     updateLayerList();
@@ -145,7 +185,7 @@ fileInput.addEventListener('change', () => {
       cadView.render();
       updateStatusInfo();
     } catch (e) {
-      alert('ファイル読込エラー: ' + (e as Error).message);
+      alert(t('msg.fileError') + (e as Error).message);
     }
   };
   reader.readAsText(file);
@@ -187,6 +227,34 @@ document.getElementById('btn-delete')?.addEventListener('click', () => {
   updateStatusInfo();
 });
 
+// ヘルプボタン
+document.getElementById('btn-help')?.addEventListener('click', () => {
+  showHelpDialog();
+});
+
+// テーマ切替ボタン
+document.getElementById('btn-theme')?.addEventListener('click', () => {
+  toggleTheme();
+});
+
+// 言語切替ボタン
+document.getElementById('btn-lang')?.addEventListener('click', () => {
+  toggleLocale();
+  updateLangButton();
+});
+
+function updateLangButton(): void {
+  const btn = document.getElementById('btn-lang');
+  if (btn) {
+    btn.textContent = getLocale() === 'ja' ? 'EN' : 'JA';
+  }
+}
+
+// 言語変更時のコールバック
+setOnLocaleChanged(() => {
+  updateLayerList();
+});
+
 // ========== チェックボックス ==========
 
 const chkGrid = document.getElementById('chk-grid') as HTMLInputElement;
@@ -225,7 +293,7 @@ document.getElementById('btn-add-layer')?.addEventListener('click', async () => 
   const layer = await showLayerDialog();
   if (layer) {
     if (!doc.addLayer(layer)) {
-      alert('同一Z位置のレイヤーが既に存在します');
+      alert(t('msg.duplicateLayer'));
     } else {
       doc.shownLayer = layer;
       updateLayerList();
@@ -250,8 +318,11 @@ doc.onLayerChanged = () => {
 
 // ========== ステータスバー ==========
 
+const statusVersion = document.getElementById('status-version')!;
 const statusCoord = document.getElementById('status-coord')!;
 const statusInfo = document.getElementById('status-info')!;
+
+statusVersion.textContent = `Ver.${APP_VERSION}`;
 
 cadView.onMouseMove = (pos) => {
   statusCoord.textContent = `(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`;

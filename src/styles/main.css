@@ -1,3 +1,55 @@
+/* ========== Theme Variables ========== */
+:root {
+  --bg-primary: #f0f0f0;
+  --bg-secondary: #f8f8f8;
+  --bg-tertiary: #e8e8e8;
+  --bg-canvas: #fff;
+  --text-primary: #222;
+  --text-secondary: #555;
+  --border-color: #ccc;
+  --border-light: #eee;
+  --btn-bg: #fff;
+  --btn-hover: #e0e8ff;
+  --btn-active: #b0c4ff;
+  --btn-active-border: #668;
+  --btn-border: #aaa;
+  --input-bg: #fff;
+  --modal-overlay: rgba(0, 0, 0, 0.3);
+  --modal-bg: #fff;
+  --modal-border: #888;
+  --modal-shadow: rgba(0, 0, 0, 0.3);
+  --primary-btn-bg: #4477cc;
+  --primary-btn-border: #336;
+  --primary-btn-text: #fff;
+  --link-color: #4477cc;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252525;
+  --bg-tertiary: #2d2d2d;
+  --bg-canvas: #1a1a1a;
+  --text-primary: #ddd;
+  --text-secondary: #999;
+  --border-color: #444;
+  --border-light: #333;
+  --btn-bg: #333;
+  --btn-hover: #3a4a6a;
+  --btn-active: #3a5599;
+  --btn-active-border: #88a;
+  --btn-border: #555;
+  --input-bg: #2a2a2a;
+  --modal-overlay: rgba(0, 0, 0, 0.6);
+  --modal-bg: #2a2a2a;
+  --modal-border: #555;
+  --modal-shadow: rgba(0, 0, 0, 0.5);
+  --primary-btn-bg: #3366aa;
+  --primary-btn-border: #558;
+  --primary-btn-text: #fff;
+  --link-color: #6699dd;
+}
+
+/* ========== Reset ========== */
 * {
   margin: 0;
   padding: 0;
@@ -10,6 +62,8 @@ html, body {
   overflow: hidden;
   font-family: "Segoe UI", "Meiryo", sans-serif;
   font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
 }
 
 #app {
@@ -19,14 +73,14 @@ html, body {
   height: 100%;
 }
 
-/* ツールバー */
+/* ========== Toolbar ========== */
 #toolbar {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  background: #f0f0f0;
-  border-bottom: 1px solid #ccc;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
   flex-wrap: wrap;
   min-height: 36px;
 }
@@ -40,26 +94,27 @@ html, body {
 .toolbar-separator {
   width: 1px;
   height: 24px;
-  background: #ccc;
+  background: var(--border-color);
   margin: 0 4px;
 }
 
 #toolbar button {
   padding: 4px 8px;
-  border: 1px solid #aaa;
-  background: #fff;
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--text-primary);
   cursor: pointer;
   font-size: 12px;
   border-radius: 3px;
 }
 
 #toolbar button:hover {
-  background: #e0e8ff;
+  background: var(--btn-hover);
 }
 
 #toolbar button.active {
-  background: #b0c4ff;
-  border-color: #668;
+  background: var(--btn-active);
+  border-color: var(--btn-active-border);
 }
 
 #toolbar label {
@@ -67,26 +122,31 @@ html, body {
   display: flex;
   align-items: center;
   gap: 2px;
+  color: var(--text-primary);
 }
 
 #toolbar input[type="number"] {
   width: 60px;
   padding: 2px 4px;
   font-size: 12px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--btn-border);
+  border-radius: 2px;
 }
 
-/* メインコンテンツ */
+/* ========== Main Content ========== */
 #main-content {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
 
-/* レイヤーパネル */
+/* ========== Layer Panel ========== */
 #layer-panel {
   width: 160px;
-  background: #f8f8f8;
-  border-right: 1px solid #ccc;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
 }
@@ -96,8 +156,8 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 4px 8px;
-  background: #e8e8e8;
-  border-bottom: 1px solid #ccc;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
   font-weight: bold;
   font-size: 12px;
 }
@@ -105,8 +165,9 @@ html, body {
 #layer-header button {
   padding: 0 6px;
   font-size: 14px;
-  border: 1px solid #aaa;
-  background: #fff;
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--text-primary);
   cursor: pointer;
   border-radius: 3px;
   line-height: 1.4;
@@ -122,25 +183,25 @@ html, body {
 #layer-list li {
   padding: 6px 8px;
   cursor: pointer;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-light);
   font-size: 12px;
 }
 
 #layer-list li:hover {
-  background: #e0e8ff;
+  background: var(--btn-hover);
 }
 
 #layer-list li.active {
-  background: #b0c4ff;
+  background: var(--btn-active);
   font-weight: bold;
 }
 
-/* CADビュー */
+/* ========== CAD View ========== */
 #cad-view-container {
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: #fff;
+  background: var(--bg-canvas);
 }
 
 #cad-canvas {
@@ -149,26 +210,27 @@ html, body {
   height: 100%;
 }
 
-/* ステータスバー */
+/* ========== Status Bar ========== */
 #status-bar {
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 2px 8px;
-  background: #f0f0f0;
-  border-top: 1px solid #ccc;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-color);
   font-size: 12px;
   min-height: 22px;
+  color: var(--text-secondary);
 }
 
-/* ダイアログ (モーダル) */
+/* ========== Modal Dialog ========== */
 .modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--modal-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -176,12 +238,13 @@ html, body {
 }
 
 .modal-dialog {
-  background: #fff;
-  border: 1px solid #888;
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
   border-radius: 4px;
   padding: 16px;
   min-width: 280px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px var(--modal-shadow);
+  color: var(--text-primary);
 }
 
 .modal-dialog h3 {
@@ -206,6 +269,10 @@ html, body {
   flex: 1;
   padding: 4px;
   font-size: 12px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--btn-border);
+  border-radius: 2px;
 }
 
 .modal-dialog .button-row {
@@ -218,14 +285,61 @@ html, body {
 .modal-dialog button {
   padding: 4px 16px;
   font-size: 12px;
-  border: 1px solid #aaa;
-  background: #f0f0f0;
+  border: 1px solid var(--btn-border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
   cursor: pointer;
   border-radius: 3px;
 }
 
 .modal-dialog button.primary {
-  background: #4477cc;
-  color: #fff;
-  border-color: #336;
+  background: var(--primary-btn-bg);
+  color: var(--primary-btn-text);
+  border-color: var(--primary-btn-border);
+}
+
+/* ========== Help Dialog ========== */
+.help-content {
+  max-width: 520px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.help-content h4 {
+  margin-top: 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 4px;
+}
+
+.help-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.help-content th,
+.help-content td {
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  text-align: left;
+  vertical-align: top;
+}
+
+.help-content th {
+  background: var(--bg-tertiary);
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.help-content td {
+  white-space: pre-line;
+}
+
+.help-content p {
+  font-size: 12px;
+  white-space: pre-line;
+  margin-bottom: 8px;
 }

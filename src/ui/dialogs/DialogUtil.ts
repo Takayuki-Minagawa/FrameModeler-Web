@@ -1,4 +1,5 @@
 /** モーダルダイアログのベースユーティリティ */
+import { t } from '../../i18n';
 
 export interface DialogResult {
   ok: boolean;
@@ -69,11 +70,11 @@ export function addButtonRow(container: HTMLElement): { okBtn: HTMLButtonElement
   row.className = 'button-row';
 
   const cancelBtn = document.createElement('button');
-  cancelBtn.textContent = 'キャンセル';
+  cancelBtn.textContent = t('cancel');
   row.appendChild(cancelBtn);
 
   const okBtn = document.createElement('button');
-  okBtn.textContent = 'OK';
+  okBtn.textContent = t('ok');
   okBtn.className = 'primary';
   row.appendChild(okBtn);
 

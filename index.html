@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FrameModeler Web</title>
+  <title>FrameModeler Web v1.0.0</title>
+  <link rel="icon" type="image/svg+xml" href="/public/favicon.svg" />
   <link rel="stylesheet" href="/src/styles/main.css" />
 </head>
 <body>
@@ -11,33 +12,39 @@
     <!-- ツールバー -->
     <div id="toolbar">
       <div class="toolbar-group">
-        <button id="btn-new" title="新規作成">新規</button>
-        <button id="btn-open" title="開く">開く</button>
-        <button id="btn-save" title="保存">保存</button>
+        <button id="btn-new" data-i18n="new" data-i18n-title="title.new">新規</button>
+        <button id="btn-open" data-i18n="open" data-i18n-title="title.open">開く</button>
+        <button id="btn-save" data-i18n="save" data-i18n-title="title.save">保存</button>
       </div>
       <div class="toolbar-separator"></div>
       <div class="toolbar-group">
-        <button id="btn-select" class="tool-btn active" title="選択">選択</button>
-        <button id="btn-move" class="tool-btn" title="移動">移動</button>
-        <button id="btn-add-node" class="tool-btn" title="節点追加">節点</button>
-        <button id="btn-add-beam" class="tool-btn" title="梁追加">梁</button>
-        <button id="btn-add-pillar" class="tool-btn" title="柱追加">柱</button>
-        <button id="btn-add-floor" class="tool-btn" title="床追加">床</button>
-        <button id="btn-add-wall" class="tool-btn" title="壁追加">壁</button>
-        <button id="btn-add-bearwall" class="tool-btn" title="耐力壁追加">耐力壁</button>
+        <button id="btn-select" class="tool-btn active" data-i18n="select" data-i18n-title="title.select">選択</button>
+        <button id="btn-move" class="tool-btn" data-i18n="move" data-i18n-title="title.move">移動</button>
+        <button id="btn-add-node" class="tool-btn" data-i18n="node" data-i18n-title="title.node">節点</button>
+        <button id="btn-add-beam" class="tool-btn" data-i18n="beam" data-i18n-title="title.beam">梁</button>
+        <button id="btn-add-pillar" class="tool-btn" data-i18n="pillar" data-i18n-title="title.pillar">柱</button>
+        <button id="btn-add-floor" class="tool-btn" data-i18n="floor" data-i18n-title="title.floor">床</button>
+        <button id="btn-add-wall" class="tool-btn" data-i18n="wall" data-i18n-title="title.wall">壁</button>
+        <button id="btn-add-bearwall" class="tool-btn" data-i18n="bearwall" data-i18n-title="title.bearwall">耐力壁</button>
       </div>
       <div class="toolbar-separator"></div>
       <div class="toolbar-group">
-        <label><input type="checkbox" id="chk-grid" checked /> グリッド</label>
-        <label><input type="checkbox" id="chk-snap" checked /> スナップ</label>
-        <label><input type="checkbox" id="chk-3d" /> 3D表示</label>
+        <label data-i18n-after="grid"><input type="checkbox" id="chk-grid" checked /> グリッド</label>
+        <label data-i18n-after="snap"><input type="checkbox" id="chk-snap" checked /> スナップ</label>
+        <label data-i18n-after="3d"><input type="checkbox" id="chk-3d" /> 3D表示</label>
       </div>
       <div class="toolbar-group">
-        <label>グリッド幅: <input type="number" id="input-grid-width" value="100" min="5" step="10" /></label>
-        <label>スナップ幅: <input type="number" id="input-snap-width" value="10" min="1" step="5" /></label>
+        <label data-i18n-label="gridWidth">グリッド幅: <input type="number" id="input-grid-width" value="100" min="5" step="10" /></label>
+        <label data-i18n-label="snapWidth">スナップ幅: <input type="number" id="input-snap-width" value="10" min="1" step="5" /></label>
       </div>
       <div class="toolbar-group">
-        <button id="btn-delete" title="選択要素を削除">削除</button>
+        <button id="btn-delete" data-i18n="delete" data-i18n-title="title.delete">削除</button>
+      </div>
+      <div class="toolbar-separator"></div>
+      <div class="toolbar-group">
+        <button id="btn-help" data-i18n-title="title.help">?</button>
+        <button id="btn-theme" data-i18n-title="title.theme">&#9790;</button>
+        <button id="btn-lang" data-i18n-title="title.lang">EN</button>
       </div>
     </div>
 
@@ -46,9 +53,9 @@
       <!-- レイヤーパネル -->
       <div id="layer-panel">
         <div id="layer-header">
-          <span>レイヤー</span>
-          <button id="btn-add-layer" title="レイヤー追加">+</button>
-          <button id="btn-remove-layer" title="レイヤー削除">-</button>
+          <span data-i18n="layer">レイヤー</span>
+          <button id="btn-add-layer" data-i18n-title="title.addLayer">+</button>
+          <button id="btn-remove-layer" data-i18n-title="title.removeLayer">-</button>
         </div>
         <ul id="layer-list"></ul>
       </div>
@@ -61,6 +68,7 @@
 
     <!-- ステータスバー -->
     <div id="status-bar">
+      <span id="status-version"></span>
       <span id="status-coord">(0.00, 0.00, 0.00)</span>
       <span id="status-info"></span>
     </div>

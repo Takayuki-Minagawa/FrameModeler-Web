@@ -2,6 +2,7 @@ import { Plane } from '../../data/Plane';
 import { Floor, FloorDirection } from '../../data/Floor';
 import { Wall } from '../../data/Wall';
 import { BearWall } from '../../data/BearWall';
+import { t } from '../../i18n';
 import {
   createModalOverlay, createDialogBox, addFormRow, addSelectRow, addButtonRow,
   showDialog, closeDialog,
@@ -11,10 +12,10 @@ import {
 export async function showPlaneDialog(plane: Plane): Promise<boolean> {
   const overlay = createModalOverlay();
 
-  let title = '面要素プロパティ';
-  if (plane instanceof Floor) title = '床プロパティ';
-  else if (plane instanceof Wall) title = '壁プロパティ';
-  else if (plane instanceof BearWall) title = '耐力壁プロパティ';
+  let title = t('dialog.planeProps');
+  if (plane instanceof Floor) title = t('dialog.floorProps');
+  else if (plane instanceof Wall) title = t('dialog.wallProps');
+  else if (plane instanceof BearWall) title = t('dialog.bearwallProps');
 
   const box = createDialogBox(title);
 
@@ -24,19 +25,19 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
     addFormRow(box, `Node${i}`, 'text', `${n.number} (${n.pos.toString()})`, true);
   }
 
-  const inputSection = addFormRow(box, '断面', 'text', plane.section);
+  const inputSection = addFormRow(box, t('section'), 'text', plane.section);
 
   // 床固有: 荷重、方向
   let inputWeight: HTMLInputElement | null = null;
   let selectDirection: HTMLSelectElement | null = null;
   if (plane instanceof Floor) {
-    inputWeight = addFormRow(box, '荷重', 'number', String(plane.weight));
-    selectDirection = addSelectRow(box, '方向', ['X', 'Y', 'XY'], plane.direction);
+    inputWeight = addFormRow(box, t('weight'), 'number', String(plane.weight));
+    selectDirection = addSelectRow(box, t('direction'), ['X', 'Y', 'XY'], plane.direction);
   }
 
   // 壁固有: 荷重
   if (plane instanceof Wall) {
-    inputWeight = addFormRow(box, '荷重', 'number', String(plane.weight));
+    inputWeight = addFormRow(box, t('weight'), 'number', String(plane.weight));
   }
 
   const { okBtn, cancelBtn } = addButtonRow(box);

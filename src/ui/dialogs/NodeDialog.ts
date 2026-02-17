@@ -1,5 +1,6 @@
 import { Node } from '../../data/Node';
 import { Point3D } from '../../math/Point3D';
+import { t } from '../../i18n';
 import {
   createModalOverlay, createDialogBox, addFormRow, addButtonRow,
   showDialog, closeDialog,
@@ -8,7 +9,7 @@ import {
 /** Node編集ダイアログ */
 export async function showNodeDialog(node: Node): Promise<boolean> {
   const overlay = createModalOverlay();
-  const box = createDialogBox('節点プロパティ');
+  const box = createDialogBox(t('dialog.nodeProps'));
 
   const inputX = addFormRow(box, 'X', 'number', String(node.pos.x));
   const inputY = addFormRow(box, 'Y', 'number', String(node.pos.y));
