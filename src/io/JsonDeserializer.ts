@@ -56,9 +56,14 @@ export interface JsonDocument {
 
 /** JSON文字列からDocumentにデータを読み込む */
 export function deserializeJson(jsonString: string): void {
-  const json: JsonDocument = JSON.parse(jsonString);
+  const parsedUnknown = JSON.parse(jsonString) as unknown;
+  if (!isRecord(parsedUnknown)) {
+    throw new Error('Invalid JSON document: expected object');
+  }
+
+  const parsed = parsedUnknown as Partial<JsonDocument>;
+  const json = normalizeDocument(parsed);
   const doc = Document.instance;
-  doc.init();
 
   // まずNodeを読み込む（他要素がNodeを参照するため）
   const tempNodes: Node[] = [];
@@ -120,6 +125,40 @@ export function deserializeJson(jsonString: string): void {
   const tempLayers: Layer[] = json.layers.map(jl => new Layer(jl.posZ, jl.name));
 
   doc.bulkLoad(allData, tempLayers);
+}
+
+function normalizeDocument(json: Partial<JsonDocument>): JsonDocument {
+  return {
+    nodes: ensureRequiredArray(json.nodes, 'nodes'),
+    beams: ensureArray(json.beams, 'beams'),
+    pillars: ensureArray(json.pillars, 'pillars'),
+    floors: ensureArray(json.floors, 'floors'),
+    walls: ensureArray(json.walls, 'walls'),
+    bearWalls: ensureArray(json.bearWalls, 'bearWalls'),
+    layers: ensureArray(json.layers, 'layers'),
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function ensureRequiredArray<T>(value: T[] | undefined, fieldName: string): T[] {
+  if (value === undefined) {
+    throw new Error(`Invalid JSON field '${fieldName}': required array`);
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`Invalid JSON field '${fieldName}': expected array`);
+  }
+  return value;
+}
+
+function ensureArray<T>(value: T[] | undefined, fieldName: string): T[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new Error(`Invalid JSON field '${fieldName}': expected array`);
+  }
+  return value;
 }
 
 function findNodeByNumber(nodes: Node[], num: number): Node | null {
