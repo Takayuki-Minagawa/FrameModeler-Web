@@ -6,8 +6,8 @@ import { Member } from './data/Member';
 import { Plane } from './data/Plane';
 import { CadView } from './ui/CadView';
 import { Layer } from './ui/Layer';
-import { deserializeXml } from './io/XmlDeserializer';
-import { downloadXml } from './io/XmlSerializer';
+import { deserializeJson } from './io/JsonDeserializer';
+import { downloadJson } from './io/JsonSerializer';
 import type { ICadMouseHandler } from './ui/handlers/ICadMouseHandler';
 import { SelectionHandler } from './ui/handlers/SelectionHandler';
 import { MoveNodeHandler } from './ui/handlers/MoveNodeHandler';
@@ -138,7 +138,7 @@ fileInput.addEventListener('change', () => {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      deserializeXml(reader.result as string);
+      deserializeJson(reader.result as string);
       doc.filename = file.name;
       updateLayerList();
       cadView.fitToScene();
@@ -156,8 +156,8 @@ fileInput.addEventListener('change', () => {
 
 // 保存ボタン
 document.getElementById('btn-save')?.addEventListener('click', () => {
-  const filename = doc.hasFileName ? doc.filename : 'model.xml';
-  downloadXml(filename);
+  const filename = doc.hasFileName ? doc.filename.replace(/\.xml$/i, '.json') : 'model.json';
+  downloadJson(filename);
 });
 
 // 削除ボタン

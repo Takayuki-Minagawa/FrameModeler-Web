@@ -10,7 +10,7 @@ README.mdに変換元C#の全アーキテクチャ、データ構造、XML形式
 - TypeScript + Vite
 - Three.js (WebGL 3D描画)
 - HTML + CSS (UIフレームワーク不使用)
-- XMLデータ形式 (DOMParser)
+- JSONデータ形式
 
 ## ビルドコマンド
 ```bash
@@ -26,7 +26,7 @@ src/
 ├── main.ts           # エントリポイント
 ├── data/             # データモデル (Document, Node, Beam, Pillar, Floor, Wall等)
 ├── math/             # Point3D, Point2D
-├── io/               # XML入出力
+├── io/               # JSON入出力
 ├── ui/               # CadView, CadRenderer, ハンドラ, ダイアログ
 │   ├── handlers/     # マウスハンドラ群
 │   └── dialogs/      # プロパティダイアログ
@@ -38,12 +38,11 @@ src/
 - Three.jsでもZ-upに設定: `camera.up.set(0, 0, 1)`
 
 ## テスト用サンプルデータ
-- `sample-data/pillar_test.xml` - 小規模 (19Node, 3Beam, 9Pillar, 2層)
-- `sample-data/test.xml` - 大規模 (88Node, 32Beam, 37Pillar, 壁/床あり, 3層)
+- `sample-data/pillar_test.json` - 小規模 (19Node, 3Beam, 9Pillar, 2層)
+- `sample-data/test.json` - 大規模 (88Node, 32Beam, 37Pillar, 壁/床あり, 3層)
 
 ## 実装上の重要ルール
 1. DocumentはシングルトンパターンでdataListを一元管理
 2. データ追加時は自動ソート→番号再割当
 3. Node削除前に参照チェック必須
-4. XMLの旧形式classname (FrameModeller.*) と新形式 (Ebi_FrameModeler.*) の両方に対応
-5. Point3Dの文字列形式は "x y z" スペース区切り
+4. Point3Dは {x, y, z} オブジェクト形式でJSON保存

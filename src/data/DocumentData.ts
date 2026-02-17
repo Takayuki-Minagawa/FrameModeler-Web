@@ -8,13 +8,13 @@ export abstract class DocumentData {
     return { removable: true, reason: '' };
   }
 
-  /** XML保存用: サブクラスでオーバーライド */
+  /** 保存用: サブクラスでオーバーライド */
   save(writer: (name: string, value: string) => void): void {
     writer('Number', String(this.number));
     writer('Select', String(this.select));
   }
 
-  /** XML読込用: サブクラスでオーバーライド */
+  /** 読込用: サブクラスでオーバーライド */
   load(reader: (name: string, defaultValue?: string) => string): void {
     this.number = parseInt(reader('Number', '0'));
     this.select = reader('Select', 'False') === 'True';
