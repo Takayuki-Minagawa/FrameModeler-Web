@@ -13,4 +13,12 @@ export abstract class DocumentData {
   isRemovable(): RemovableResult {
     return { removable: true, reason: '' };
   }
+
+  /**
+   * 同一型データ間の整列順。既定は順序なし(0)。
+   * 型固有の整列が必要なサブクラス(Node/Beam/Pillar/Floor)がオーバーライドする。
+   */
+  compareTo(_other: DocumentData): number {
+    return 0;
+  }
 }

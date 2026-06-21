@@ -13,11 +13,7 @@ export class AddBeamHandler implements ICadMouseHandler {
 
   onClick(view: CadView, pos: Point3D, _event: MouseEvent): void {
     const doc = Document.instance;
-    let node = doc.getNodeAt(pos);
-    if (!node) {
-      node = new Node(pos);
-      doc.add(node);
-    }
+    const node = doc.getOrCreateNode(pos);
 
     if (!this.prevNode) {
       this.prevNode = node;

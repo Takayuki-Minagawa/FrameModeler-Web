@@ -101,12 +101,8 @@ export class Document {
 
     if (idxA !== idxB) return idxA - idxB;
 
-    // 同じ型なら型固有のcompareTo
-    if (a instanceof Node && b instanceof Node) return a.compareTo(b);
-    if (a instanceof Beam && b instanceof Beam) return a.compareTo(b);
-    if (a instanceof Pillar && b instanceof Pillar) return a.compareTo(b);
-    if (a instanceof Floor && b instanceof Floor) return a.compareTo(b);
-    return 0;
+    // 同一型バケット内は型固有のcompareTo（未定義型は既定の0で安定）
+    return a.compareTo(b);
   }
 
   private assignNumbers(): void {
@@ -137,17 +133,21 @@ export class Document {
     return null;
   }
 
-  /** 直上のNodeを検索（柱配置用） */
-  getNodeAbove(p: Point3D): Node | null {
-    const abovePos = this.getPosAbove(p);
-    if (!abovePos) return null;
-
-    let node = this.getNodeAt(abovePos);
+  /** 指定座標のNodeを取得。無ければ生成して追加する */
+  getOrCreateNode(pos: Point3D): Node {
+    let node = this.getNodeAt(pos);
     if (!node) {
-      node = new Node(abovePos);
+      node = new Node(pos);
       this.add(node);
     }
     return node;
+  }
+
+  /** 直上のNodeを取得。位置が見つかれば（無ければ生成して）返す（柱配置用） */
+  getOrCreateNodeAbove(p: Point3D): Node | null {
+    const abovePos = this.getPosAbove(p);
+    if (!abovePos) return null;
+    return this.getOrCreateNode(abovePos);
   }
 
   /** 直上の位置を検索（Node or 部材交点） */
@@ -313,10 +313,7 @@ export class Document {
   /** Node削除可能チェック用: 参照元があるかチェック */
   checkNodeRemovable(node: Node): RemovableResult {
     for (const data of this.dataList) {
-      if (data instanceof Member && data.isReferring(node)) {
-        return { removable: false, reason: '他のデータから参照されているノードは削除できません' };
-      }
-      if (data instanceof Plane && data.isReferring(node)) {
+      if ((data instanceof Member || data instanceof Plane) && data.isReferring(node)) {
         return { removable: false, reason: '他のデータから参照されているノードは削除できません' };
       }
     }

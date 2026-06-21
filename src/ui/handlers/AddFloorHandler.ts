@@ -1,8 +1,7 @@
 import type { ICadMouseHandler } from './ICadMouseHandler';
 import type { CadView } from '../CadView';
 import { Document } from '../../data/Document';
-import { DocumentData } from '../../data/DocumentData';
-import { Node } from '../../data/Node';
+import type { DocumentData } from '../../data/DocumentData';
 import { Floor, FloorDirection } from '../../data/Floor';
 import { Point3D } from '../../math/Point3D';
 
@@ -19,15 +18,7 @@ export class AddFloorHandler implements ICadMouseHandler {
     } else {
       if (!pos.equals(this.prevPoint)) {
         const points = createRectPoints(pos, this.prevPoint);
-        const nodes: Node[] = [];
-        for (const p of points) {
-          let n = doc.getNodeAt(p);
-          if (!n) {
-            n = new Node(p);
-            doc.add(n);
-          }
-          nodes.push(n);
-        }
+        const nodes = points.map((p) => doc.getOrCreateNode(p));
 
         if (doc.getPlaneOf(nodes)) {
           alert('既に同一の床が存在します');
