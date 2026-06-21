@@ -1,20 +1,11 @@
 import { DocumentData, type RemovableResult } from './DocumentData';
 import { Node } from './Node';
 import { Member } from './Member';
-import { Beam } from './Beam';
-import { Pillar } from './Pillar';
 import { Plane } from './Plane';
-import { Floor } from './Floor';
-import { Wall } from './Wall';
-import { BearWall } from './BearWall';
 import { Point3D } from '../math/Point3D';
 import { Point2D } from '../math/Point2D';
 import { Layer } from '../ui/Layer';
-
-/** データ型の優先順位 */
-const TYPE_ORDER: Function[] = [
-  Node, Beam, Pillar, BearWall, Wall, Floor,
-];
+import { typeOrderIndex, categoryOf, CAD_ID_OFFSET, type NumberCategory } from './typeRegistry';
 
 export class Document {
   private static _instance: Document = new Document();
@@ -94,11 +85,8 @@ export class Document {
   }
 
   private static compareData(a: DocumentData, b: DocumentData): number {
-    const typeIndexA = TYPE_ORDER.findIndex(t => a instanceof t);
-    const typeIndexB = TYPE_ORDER.findIndex(t => b instanceof t);
-    const idxA = typeIndexA >= 0 ? typeIndexA : TYPE_ORDER.length;
-    const idxB = typeIndexB >= 0 ? typeIndexB : TYPE_ORDER.length;
-
+    const idxA = typeOrderIndex(a);
+    const idxB = typeOrderIndex(b);
     if (idxA !== idxB) return idxA - idxB;
 
     // 同一型バケット内は型固有のcompareTo（未定義型は既定の0で安定）
@@ -106,14 +94,10 @@ export class Document {
   }
 
   private assignNumbers(): void {
-    let nodeNum = 0;
-    let memberNum = 0;
-    let planeNum = 0;
-
+    const counters: Record<NumberCategory, number> = { node: 0, member: 0, plane: 0 };
     for (const data of this.dataList) {
-      if (data instanceof Node) data.number = nodeNum++;
-      else if (data instanceof Member) data.number = memberNum++;
-      else if (data instanceof Plane) data.number = planeNum++;
+      const category = categoryOf(data);
+      if (category) data.number = counters[category]++;
     }
   }
 
@@ -222,9 +206,9 @@ export class Document {
 
   // ========== CAD ID ==========
 
-  readonly nodeCadIdOffset = 0;
-  readonly memberCadIdOffset = 100000;
-  readonly planeCadIdOffset = 200000;
+  readonly nodeCadIdOffset = CAD_ID_OFFSET.node;
+  readonly memberCadIdOffset = CAD_ID_OFFSET.member;
+  readonly planeCadIdOffset = CAD_ID_OFFSET.plane;
 
   // ========== レイヤー ==========
 

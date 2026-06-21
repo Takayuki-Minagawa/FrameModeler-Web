@@ -18,7 +18,7 @@ interface JsonNode {
   select: boolean;
 }
 
-interface JsonMember {
+export interface JsonMember {
   number: number;
   nodeI: number;
   nodeJ: number;
