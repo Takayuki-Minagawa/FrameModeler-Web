@@ -1,84 +1,71 @@
-import type { ICadMouseHandler } from './ICadMouseHandler';
 import type { CadView } from '../CadView';
 import { Document } from '../../data/Document';
-import { DocumentData } from '../../data/DocumentData';
 import { Node } from '../../data/Node';
+import { Plane } from '../../data/Plane';
 import { Wall } from '../../data/Wall';
 import { Point3D } from '../../math/Point3D';
+import { TwoClickAddHandler } from './TwoClickAddHandler';
+import { createQuadPoints } from './geometry';
 
-/** 壁追加ハンドラ: 2クリックで下端2点→直上2点の四角形壁を生成 */
-export class AddWallHandler implements ICadMouseHandler {
-  private prevPoint: Point3D | null = null;
-  showDialog: ((data: DocumentData) => void) | null = null;
+/**
+ * 壁系（壁/耐力壁）追加ハンドラの基底:
+ * 2クリックで下端2点→直上2点の四角形を生成する。
+ * 生成クラスと重複時メッセージのみサブクラスで差し替える。
+ */
+export abstract class AddQuadPlaneHandler extends TwoClickAddHandler<Point3D> {
+  /** 生成する平面要素を返す */
+  protected abstract createPlane(nodes: Node[]): Plane;
+  /** 重複時の alert 文言 */
+  protected abstract duplicateMessage(): string;
 
-  onClick(view: CadView, pos: Point3D, _event: MouseEvent): void {
+  protected acquireAnchor(pos: Point3D): Point3D | null {
+    // 直上に何かあるか確認
+    if (Document.instance.getPosAbove(pos)) {
+      return pos.clone();
+    }
+    return null;
+  }
+
+  protected commit(anchor: Point3D, pos: Point3D): void {
     const doc = Document.instance;
+    if (!pos.toPointXY().equals(anchor.toPointXY())) {
+      const { points, aboveExists } = createQuadPoints(pos, anchor);
 
-    if (!this.prevPoint) {
-      // 直上に何かあるか確認
-      if (doc.getPosAbove(pos)) {
-        this.prevPoint = pos.clone();
-      }
-    } else {
-      if (!pos.toPointXY().equals(this.prevPoint.toPointXY())) {
-        const { points, aboveExists } = createQuadPoints(pos, this.prevPoint);
-
-        if (aboveExists) {
-          const nodes: Node[] = [];
-          for (const p of points) {
-            let n = doc.getNodeAt(p);
-            if (!n) {
-              n = new Node(p);
-              doc.add(n);
-            }
-            nodes.push(n);
+      if (aboveExists) {
+        const nodes: Node[] = [];
+        for (const p of points) {
+          let n = doc.getNodeAt(p);
+          if (!n) {
+            n = new Node(p);
+            doc.add(n);
           }
+          nodes.push(n);
+        }
 
-          if (doc.getPlaneOf(nodes)) {
-            alert('既に同一の壁が存在します');
-          } else {
-            const wall = new Wall(nodes);
-            doc.add(wall);
-            if (this.showDialog) this.showDialog(wall);
-          }
+        if (doc.getPlaneOf(nodes)) {
+          alert(this.duplicateMessage());
+        } else {
+          const plane = this.createPlane(nodes);
+          doc.add(plane);
+          if (this.showDialog) this.showDialog(plane);
         }
       }
-      this.prevPoint = null;
-      view.clearPreview();
     }
-    view.render();
   }
 
-  onDoubleClick(_view: CadView, _pos: Point3D, _event: MouseEvent): void {}
-
-  onMouseMove(view: CadView, pos: Point3D): void {
-    view.clearPreview();
-    if (this.prevPoint) {
-      const { points } = createQuadPoints(pos, this.prevPoint);
-      for (let i = 0; i < points.length; i++) {
-        const next = points[(i + 1) % points.length];
-        view.addPreviewLine(points[i], next, 0xff0000);
-      }
-    }
-    view.render();
+  protected drawPreview(view: CadView, anchor: Point3D, pos: Point3D): void {
+    const { points } = createQuadPoints(pos, anchor);
+    view.addPreviewPolygon(points, view.previewColor);
   }
-
-  draw(_view: CadView): void {}
 }
 
-function createQuadPoints(p: Point3D, q: Point3D): { points: Point3D[]; aboveExists: boolean } {
-  const doc = Document.instance;
-  const aboveP = doc.getPosAbove(p);
-  const aboveQ = doc.getPosAbove(q);
+/** 壁追加ハンドラ: 2クリックで下端2点→直上2点の四角形壁を生成 */
+export class AddWallHandler extends AddQuadPlaneHandler {
+  protected createPlane(nodes: Node[]): Plane {
+    return new Wall(nodes);
+  }
 
-  const aboveExists = aboveP !== null && aboveQ !== null;
-  return {
-    points: [
-      p,
-      q,
-      aboveQ ?? q,
-      aboveP ?? p,
-    ],
-    aboveExists,
-  };
+  protected duplicateMessage(): string {
+    return '既に同一の壁が存在します';
+  }
 }

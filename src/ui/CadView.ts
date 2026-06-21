@@ -412,6 +412,14 @@ export class CadView {
     this.previewGroup.add(new THREE.Points(geom, mat));
   }
 
+  /** 頂点列を閉ループとしてプレビュー線で描く（4辺ループ等の共通化用） */
+  addPreviewPolygon(points: Point3D[], color: number = this.palette.preview): void {
+    for (let i = 0; i < points.length; i++) {
+      const next = points[(i + 1) % points.length];
+      this.addPreviewLine(points[i], next, color);
+    }
+  }
+
   /** プレビュー用の現在パレット（ハンドラからの参照用） */
   get previewColor(): number { return this.palette.preview; }
   get selectionRectColor(): number { return this.palette.selectionRect; }

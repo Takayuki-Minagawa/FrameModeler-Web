@@ -7,7 +7,11 @@ import type { Point3D } from '../../math/Point3D';
 
 /** 柱追加ハンドラ: クリック位置の直上Nodeとの間に柱を生成 */
 export class AddPillarHandler implements ICadMouseHandler {
-  showDialog: ((data: DocumentData) => void) | null = null;
+  private showDialog: ((data: DocumentData) => void) | null = null;
+
+  setDialogCallback(cb: (data: DocumentData) => void): void {
+    this.showDialog = cb;
+  }
 
   onClick(view: CadView, pos: Point3D, _event: MouseEvent): void {
     const doc = Document.instance;

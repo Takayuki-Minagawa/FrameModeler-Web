@@ -1,37 +1,34 @@
-import type { ICadMouseHandler } from './ICadMouseHandler';
 import type { CadView } from '../CadView';
 import { Document } from '../../data/Document';
-import type { DocumentData } from '../../data/DocumentData';
 import { Floor, FloorDirection } from '../../data/Floor';
 import { Point3D } from '../../math/Point3D';
+import { TwoClickAddHandler } from './TwoClickAddHandler';
+import { createRectPoints } from './geometry';
 
 /** 床追加ハンドラ: 2クリック矩形で床を生成 */
-export class AddFloorHandler implements ICadMouseHandler {
-  private prevPoint: Point3D | null = null;
-  showDialog: ((data: DocumentData) => void) | null = null;
+export class AddFloorHandler extends TwoClickAddHandler<Point3D> {
+  protected acquireAnchor(pos: Point3D): Point3D {
+    return pos.clone();
+  }
 
-  onClick(view: CadView, pos: Point3D, _event: MouseEvent): void {
+  protected commit(anchor: Point3D, pos: Point3D): void {
     const doc = Document.instance;
+    if (!pos.equals(anchor)) {
+      const points = createRectPoints(pos, anchor);
+      const nodes = points.map((p) => doc.getOrCreateNode(p));
 
-    if (!this.prevPoint) {
-      this.prevPoint = pos.clone();
-    } else {
-      if (!pos.equals(this.prevPoint)) {
-        const points = createRectPoints(pos, this.prevPoint);
-        const nodes = points.map((p) => doc.getOrCreateNode(p));
-
-        if (doc.getPlaneOf(nodes)) {
-          alert('既に同一の床が存在します');
-        } else {
-          const floor = new Floor(nodes);
-          doc.add(floor);
-          if (this.showDialog) this.showDialog(floor);
-        }
+      if (doc.getPlaneOf(nodes)) {
+        alert('既に同一の床が存在します');
+      } else {
+        const floor = new Floor(nodes);
+        doc.add(floor);
+        if (this.showDialog) this.showDialog(floor);
       }
-      this.prevPoint = null;
-      view.clearPreview();
     }
-    view.render();
+  }
+
+  protected drawPreview(view: CadView, anchor: Point3D, pos: Point3D): void {
+    view.addPreviewPolygon(createRectPoints(pos, anchor), view.previewColor);
   }
 
   onDoubleClick(view: CadView, pos: Point3D, _event: MouseEvent): void {
@@ -41,30 +38,4 @@ export class AddFloorHandler implements ICadMouseHandler {
       view.render();
     }
   }
-
-  onMouseMove(view: CadView, pos: Point3D): void {
-    view.clearPreview();
-    if (this.prevPoint) {
-      const points = createRectPoints(pos, this.prevPoint);
-      for (let i = 0; i < points.length; i++) {
-        const next = points[(i + 1) % points.length];
-        view.addPreviewLine(points[i], next, 0xff0000);
-      }
-    }
-    view.render();
-  }
-
-  draw(_view: CadView): void {}
-}
-
-function createRectPoints(p: Point3D, q: Point3D): Point3D[] {
-  const min = Point3D.min(p, q);
-  const max = Point3D.max(p, q);
-  const z = (min.z + max.z) / 2;
-  return [
-    new Point3D(min.x, min.y, z),
-    new Point3D(max.x, min.y, z),
-    new Point3D(max.x, max.y, z),
-    new Point3D(min.x, max.y, z),
-  ];
 }

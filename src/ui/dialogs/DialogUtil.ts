@@ -1,10 +1,6 @@
 /** モーダルダイアログのベースユーティリティ */
 import { t } from '../../i18n';
 
-export interface DialogResult {
-  ok: boolean;
-}
-
 /** モーダルオーバーレイを作成 */
 export function createModalOverlay(): HTMLDivElement {
   const overlay = document.createElement('div');
@@ -82,16 +78,74 @@ export function addButtonRow(container: HTMLElement): { okBtn: HTMLButtonElement
   return { okBtn, cancelBtn };
 }
 
-/** ダイアログをPromiseとして表示 */
-export function showDialog(overlay: HTMLDivElement): { promise: Promise<boolean>; resolve: (ok: boolean) => void } {
-  let resolveFunc: (ok: boolean) => void;
+/**
+ * ESC・オーバーレイクリックで閉じられるモーダルとして overlay を表示する共通基盤。
+ * dismiss(result) は (a) ESCリスナ除去 (b) overlay除去 (c) resolve を必ずセットで行い、
+ * リスナ漏れ・Promise未解決リークを防ぐ。
+ */
+function showModalBase(
+  overlay: HTMLDivElement,
+  onDismiss?: (dismiss: (result: boolean) => void) => void,
+): { promise: Promise<boolean>; dismiss: (result: boolean) => void } {
+  let resolveFunc!: (result: boolean) => void;
+  let closed = false;
+
+  const onKeydown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') dismiss(false);
+  };
+
+  const dismiss = (result: boolean): void => {
+    if (closed) return;
+    closed = true;
+    document.removeEventListener('keydown', onKeydown);
+    overlay.remove();
+    resolveFunc(result);
+  };
+
   const promise = new Promise<boolean>((resolve) => {
     resolveFunc = resolve;
   });
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) dismiss(false);
+  });
+  document.addEventListener('keydown', onKeydown);
+
+  if (onDismiss) onDismiss(dismiss);
+
   document.body.appendChild(overlay);
-  return { promise, resolve: resolveFunc! };
+  return { promise, dismiss };
 }
 
-export function closeDialog(overlay: HTMLDivElement): void {
-  overlay.remove();
+/**
+ * OK/キャンセル付きモーダルダイアログの共通ライフサイクル。
+ * - overlay を document.body に append。
+ * - OKクリック時 onOk() が true を返したら dismiss(true)、false なら閉じない。
+ * - Cancelクリック / ESC / オーバーレイクリックで dismiss(false)。
+ * @returns OKで確定したら true、キャンセル/閉じたら false を解決する Promise。
+ */
+export function wireDialog(
+  overlay: HTMLDivElement,
+  okBtn: HTMLButtonElement,
+  cancelBtn: HTMLButtonElement,
+  onOk: () => boolean,
+): Promise<boolean> {
+  const { promise, dismiss } = showModalBase(overlay);
+
+  okBtn.addEventListener('click', () => {
+    if (onOk()) dismiss(true);
+  });
+  cancelBtn.addEventListener('click', () => dismiss(false));
+
+  return promise;
+}
+
+/**
+ * 閉じるボタンのみのモーダル（Help用）。
+ * 閉じるボタン / ESC / オーバーレイクリックで閉じる。
+ */
+export function showModal(overlay: HTMLDivElement, closeBtn: HTMLButtonElement): Promise<boolean> {
+  const { promise, dismiss } = showModalBase(overlay);
+  closeBtn.addEventListener('click', () => dismiss(false));
+  return promise;
 }

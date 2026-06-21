@@ -5,7 +5,7 @@ import { BearWall } from '../../data/BearWall';
 import { t } from '../../i18n';
 import {
   createModalOverlay, createDialogBox, addFormRow, addSelectRow, addButtonRow,
-  showDialog, closeDialog,
+  wireDialog,
 } from './DialogUtil';
 
 /** Plane（床/壁/耐力壁）編集ダイアログ */
@@ -43,9 +43,7 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
   const { okBtn, cancelBtn } = addButtonRow(box);
   overlay.appendChild(box);
 
-  const { promise, resolve } = showDialog(overlay);
-
-  okBtn.addEventListener('click', () => {
+  return wireDialog(overlay, okBtn, cancelBtn, () => {
     plane.section = inputSection.value;
 
     if (plane instanceof Floor) {
@@ -59,14 +57,6 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
       plane.weight = parseFloat(inputWeight.value) || 0;
     }
 
-    closeDialog(overlay);
-    resolve(true);
+    return true;
   });
-
-  cancelBtn.addEventListener('click', () => {
-    closeDialog(overlay);
-    resolve(false);
-  });
-
-  return promise;
 }

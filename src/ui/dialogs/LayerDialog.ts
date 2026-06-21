@@ -2,7 +2,7 @@ import { Layer } from '../Layer';
 import { t } from '../../i18n';
 import {
   createModalOverlay, createDialogBox, addFormRow, addButtonRow,
-  showDialog, closeDialog,
+  wireDialog,
 } from './DialogUtil';
 
 /** レイヤー追加/編集ダイアログ */
@@ -16,24 +16,14 @@ export async function showLayerDialog(layer?: Layer): Promise<Layer | null> {
   const { okBtn, cancelBtn } = addButtonRow(box);
   overlay.appendChild(box);
 
-  const { promise, resolve } = showDialog(overlay);
-
   let result: Layer | null = null;
 
-  okBtn.addEventListener('click', () => {
+  await wireDialog(overlay, okBtn, cancelBtn, () => {
     const posZ = parseFloat(inputPosZ.value);
-    if (!isNaN(posZ)) {
-      result = new Layer(posZ, inputName.value || t('msg.defaultLayerName'));
-      closeDialog(overlay);
-      resolve(true);
-    }
+    if (isNaN(posZ)) return false;
+    result = new Layer(posZ, inputName.value || t('msg.defaultLayerName'));
+    return true;
   });
 
-  cancelBtn.addEventListener('click', () => {
-    closeDialog(overlay);
-    resolve(false);
-  });
-
-  await promise;
   return result;
 }

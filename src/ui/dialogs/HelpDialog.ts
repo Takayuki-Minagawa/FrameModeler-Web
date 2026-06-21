@@ -1,6 +1,6 @@
 import { APP_VERSION } from '../../version';
 import { t, type MessageKey } from '../../i18n';
-import { createModalOverlay, createDialogBox, closeDialog } from './DialogUtil';
+import { createModalOverlay, createDialogBox, showModal } from './DialogUtil';
 
 export function showHelpDialog(): void {
   const overlay = createModalOverlay();
@@ -55,15 +55,11 @@ export function showHelpDialog(): void {
   const closeBtn = document.createElement('button');
   closeBtn.textContent = t('close');
   closeBtn.className = 'primary';
-  closeBtn.addEventListener('click', () => closeDialog(overlay));
   btnRow.appendChild(closeBtn);
   box.appendChild(btnRow);
 
   overlay.appendChild(box);
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeDialog(overlay);
-  });
-  document.body.appendChild(overlay);
+  showModal(overlay, closeBtn);
 }
 
 function createTable(rows: [MessageKey, MessageKey][]): HTMLTableElement {

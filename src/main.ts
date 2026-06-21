@@ -83,51 +83,24 @@ async function showDataDialog(data: DocumentData): Promise<void> {
 
 // ========== ハンドラ管理 ==========
 
+/** ツールIDごとのハンドラ生成関数 */
+const handlerFactories: Record<string, () => ICadMouseHandler> = {
+  'btn-select': () => new SelectionHandler(),
+  'btn-move': () => new MoveNodeHandler(),
+  'btn-add-node': () => new AddNodeHandler(),
+  'btn-add-beam': () => new AddBeamHandler(),
+  'btn-add-pillar': () => new AddPillarHandler(),
+  'btn-add-floor': () => new AddFloorHandler(),
+  'btn-add-wall': () => new AddWallHandler(),
+  'btn-add-bearwall': () => new AddBearWallHandler(),
+};
+
 function createHandler(id: string): ICadMouseHandler {
-  switch (id) {
-    case 'btn-select': {
-      const h = new SelectionHandler();
-      h.setDialogCallback(showDataDialog);
-      return h;
-    }
-    case 'btn-move': {
-      const h = new MoveNodeHandler();
-      h.setDialogCallback(showDataDialog);
-      return h;
-    }
-    case 'btn-add-node':
-      return new AddNodeHandler();
-    case 'btn-add-beam': {
-      const h = new AddBeamHandler();
-      h.showDialog = showDataDialog;
-      return h;
-    }
-    case 'btn-add-pillar': {
-      const h = new AddPillarHandler();
-      h.showDialog = showDataDialog;
-      return h;
-    }
-    case 'btn-add-floor': {
-      const h = new AddFloorHandler();
-      h.showDialog = showDataDialog;
-      return h;
-    }
-    case 'btn-add-wall': {
-      const h = new AddWallHandler();
-      h.showDialog = showDataDialog;
-      return h;
-    }
-    case 'btn-add-bearwall': {
-      const h = new AddBearWallHandler();
-      h.showDialog = showDataDialog;
-      return h;
-    }
-    default: {
-      const h = new SelectionHandler();
-      h.setDialogCallback(showDataDialog);
-      return h;
-    }
-  }
+  const factory = handlerFactories[id] ?? handlerFactories['btn-select'];
+  const handler = factory();
+  // ダイアログ表示コールバックは統一APIで注入（対応ハンドラのみ）
+  handler.setDialogCallback?.(showDataDialog);
+  return handler;
 }
 
 let activeToolId = 'btn-select';
