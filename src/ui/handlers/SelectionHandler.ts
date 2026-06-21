@@ -116,19 +116,21 @@ function isOnLayer(data: DocumentData, layer: import('../Layer').Layer): boolean
   return false;
 }
 
+function posInRect(pos: Point3D, minX: number, maxX: number, minY: number, maxY: number): boolean {
+  return pos.x >= minX && pos.x <= maxX && pos.y >= minY && pos.y <= maxY;
+}
+
 function isInsideRect(data: DocumentData, minX: number, maxX: number, minY: number, maxY: number): boolean {
   if (data instanceof Node) {
-    return data.pos.x >= minX && data.pos.x <= maxX && data.pos.y >= minY && data.pos.y <= maxY;
+    return posInRect(data.pos, minX, maxX, minY, maxY);
   }
   if (data instanceof Member) {
     if (!data.ok) return false;
-    return isInsideRect(data.nodeI! as any, minX, maxX, minY, maxY) &&
-           isInsideRect(data.nodeJ! as any, minX, maxX, minY, maxY);
+    return posInRect(data.posI, minX, maxX, minY, maxY) &&
+           posInRect(data.posJ, minX, maxX, minY, maxY);
   }
   if (data instanceof Plane) {
-    return data.nodeList.every(n =>
-      n.pos.x >= minX && n.pos.x <= maxX && n.pos.y >= minY && n.pos.y <= maxY
-    );
+    return data.nodeList.every(n => posInRect(n.pos, minX, maxX, minY, maxY));
   }
   return false;
 }

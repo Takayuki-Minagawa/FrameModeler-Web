@@ -13,7 +13,6 @@ import { Point3D } from '../math/Point3D';
 import { Point2D } from '../math/Point2D';
 import { Layer } from './Layer';
 import type { ICadMouseHandler } from './handlers/ICadMouseHandler';
-import type { SelectionHandler } from './handlers/SelectionHandler';
 
 export class CadView {
   private renderer: THREE.WebGLRenderer;
@@ -346,10 +345,7 @@ export class CadView {
     if (this.isDragging && this.dragButton === 0 && this._handler) {
       // 左ドラッグ終了 → SelectionHandler用
       const pos = this.getMouseCoord(e);
-      const sel = this._handler as any;
-      if (typeof sel.onEndDrag === 'function') {
-        sel.onEndDrag(this, pos, e);
-      }
+      this._handler.onEndDrag?.(this, pos, e);
     }
     this.isDragging = false;
     this.dragButton = -1;

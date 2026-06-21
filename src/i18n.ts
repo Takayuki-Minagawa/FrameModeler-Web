@@ -5,7 +5,7 @@ const STORAGE_KEY = 'framemodeler-locale';
 let currentLocale: Locale = (localStorage.getItem(STORAGE_KEY) as Locale) || 'ja';
 let onLocaleChanged: (() => void) | null = null;
 
-const messages: Record<string, Record<Locale, string>> = {
+const messages = {
   // Toolbar - File
   new: { ja: '新規', en: 'New' },
   open: { ja: '開く', en: 'Open' },
@@ -107,12 +107,15 @@ const messages: Record<string, Record<Locale, string>> = {
   'help.camera.wheel.desc': { ja: 'ズーム', en: 'Zoom' },
 
   'help.data.desc': { ja: 'JSON形式でモデルデータを保存・読込します。\n座標系: X=右, Y=奥, Z=上（mm単位）', en: 'Save/load model data in JSON format.\nCoordinates: X=right, Y=depth, Z=up (mm unit)' },
-};
+} as const;
 
-export function t(key: string): string {
+/** 翻訳キー（messages のキーに限定。タイポはコンパイルエラーになる） */
+export type MessageKey = keyof typeof messages;
+
+export function t(key: MessageKey): string {
   const entry = messages[key];
   if (!entry) return key;
-  return entry[currentLocale] ?? entry['ja'] ?? key;
+  return entry[currentLocale] ?? entry.ja ?? key;
 }
 
 export function getLocale(): Locale {
@@ -137,16 +140,16 @@ export function setOnLocaleChanged(callback: () => void): void {
 /** data-i18n 属性を持つ全要素のテキストを更新 */
 export function updateDom(): void {
   document.querySelectorAll('[data-i18n]').forEach((el) => {
-    const key = el.getAttribute('data-i18n')!;
+    const key = el.getAttribute('data-i18n') as MessageKey;
     el.textContent = t(key);
   });
   document.querySelectorAll('[data-i18n-title]').forEach((el) => {
-    const key = el.getAttribute('data-i18n-title')!;
+    const key = el.getAttribute('data-i18n-title') as MessageKey;
     (el as HTMLElement).title = t(key);
   });
   // Update labels with format "text: input"
   document.querySelectorAll('[data-i18n-label]').forEach((el) => {
-    const key = el.getAttribute('data-i18n-label')!;
+    const key = el.getAttribute('data-i18n-label') as MessageKey;
     const label = el as HTMLLabelElement;
     const input = label.querySelector('input, select');
     if (input) {
@@ -159,7 +162,7 @@ export function updateDom(): void {
   });
   // Update checkbox labels
   document.querySelectorAll('[data-i18n-after]').forEach((el) => {
-    const key = el.getAttribute('data-i18n-after')!;
+    const key = el.getAttribute('data-i18n-after') as MessageKey;
     const label = el as HTMLLabelElement;
     // Find the text node after the input
     const input = label.querySelector('input');

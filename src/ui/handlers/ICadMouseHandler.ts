@@ -7,4 +7,6 @@ export interface ICadMouseHandler {
   onDoubleClick(view: CadView, pos: Point3D, event: MouseEvent): void;
   onMouseMove(view: CadView, pos: Point3D): void;
   draw(view: CadView): void;
+  /** 左ボタンドラッグ終了時（矩形選択の確定など）。実装は任意 */
+  onEndDrag?(view: CadView, pos: Point3D, event: MouseEvent): void;
 }

@@ -37,8 +37,8 @@ export class Document {
 
   // ========== データリストアクセス ==========
 
-  chooseData<T>(type: Function): T[] {
-    return this.dataList.filter(d => d instanceof type) as unknown as T[];
+  chooseData<T extends DocumentData>(type: abstract new (...args: any[]) => T): T[] {
+    return this.dataList.filter((d): d is T => d instanceof type);
   }
 
   get allDataList(): ReadonlyArray<DocumentData> {
