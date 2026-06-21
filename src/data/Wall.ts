@@ -13,10 +13,7 @@ export class Wall extends Plane {
   }
 
   get wallLength(): number {
-    if (this.nodeCount === 0) return 0;
-    const dx = this.nodeList[0].pos.x - this.nodeList[1].pos.x;
-    const dy = this.nodeList[0].pos.y - this.nodeList[1].pos.y;
-    const dz = this.nodeList[0].pos.z - this.nodeList[1].pos.z;
-    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (this.nodeCount < 2) return 0;
+    return this.nodeList[0].pos.sub(this.nodeList[1].pos).length;
   }
 }

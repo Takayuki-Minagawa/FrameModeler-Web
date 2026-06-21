@@ -14,7 +14,6 @@ export class Document {
   private _layers: Layer[] = [];
   private _shownLayer: Layer | null = null;
   private _filename: string = '';
-  private suppressDataSort: boolean = false;
 
   /** 変更通知コールバック */
   onChanged: (() => void) | null = null;
@@ -53,10 +52,7 @@ export class Document {
   add(data: DocumentData): void {
     if (this.dataList.includes(data)) return;
     this.dataList.push(data);
-    if (!this.suppressDataSort) {
-      this.sortDataList();
-      this.assignNumbers();
-    }
+    this.reindex();
     this.notifyChanged();
   }
 
@@ -73,15 +69,14 @@ export class Document {
     }
 
     this.dataList.splice(idx, 1);
-    if (!this.suppressDataSort) {
-      this.sortDataList();
-      this.assignNumbers();
-    }
+    this.reindex();
     this.notifyChanged();
   }
 
-  private sortDataList(): void {
+  /** ソートと番号再割当を常に一体で行う（不変条件を保証, 5-3） */
+  private reindex(): void {
     this.dataList.sort((a, b) => Document.compareData(a, b));
+    this.assignNumbers();
   }
 
   private static compareData(a: DocumentData, b: DocumentData): number {
@@ -134,11 +129,14 @@ export class Document {
     return this.getOrCreateNode(abovePos);
   }
 
-  /** 直上の位置を検索（Node or 部材交点） */
+  /** 直上の位置を検索（Node優先、無ければ部材交点）（D-10） */
   getPosAbove(p: Point3D): Point3D | null {
-    let minDist = Number.MAX_VALUE;
+    return this.findNodeAbove(p) ?? this.findMemberIntersectionAbove(p);
+  }
 
-    // Node検索
+  /** 同一XYで最も近い上方のNode位置 */
+  private findNodeAbove(p: Point3D): Point3D | null {
+    let minDist = Number.MAX_VALUE;
     let aboveNode: Node | null = null;
     for (const n of this.nodeList) {
       if (n.pos.x === p.x && n.pos.y === p.y) {
@@ -149,9 +147,12 @@ export class Document {
         }
       }
     }
-    if (aboveNode) return aboveNode.pos.clone();
+    return aboveNode ? aboveNode.pos.clone() : null;
+  }
 
-    // 部材交点検索
+  /** pを始点とする鉛直線が交わる、最も近い上方の部材交点 */
+  private findMemberIntersectionAbove(p: Point3D): Point3D | null {
+    let minDist = Number.MAX_VALUE;
     let abovePos: Point3D | null = null;
     for (const m of this.memberList) {
       const i = m.posI.toPointXY();
@@ -160,7 +161,7 @@ export class Document {
       const d2 = p.toPointXY().sub(i);
       const d1n = d1.getNormalized();
       const d2n = d2.getNormalized();
-      if (Point2D.dotProduct(d1n, d2n) > 0.999) {
+      if (Point2D.dotProduct(d1n, d2n) > Document.COLLINEAR_THRESHOLD) {
         const d1len = d1.length;
         const d2len = d2.length;
         if (d1len > d2len) {
@@ -177,6 +178,9 @@ export class Document {
     }
     return abovePos;
   }
+
+  /** 共線判定のしきい値（正規化ベクトルの内積） */
+  private static readonly COLLINEAR_THRESHOLD = 0.999;
 
   getMemberOf(i: Node, j: Node): Member | null {
     for (const m of this.memberList) {
@@ -197,11 +201,7 @@ export class Document {
   }
 
   get sceneCenter(): Point3D {
-    const nodes = this.nodeList;
-    if (nodes.length === 0) return new Point3D();
-    let sum = new Point3D();
-    for (const n of nodes) sum = sum.add(n.pos);
-    return sum.div(nodes.length);
+    return Point3D.average(this.nodeList.map(n => n.pos));
   }
 
   // ========== CAD ID ==========
@@ -275,15 +275,16 @@ export class Document {
     this.onLayerChanged?.();
   }
 
-  /** 外部からデータ一括設定（XML読込用） */
+  /** 外部からデータ一括設定（JSON読込用） */
   bulkLoad(data: DocumentData[], layers: Layer[]): void {
-    this.suppressDataSort = true;
     this.dataList = data;
-    this.suppressDataSort = false;
-    this.sortDataList();
-    this.assignNumbers();
+    this.reindex();
 
-    this._layers = layers.sort((a, b) => a.compareTo(b));
+    // posZ 重複レイヤーを除外（addLayer と同じ不変条件を保つ, I-8）
+    const seenPosZ = new Set<number>();
+    this._layers = layers
+      .filter((l) => (seenPosZ.has(l.posZ) ? false : (seenPosZ.add(l.posZ), true)))
+      .sort((a, b) => a.compareTo(b));
     this._shownLayer = this._layers.length > 0 ? this._layers[0] : null;
 
     this.notifyChanged();

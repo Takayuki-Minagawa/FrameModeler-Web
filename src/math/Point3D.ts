@@ -118,6 +118,14 @@ export class Point3D {
     );
   }
 
+  /** 点群の重心（平均座標）。空配列なら原点（D-9）。 */
+  static average(points: ReadonlyArray<Point3D>): Point3D {
+    if (points.length === 0) return new Point3D();
+    let sum = new Point3D();
+    for (const p of points) sum = sum.add(p);
+    return sum.div(points.length);
+  }
+
   static min(a: Point3D, b: Point3D): Point3D {
     return new Point3D(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.min(a.z, b.z));
   }

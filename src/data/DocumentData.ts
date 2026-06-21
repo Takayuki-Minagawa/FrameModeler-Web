@@ -1,3 +1,5 @@
+import type { Layer } from '../ui/Layer';
+
 /** 削除可否の判定結果 */
 export interface RemovableResult {
   removable: boolean;
@@ -12,6 +14,22 @@ export abstract class DocumentData {
 
   isRemovable(): RemovableResult {
     return { removable: true, reason: '' };
+  }
+
+  /**
+   * この要素が占めるZ範囲。レイヤー判定に使う（D-4）。
+   * 範囲を持たない/不完全な要素は null を返す。サブクラスで上書き。
+   */
+  protected zRange(): { bottom: number; top: number } | null {
+    return null;
+  }
+
+  /** 指定レイヤー上に存在するか（Z範囲がレイヤー高さを含むか） */
+  existsOn(layer: Layer | null): boolean {
+    if (!layer) return false;
+    const r = this.zRange();
+    if (!r) return false;
+    return r.bottom <= layer.posZ && layer.posZ <= r.top;
   }
 
   /**

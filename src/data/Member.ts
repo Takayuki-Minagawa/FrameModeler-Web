@@ -1,7 +1,6 @@
 import { DocumentData } from './DocumentData';
 import { Node } from './Node';
 import { Point3D } from '../math/Point3D';
-import type { Layer } from '../ui/Layer';
 
 /**
  * 部材の抽象基底クラス（2節点間の線要素）
@@ -40,12 +39,12 @@ export abstract class Member extends DocumentData {
     else this.nodeJ = n;
   }
 
-  /** 指定レイヤーにかかっているか */
-  existsOn(layer: Layer | null): boolean {
-    if (!layer || !this.ok) return false;
-    const bottom = Math.min(this.nodeI!.pos.z, this.nodeJ!.pos.z);
-    const top = Math.max(this.nodeI!.pos.z, this.nodeJ!.pos.z);
-    return bottom <= layer.posZ && layer.posZ <= top;
+  protected zRange(): { bottom: number; top: number } | null {
+    if (!this.ok) return null;
+    return {
+      bottom: Math.min(this.nodeI!.pos.z, this.nodeJ!.pos.z),
+      top: Math.max(this.nodeI!.pos.z, this.nodeJ!.pos.z),
+    };
   }
 
   /** 指定Nodeを参照しているか */

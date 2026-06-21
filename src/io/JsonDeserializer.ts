@@ -59,7 +59,12 @@ export interface JsonDocument {
 
 /** JSON文字列からDocumentにデータを読み込む */
 export function deserializeJson(jsonString: string): void {
-  const parsedUnknown = JSON.parse(jsonString) as unknown;
+  let parsedUnknown: unknown;
+  try {
+    parsedUnknown = JSON.parse(jsonString);
+  } catch (e) {
+    throw new Error('Invalid JSON document: ' + (e as Error).message);
+  }
   if (!isRecord(parsedUnknown)) {
     throw new Error('Invalid JSON document: expected object');
   }
