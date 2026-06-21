@@ -4,7 +4,7 @@ import { Wall } from '../../data/Wall';
 import { BearWall } from '../../data/BearWall';
 import { t } from '../../i18n';
 import {
-  createModalOverlay, createDialogBox, addFormRow, addSelectRow, addButtonRow,
+  createModalOverlay, createDialogBox, addFormRow, addNodeRow, addSelectRow, addButtonRow,
   wireDialog,
 } from './DialogUtil';
 
@@ -22,7 +22,7 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
   // 節点情報（読み取り専用）
   for (let i = 0; i < plane.nodeCount; i++) {
     const n = plane.getNode(i);
-    addFormRow(box, `Node${i}`, 'text', `${n.number} (${n.pos.toString()})`, true);
+    addNodeRow(box, `Node${i}`, n);
   }
 
   const inputSection = addFormRow(box, t('section'), 'text', plane.section);
@@ -32,7 +32,12 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
   let selectDirection: HTMLSelectElement | null = null;
   if (plane instanceof Floor) {
     inputWeight = addFormRow(box, t('weight'), 'number', String(plane.weight));
-    selectDirection = addSelectRow(box, t('direction'), ['X', 'Y', 'XY'], plane.direction);
+    selectDirection = addSelectRow(
+      box,
+      t('direction'),
+      [FloorDirection.X, FloorDirection.Y, FloorDirection.XY],
+      plane.direction,
+    );
   }
 
   // 壁固有: 荷重

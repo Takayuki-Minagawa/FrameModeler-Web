@@ -1,7 +1,7 @@
 import { Member } from '../../data/Member';
 import { t } from '../../i18n';
 import {
-  createModalOverlay, createDialogBox, addFormRow, addButtonRow,
+  createModalOverlay, createDialogBox, addFormRow, addNodeRow, addButtonRow,
   wireDialog,
 } from './DialogUtil';
 
@@ -11,8 +11,8 @@ export async function showMemberDialog(member: Member): Promise<boolean> {
   const title = member.constructor.name === 'Beam' ? t('dialog.beamProps') : t('dialog.pillarProps');
   const box = createDialogBox(title);
 
-  addFormRow(box, 'NodeI', 'text', `${member.nodeI?.number} (${member.nodeI?.pos.toString()})`, true);
-  addFormRow(box, 'NodeJ', 'text', `${member.nodeJ?.number} (${member.nodeJ?.pos.toString()})`, true);
+  addNodeRow(box, 'NodeI', member.nodeI!);
+  addNodeRow(box, 'NodeJ', member.nodeJ!);
   const inputSection = addFormRow(box, t('section'), 'text', member.section);
 
   const { okBtn, cancelBtn } = addButtonRow(box);

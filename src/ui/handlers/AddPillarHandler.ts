@@ -4,6 +4,7 @@ import { Document } from '../../data/Document';
 import type { DocumentData } from '../../data/DocumentData';
 import { Pillar } from '../../data/Pillar';
 import type { Point3D } from '../../math/Point3D';
+import { t } from '../../i18n';
 
 /** 柱追加ハンドラ: クリック位置の直上Nodeとの間に柱を生成 */
 export class AddPillarHandler implements ICadMouseHandler {
@@ -24,7 +25,7 @@ export class AddPillarHandler implements ICadMouseHandler {
     const bottom = doc.getOrCreateNode(pos);
 
     if (doc.getMemberOf(top, bottom)) {
-      alert('既に接続されたメンバーが存在します');
+      alert(t('msg.memberExists'));
     } else {
       const pillar = new Pillar(bottom, top);
       doc.add(pillar);

@@ -37,6 +37,15 @@ export function addFormRow(container: HTMLElement, label: string, inputType: str
   return input;
 }
 
+/** 読み取り専用のノード表示行を追加（番号と座標） */
+export function addNodeRow(
+  container: HTMLElement,
+  label: string,
+  node: import('../../data/Node').Node,
+): HTMLInputElement {
+  return addFormRow(container, label, 'text', `${node.number} (${node.pos.toString()})`, true);
+}
+
 /** セレクト行を追加 */
 export function addSelectRow(container: HTMLElement, label: string, options: string[], selected: string): HTMLSelectElement {
   const row = document.createElement('div');

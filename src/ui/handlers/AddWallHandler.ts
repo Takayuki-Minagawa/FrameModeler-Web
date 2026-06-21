@@ -4,6 +4,7 @@ import { Node } from '../../data/Node';
 import { Plane } from '../../data/Plane';
 import { Wall } from '../../data/Wall';
 import { Point3D } from '../../math/Point3D';
+import { t } from '../../i18n';
 import { TwoClickAddHandler } from './TwoClickAddHandler';
 import { createQuadPoints } from './geometry';
 
@@ -66,6 +67,6 @@ export class AddWallHandler extends AddQuadPlaneHandler {
   }
 
   protected duplicateMessage(): string {
-    return '既に同一の壁が存在します';
+    return t('msg.wallExists');
   }
 }

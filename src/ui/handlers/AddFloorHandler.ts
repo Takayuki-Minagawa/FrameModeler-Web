@@ -2,6 +2,7 @@ import type { CadView } from '../CadView';
 import { Document } from '../../data/Document';
 import { Floor, FloorDirection } from '../../data/Floor';
 import { Point3D } from '../../math/Point3D';
+import { t } from '../../i18n';
 import { TwoClickAddHandler } from './TwoClickAddHandler';
 import { createRectPoints } from './geometry';
 
@@ -18,7 +19,7 @@ export class AddFloorHandler extends TwoClickAddHandler<Point3D> {
       const nodes = points.map((p) => doc.getOrCreateNode(p));
 
       if (doc.getPlaneOf(nodes)) {
-        alert('既に同一の床が存在します');
+        alert(t('msg.floorExists'));
       } else {
         const floor = new Floor(nodes);
         doc.add(floor);

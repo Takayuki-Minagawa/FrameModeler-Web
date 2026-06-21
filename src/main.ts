@@ -115,6 +115,9 @@ function createHandler(id: string): ICadMouseHandler {
 let activeToolId = 'btn-select';
 
 function setActiveTool(id: string): void {
+  // 現ハンドラに切替を通知（途中状態のキャンセル等）
+  cadView.handler?.onDeactivate?.(cadView);
+
   activeToolId = id;
   cadView.handler = createHandler(id);
 

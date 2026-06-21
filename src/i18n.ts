@@ -75,6 +75,10 @@ const messages = {
   'msg.fileError': { ja: 'ファイル読込エラー: ', en: 'File load error: ' },
   'msg.duplicateLayer': { ja: '同一Z位置のレイヤーが既に存在します', en: 'A layer at the same Z position already exists' },
   'msg.defaultLayerName': { ja: '新規レイヤー', en: 'New Layer' },
+  'msg.memberExists': { ja: '既に接続されたメンバーが存在します', en: 'A connected member already exists' },
+  'msg.floorExists': { ja: '既に同一の床が存在します', en: 'The same floor already exists' },
+  'msg.wallExists': { ja: '既に同一の壁が存在します', en: 'The same wall already exists' },
+  'msg.bearwallExists': { ja: '既に同一の耐力壁が存在します', en: 'The same bearing wall already exists' },
 
   // Help dialog
   'help.title': { ja: '操作マニュアル', en: 'Operation Manual' },
@@ -137,39 +141,59 @@ export function setOnLocaleChanged(callback: () => void): void {
   onLocaleChanged = callback;
 }
 
-/** data-i18n 属性を持つ全要素のテキストを更新 */
+/**
+ * data 属性ごとの更新ルール。属性値を MessageKey とみなし apply で要素へ反映する。
+ * label/after はテキストノード走査を含むため、各 apply 内で従来の挙動を厳密に維持する。
+ */
+const domUpdateRules: { attr: string; apply: (el: Element, text: string) => void }[] = [
+  {
+    attr: 'data-i18n',
+    apply: (el, text) => {
+      el.textContent = text;
+    },
+  },
+  {
+    attr: 'data-i18n-title',
+    apply: (el, text) => {
+      (el as HTMLElement).title = text;
+    },
+  },
+  {
+    // ラベル "text: input" 形式: ラベル直下のテキストノードを更新
+    attr: 'data-i18n-label',
+    apply: (el, text) => {
+      const label = el as HTMLLabelElement;
+      const input = label.querySelector('input, select');
+      if (input) {
+        label.childNodes.forEach((node) => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            node.textContent = text + ' ';
+          }
+        });
+      }
+    },
+  },
+  {
+    // チェックボックスラベル: input 直後のテキストノードを更新
+    attr: 'data-i18n-after',
+    apply: (el, text) => {
+      const label = el as HTMLLabelElement;
+      const input = label.querySelector('input');
+      if (input && input.nextSibling) {
+        input.nextSibling.textContent = ' ' + text;
+      }
+    },
+  },
+];
+
+/** data-i18n 系属性を持つ全要素のテキストを更新 */
 export function updateDom(): void {
-  document.querySelectorAll('[data-i18n]').forEach((el) => {
-    const key = el.getAttribute('data-i18n') as MessageKey;
-    el.textContent = t(key);
-  });
-  document.querySelectorAll('[data-i18n-title]').forEach((el) => {
-    const key = el.getAttribute('data-i18n-title') as MessageKey;
-    (el as HTMLElement).title = t(key);
-  });
-  // Update labels with format "text: input"
-  document.querySelectorAll('[data-i18n-label]').forEach((el) => {
-    const key = el.getAttribute('data-i18n-label') as MessageKey;
-    const label = el as HTMLLabelElement;
-    const input = label.querySelector('input, select');
-    if (input) {
-      label.childNodes.forEach((node) => {
-        if (node.nodeType === Node.TEXT_NODE) {
-          node.textContent = t(key) + ' ';
-        }
-      });
-    }
-  });
-  // Update checkbox labels
-  document.querySelectorAll('[data-i18n-after]').forEach((el) => {
-    const key = el.getAttribute('data-i18n-after') as MessageKey;
-    const label = el as HTMLLabelElement;
-    // Find the text node after the input
-    const input = label.querySelector('input');
-    if (input && input.nextSibling) {
-      input.nextSibling.textContent = ' ' + t(key);
-    }
-  });
+  for (const { attr, apply } of domUpdateRules) {
+    document.querySelectorAll(`[${attr}]`).forEach((el) => {
+      const key = el.getAttribute(attr) as MessageKey;
+      apply(el, t(key));
+    });
+  }
 }
 
 /** 初期化: DOMロード後に呼ぶ */

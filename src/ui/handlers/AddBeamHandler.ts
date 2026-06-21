@@ -3,6 +3,7 @@ import { Document } from '../../data/Document';
 import { Node } from '../../data/Node';
 import { Beam } from '../../data/Beam';
 import type { Point3D } from '../../math/Point3D';
+import { t } from '../../i18n';
 import { TwoClickAddHandler } from './TwoClickAddHandler';
 
 /** 梁追加ハンドラ: 2クリックでNodeI→NodeJを接続 */
@@ -16,7 +17,7 @@ export class AddBeamHandler extends TwoClickAddHandler<Node> {
     const node = doc.getOrCreateNode(pos);
 
     if (doc.getMemberOf(anchor, node)) {
-      alert('既に接続されたメンバーが存在します');
+      alert(t('msg.memberExists'));
     } else {
       const beam = new Beam(anchor, node);
       doc.add(beam);

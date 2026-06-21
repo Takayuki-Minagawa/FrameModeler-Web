@@ -56,4 +56,11 @@ export abstract class TwoClickAddHandler<A> implements ICadMouseHandler {
   }
 
   draw(_view: CadView): void {}
+
+  /** 別ツールへ切替時: 途中の1点目を破棄しプレビューを消す */
+  onDeactivate(view: CadView): void {
+    this.anchor = null;
+    view.clearPreview();
+    view.render();
+  }
 }

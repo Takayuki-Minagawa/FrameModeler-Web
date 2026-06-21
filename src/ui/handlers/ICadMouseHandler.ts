@@ -12,4 +12,6 @@ export interface ICadMouseHandler {
   onEndDrag?(view: CadView, pos: Point3D, event: MouseEvent): void;
   /** ダイアログ表示コールバックの注入。実装は任意 */
   setDialogCallback?(cb: (data: DocumentData) => void): void;
+  /** 別ツールへ切り替わる直前に呼ばれる。途中状態の破棄などに使う。実装は任意 */
+  onDeactivate?(view: CadView): void;
 }
