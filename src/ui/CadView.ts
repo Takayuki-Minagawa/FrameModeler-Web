@@ -12,6 +12,7 @@ import { BearWall } from '../data/BearWall';
 import { Point3D } from '../math/Point3D';
 import { Point2D } from '../math/Point2D';
 import { Layer } from './Layer';
+import { CAD, getPalette, type CadPalette } from './CadConfig';
 import type { ICadMouseHandler } from './handlers/ICadMouseHandler';
 
 export class CadView {
@@ -56,6 +57,9 @@ export class CadView {
   // マウスハンドラ
   private _handler: ICadMouseHandler | null = null;
 
+  // 現在のテーマに対応するカラーパレット（render毎に更新）
+  private palette: CadPalette = getPalette();
+
   // コールバック
   onMouseMove: ((pos: Point3D) => void) | null = null;
 
@@ -64,7 +68,7 @@ export class CadView {
 
     // レンダラー
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setClearColor(0xffffff);
+    this.renderer.setClearColor(this.palette.background);
     this.renderer.setPixelRatio(window.devicePixelRatio);
 
     // シーン
@@ -140,20 +144,25 @@ export class CadView {
     const h = container.clientHeight;
     this.renderer.setSize(w, h);
 
-    // Orthoカメラ更新
-    const aspect = w / h;
+    this.updateOrthoFrustum();
+
+    // Perspカメラ更新
+    this.perspCamera.aspect = w / h;
+    this.perspCamera.updateProjectionMatrix();
+
+    this.render();
+  }
+
+  /** Orthoカメラの視錐台をコンテナのアスペクト比に合わせて更新する（V-8） */
+  private updateOrthoFrustum(): void {
+    const container = this.canvas.parentElement!;
+    const aspect = container.clientWidth / container.clientHeight;
     const halfH = this.cameraDistance;
     this.orthoCamera.left = -halfH * aspect;
     this.orthoCamera.right = halfH * aspect;
     this.orthoCamera.top = halfH;
     this.orthoCamera.bottom = -halfH;
     this.orthoCamera.updateProjectionMatrix();
-
-    // Perspカメラ更新
-    this.perspCamera.aspect = aspect;
-    this.perspCamera.updateProjectionMatrix();
-
-    this.render();
   }
 
   // ========== カメラ更新 ==========
@@ -178,18 +187,10 @@ export class CadView {
         this.cameraCenter.z + this.cameraDistance
       );
       this.orthoCamera.lookAt(this.cameraCenter);
-
-      const container = this.canvas.parentElement!;
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      const aspect = w / h;
-      const halfH = this.cameraDistance;
-      this.orthoCamera.left = -halfH * aspect;
-      this.orthoCamera.right = halfH * aspect;
-      this.orthoCamera.top = halfH;
-      this.orthoCamera.bottom = -halfH;
+      // 2Dは真上(+Z)から見下ろすため、画面上方向を+Yに固定する
+      // （3D用のZ-up設定とは別。平面図の向きを安定させる意図）
       this.orthoCamera.up.set(0, 1, 0);
-      this.orthoCamera.updateProjectionMatrix();
+      this.updateOrthoFrustum();
     }
   }
 
@@ -214,8 +215,7 @@ export class CadView {
         snapped.set(dir, val - rest + (val > 0 ? this._snapWidth : -this._snapWidth));
       }
     }
-    const doc = Document.instance;
-    snapped.z = doc.shownLayer?.posZ ?? 0;
+    snapped.z = this.layerZ;
     return snapped;
   }
 
@@ -229,13 +229,10 @@ export class CadView {
     const ndc = new THREE.Vector3(ndcX, ndcY, 0.5);
     ndc.unproject(this.camera);
 
+    const layerZ = this.layerZ;
     if (!this._show3D) {
-      const doc = Document.instance;
-      const layerZ = doc.shownLayer?.posZ ?? 0;
       return new Point3D(ndc.x, ndc.y, layerZ);
     } else {
-      const doc = Document.instance;
-      const layerZ = doc.shownLayer?.posZ ?? 0;
       const camPos = this.camera.position.clone();
       const dir = ndc.sub(camPos).normalize();
       if (Math.abs(dir.z) < 0.0001) return new Point3D(ndc.x, ndc.y, layerZ);
@@ -257,7 +254,7 @@ export class CadView {
     const doc = Document.instance;
     const layer = doc.shownLayer;
     const showAll = this._show3D || !layer;
-    const hitRange = this.cameraDistance * 0.008; // ピクセル相当の距離
+    const hitRange = this.cameraDistance * CAD.HIT_RANGE_RATIO; // ピクセル相当の距離
 
     // Node優先
     for (const node of doc.nodeList) {
@@ -299,7 +296,7 @@ export class CadView {
       const dy = e.clientY - this.lastClickPos.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (now - this.lastClickTime < 400 && dist < 10) {
+      if (now - this.lastClickTime < CAD.DBLCLICK_MS && dist < CAD.DBLCLICK_PX) {
         this._handler.onDoubleClick(this, pos, e);
         this.lastClickTime = 0;
       } else {
@@ -325,11 +322,11 @@ export class CadView {
 
       if (this.dragButton === 2 || this.dragButton === 1) {
         if (this._show3D && this.dragButton === 2) {
-          this.spherePhi -= dx * 0.01;
-          this.sphereTheta += dy * 0.01;
+          this.spherePhi -= dx * CAD.ROTATE_SENSITIVITY;
+          this.sphereTheta += dy * CAD.ROTATE_SENSITIVITY;
           this.sphereTheta = Math.max(0.01, Math.min(Math.PI - 0.01, this.sphereTheta));
         } else {
-          const scale = this.cameraDistance / 500;
+          const scale = this.cameraDistance / CAD.PAN_DENOM;
           this.cameraCenter.x -= dx * scale;
           this.cameraCenter.y += dy * scale;
         }
@@ -353,14 +350,21 @@ export class CadView {
 
   private onCanvasWheel(e: WheelEvent): void {
     e.preventDefault();
-    const ratio = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+    const ratio = e.deltaY > 0 ? CAD.ZOOM_FACTOR : 1 / CAD.ZOOM_FACTOR;
     this.cameraDistance *= ratio;
-    this.cameraDistance = Math.max(10, Math.min(100000, this.cameraDistance));
+    this.cameraDistance = Math.max(CAD.MIN_DISTANCE, Math.min(CAD.MAX_DISTANCE, this.cameraDistance));
     this.updateCamera();
     this.render();
   }
 
   // ========== 描画 ==========
+
+  /** テーマ変更時に背景色を更新して再描画する（B-2） */
+  refreshTheme(): void {
+    this.palette = getPalette();
+    this.renderer.setClearColor(this.palette.background);
+    this.render();
+  }
 
   render(): void {
     this.rebuildScene();
@@ -368,6 +372,7 @@ export class CadView {
   }
 
   private rebuildScene(): void {
+    this.palette = getPalette();
     this.clearGroup(this.gridGroup);
     this.clearGroup(this.elementGroup);
 
@@ -382,18 +387,7 @@ export class CadView {
     while (group.children.length > 0) {
       const child = group.children[0];
       group.remove(child);
-      if (child instanceof THREE.Mesh) {
-        child.geometry.dispose();
-        if (child.material instanceof THREE.Material) child.material.dispose();
-      }
-      if (child instanceof THREE.Line) {
-        child.geometry.dispose();
-        if (child.material instanceof THREE.Material) child.material.dispose();
-      }
-      if (child instanceof THREE.Points) {
-        child.geometry.dispose();
-        if (child.material instanceof THREE.Material) child.material.dispose();
-      }
+      disposeObject(child);
     }
   }
 
@@ -401,7 +395,7 @@ export class CadView {
     this.clearGroup(this.previewGroup);
   }
 
-  addPreviewLine(from: Point3D, to: Point3D, color: number = 0xff0000): void {
+  addPreviewLine(from: Point3D, to: Point3D, color: number = this.palette.preview): void {
     const geom = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(from.x, from.y, from.z),
       new THREE.Vector3(to.x, to.y, to.z),
@@ -410,21 +404,25 @@ export class CadView {
     this.previewGroup.add(new THREE.Line(geom, mat));
   }
 
-  addPreviewPoint(pos: Point3D, color: number = 0xff0000): void {
+  addPreviewPoint(pos: Point3D, color: number = this.palette.preview): void {
     const geom = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(pos.x, pos.y, pos.z),
     ]);
-    const mat = new THREE.PointsMaterial({ color, size: 8, sizeAttenuation: false });
+    const mat = new THREE.PointsMaterial({ color, size: CAD.PREVIEW_POINT_SIZE, sizeAttenuation: false });
     this.previewGroup.add(new THREE.Points(geom, mat));
   }
+
+  /** プレビュー用の現在パレット（ハンドラからの参照用） */
+  get previewColor(): number { return this.palette.preview; }
+  get selectionRectColor(): number { return this.palette.selectionRect; }
 
   // ========== グリッド描画 ==========
 
   private drawGrid(): void {
-    const doc = Document.instance;
-    const layerZ = doc.shownLayer?.posZ ?? 0;
-    const range = this.cameraDistance * 2;
-    const gw = this._gridWidth;
+    const layerZ = this.layerZ;
+    const range = this.cameraDistance * CAD.GRID_RANGE_RATIO;
+    // ズームアウト時の過剰な線生成を抑えるためグリッド幅をクランプ（V-10）
+    const gw = Math.max(this._gridWidth, (range * 2) / CAD.MAX_GRID_LINES);
 
     const gridPoints: THREE.Vector3[] = [];
     for (let x = -range; x <= range; x += gw) {
@@ -437,12 +435,17 @@ export class CadView {
     }
     if (gridPoints.length > 0) {
       const geom = new THREE.BufferGeometry().setFromPoints(gridPoints);
-      const mat = new THREE.LineBasicMaterial({ color: 0xa0a0a0, transparent: true, opacity: 0.5 });
+      const mat = new THREE.LineBasicMaterial({ color: this.palette.grid, transparent: true, opacity: 0.5 });
       this.gridGroup.add(new THREE.LineSegments(geom, mat));
     }
 
-    this.addLineToGroup(this.gridGroup, new THREE.Vector3(-range, 0, layerZ), new THREE.Vector3(range, 0, layerZ), 0xff0000);
-    this.addLineToGroup(this.gridGroup, new THREE.Vector3(0, -range, layerZ), new THREE.Vector3(0, range, layerZ), 0x00aa00);
+    this.addLineToGroup(this.gridGroup, new THREE.Vector3(-range, 0, layerZ), new THREE.Vector3(range, 0, layerZ), this.palette.axisX);
+    this.addLineToGroup(this.gridGroup, new THREE.Vector3(0, -range, layerZ), new THREE.Vector3(0, range, layerZ), this.palette.axisY);
+  }
+
+  /** 現在表示中レイヤーのZ高さ（無ければ0）（V-9） */
+  private get layerZ(): number {
+    return Document.instance.shownLayer?.posZ ?? 0;
   }
 
   private addLineToGroup(group: THREE.Group, a: THREE.Vector3, b: THREE.Vector3, color: number): void {
@@ -457,10 +460,12 @@ export class CadView {
     const doc = Document.instance;
     const showAll = this._show3D || !doc.shownLayer;
 
+    const p = this.palette;
+
     for (const node of doc.nodeList) {
       if (!showAll && !node.existsOn(doc.shownLayer)) continue;
       const isOnLayer = node.existsOn(doc.shownLayer);
-      const color = node.select ? 0xff0000 : 0x0000ff;
+      const color = node.select ? p.select : p.node;
       const opacity = isOnLayer ? 1.0 : 0.3;
       this.drawNode(node, color, opacity);
     }
@@ -469,7 +474,7 @@ export class CadView {
       if (!member.ok) continue;
       if (!showAll && !member.existsOn(doc.shownLayer)) continue;
       const isOnLayer = member.existsOn(doc.shownLayer);
-      const color = member.select ? 0xff0000 : 0x0000ff;
+      const color = member.select ? p.select : p.member;
       const opacity = isOnLayer ? 1.0 : 0.3;
 
       if (member instanceof Pillar && !this._show3D) {
@@ -486,13 +491,13 @@ export class CadView {
 
       if (plane instanceof Floor) {
         if (plane.direction === FloorDirection.DUMMY) continue;
-        const color = plane.select ? 0xff0000 : 0x0000ff;
+        const color = plane.select ? p.select : p.member;
         this.drawFloor(plane, color, isOnLayer ? 0.3 : 0.15);
       } else if (plane instanceof Wall) {
-        const color = plane.select ? 0xff0000 : 0x00aa00;
+        const color = plane.select ? p.select : p.wall;
         this.drawPlanePolygon(plane, color, isOnLayer ? 0.15 : 0.08);
       } else if (plane instanceof BearWall) {
-        const color = plane.select ? 0xff0000 : 0x0000ff;
+        const color = plane.select ? p.select : p.member;
         this.drawPlanePolygon(plane, color, isOnLayer ? 0.3 : 0.15);
         this.drawBraces(plane, color, isOnLayer ? 1.0 : 0.5);
       }
@@ -504,7 +509,7 @@ export class CadView {
       new THREE.Vector3(node.pos.x, node.pos.y, node.pos.z),
     ]);
     const mat = new THREE.PointsMaterial({
-      color, size: 6, sizeAttenuation: false,
+      color, size: CAD.NODE_SIZE, sizeAttenuation: false,
       transparent: opacity < 1, opacity,
     });
     this.elementGroup.add(new THREE.Points(geom, mat));
@@ -516,7 +521,7 @@ export class CadView {
       new THREE.Vector3(member.posJ.x, member.posJ.y, member.posJ.z),
     ]);
     const mat = new THREE.LineBasicMaterial({
-      color, linewidth: 2,
+      color, linewidth: CAD.MEMBER_LINEWIDTH,
       transparent: opacity < 1, opacity,
     });
     this.elementGroup.add(new THREE.Line(geom, mat));
@@ -524,7 +529,7 @@ export class CadView {
 
   private drawPillarCircle(pillar: Pillar, color: number, opacity: number): void {
     const pos = pillar.nodeI!.pos;
-    const radius = this.cameraDistance * 0.005;
+    const radius = this.cameraDistance * CAD.PILLAR_RADIUS_RATIO;
     const geom = new THREE.CircleGeometry(radius, 32);
     const mat = new THREE.MeshBasicMaterial({
       color, transparent: true, opacity: opacity * 0.5,
@@ -588,6 +593,20 @@ export class CadView {
       const mat = new THREE.LineBasicMaterial({ color, transparent: opacity < 1, opacity });
       this.elementGroup.add(new THREE.Line(geom, mat));
     }
+  }
+}
+
+// ========== Three.js ユーティリティ ==========
+
+/** Mesh/Line/Points の geometry と material(配列含む) を破棄する（V-6） */
+function disposeObject(obj: THREE.Object3D): void {
+  const renderable = obj as Partial<THREE.Mesh>;
+  renderable.geometry?.dispose();
+  const mat = renderable.material;
+  if (Array.isArray(mat)) {
+    mat.forEach((m) => m.dispose());
+  } else {
+    mat?.dispose();
   }
 }
 

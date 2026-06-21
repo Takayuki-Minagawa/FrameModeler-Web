@@ -241,6 +241,7 @@ document.getElementById('btn-help')?.addEventListener('click', () => {
 // テーマ切替ボタン
 document.getElementById('btn-theme')?.addEventListener('click', () => {
   toggleTheme();
+  cadView.refreshTheme();
 });
 
 // 言語切替ボタン
