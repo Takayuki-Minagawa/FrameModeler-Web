@@ -57,10 +57,19 @@ function updateThemeButton(): void {
   }
 }
 
+// ========== DOM ヘルパ ==========
+
+/** 必須要素を型付きで取得する。存在しなければ即座にエラー（V-12） */
+function byId<T extends HTMLElement>(id: string): T {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`Element not found: #${id}`);
+  return el as T;
+}
+
 // ========== アプリケーション初期化 ==========
 
 const doc = Document.instance;
-const canvas = document.getElementById('cad-canvas') as HTMLCanvasElement;
+const canvas = byId<HTMLCanvasElement>('cad-canvas');
 const cadView = new CadView(canvas);
 
 // テーマ・i18n 初期化
@@ -237,11 +246,11 @@ setOnLocaleChanged(() => {
 
 // ========== チェックボックス ==========
 
-const chkGrid = document.getElementById('chk-grid') as HTMLInputElement;
-const chkSnap = document.getElementById('chk-snap') as HTMLInputElement;
-const chk3D = document.getElementById('chk-3d') as HTMLInputElement;
-const inputGridWidth = document.getElementById('input-grid-width') as HTMLInputElement;
-const inputSnapWidth = document.getElementById('input-snap-width') as HTMLInputElement;
+const chkGrid = byId<HTMLInputElement>('chk-grid');
+const chkSnap = byId<HTMLInputElement>('chk-snap');
+const chk3D = byId<HTMLInputElement>('chk-3d');
+const inputGridWidth = byId<HTMLInputElement>('input-grid-width');
+const inputSnapWidth = byId<HTMLInputElement>('input-snap-width');
 
 chkGrid.addEventListener('change', () => { cadView.showGrid = chkGrid.checked; });
 chkSnap.addEventListener('change', () => { cadView.snapping = chkSnap.checked; });
@@ -251,21 +260,29 @@ inputSnapWidth.addEventListener('change', () => { cadView.snapWidth = parseInt(i
 
 // ========== レイヤーパネル ==========
 
-const layerList = document.getElementById('layer-list') as HTMLUListElement;
+const layerList = byId<HTMLUListElement>('layer-list');
+
+// クリックは要素委譲で1つのリスナにまとめる（V-14）
+layerList.addEventListener('click', (e) => {
+  const li = (e.target as HTMLElement).closest('li');
+  if (!li?.dataset.index) return;
+  const layer = doc.layers[parseInt(li.dataset.index)];
+  if (layer) {
+    doc.shownLayer = layer;
+    updateLayerList();
+    cadView.render();
+  }
+});
 
 function updateLayerList(): void {
   layerList.innerHTML = '';
-  for (const layer of doc.layers) {
+  doc.layers.forEach((layer, i) => {
     const li = document.createElement('li');
     li.textContent = layer.toString();
+    li.dataset.index = String(i);
     li.classList.toggle('active', layer === doc.shownLayer);
-    li.addEventListener('click', () => {
-      doc.shownLayer = layer;
-      updateLayerList();
-      cadView.render();
-    });
     layerList.appendChild(li);
-  }
+  });
 }
 
 // レイヤー追加
@@ -298,9 +315,9 @@ doc.onLayerChanged = () => {
 
 // ========== ステータスバー ==========
 
-const statusVersion = document.getElementById('status-version')!;
-const statusCoord = document.getElementById('status-coord')!;
-const statusInfo = document.getElementById('status-info')!;
+const statusVersion = byId('status-version');
+const statusCoord = byId('status-coord');
+const statusInfo = byId('status-info');
 
 statusVersion.textContent = `Ver.${APP_VERSION}`;
 

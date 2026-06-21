@@ -60,6 +60,10 @@ export class CadView {
   // 現在のテーマに対応するカラーパレット（render毎に更新）
   private palette: CadPalette = getPalette();
 
+  // 描画スケジューリング（V-3/V-11）
+  private rafId = 0;
+  private needsRebuild = true;
+
   // コールバック
   onMouseMove: ((pos: Point3D) => void) | null = null;
 
@@ -331,7 +335,8 @@ export class CadView {
           this.cameraCenter.y += dy * scale;
         }
         this.updateCamera();
-        this.render();
+        // パン/回転はジオメトリを変えないため、再構築不要の描画でよい（V-3）
+        this.renderCameraOnly();
       }
 
       this.dragPrev.set(e.clientX, e.clientY);
@@ -366,9 +371,28 @@ export class CadView {
     this.render();
   }
 
+  /** データ変更を伴う再描画。次フレームでシーンを再構築して描画する（V-11） */
   render(): void {
-    this.rebuildScene();
-    this.renderer.render(this.scene, this.camera);
+    this.needsRebuild = true;
+    this.scheduleFrame();
+  }
+
+  /** カメラ操作のみの再描画。ジオメトリ再構築をスキップする（V-3） */
+  private renderCameraOnly(): void {
+    this.scheduleFrame();
+  }
+
+  /** requestAnimationFrame で1フレーム1回に描画を集約する */
+  private scheduleFrame(): void {
+    if (this.rafId !== 0) return;
+    this.rafId = requestAnimationFrame(() => {
+      this.rafId = 0;
+      if (this.needsRebuild) {
+        this.rebuildScene();
+        this.needsRebuild = false;
+      }
+      this.renderer.render(this.scene, this.camera);
+    });
   }
 
   private rebuildScene(): void {
