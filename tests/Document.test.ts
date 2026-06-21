@@ -166,15 +166,33 @@ describe('Document', () => {
     expect(doc.nodeList.length).toBe(1);
   });
 
-  // NOTE (B-1): Document.remove relies on DocumentData.isRemovable(), which
-  // currently always returns removable=true (the checkNodeRemovable reference
-  // check is not wired into isRemovable). So a referenced Node can be removed
-  // today. We assert only that remove succeeds, documenting the current
-  // (intentionally untested for safety) behavior rather than the desired one.
-  it('remove deletes data (current behavior: no reference protection)', () => {
+  it('remove deletes an unreferenced node', () => {
     const n = new Node(new Point3D(0, 0, 0));
     doc.add(n);
     expect(() => doc.remove(n)).not.toThrow();
     expect(doc.nodeList.length).toBe(0);
+  });
+
+  // B-1: a Node referenced by a Member must not be removable.
+  it('remove throws for a node referenced by a beam', () => {
+    const a = new Node(new Point3D(0, 0, 0));
+    const b = new Node(new Point3D(1000, 0, 0));
+    doc.add(a);
+    doc.add(b);
+    doc.add(new Beam(a, b));
+    expect(() => doc.remove(a)).toThrow();
+    expect(doc.nodeList.length).toBe(2);
+  });
+
+  it('remove allows a node once its referencing member is gone', () => {
+    const a = new Node(new Point3D(0, 0, 0));
+    const b = new Node(new Point3D(1000, 0, 0));
+    doc.add(a);
+    doc.add(b);
+    const beam = new Beam(a, b);
+    doc.add(beam);
+    doc.remove(beam);
+    expect(() => doc.remove(a)).not.toThrow();
+    expect(doc.nodeList.length).toBe(1);
   });
 });

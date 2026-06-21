@@ -19,14 +19,4 @@ export class Wall extends Plane {
     const dz = this.nodeList[0].pos.z - this.nodeList[1].pos.z;
     return Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
-
-  save(writer: (name: string, value: string) => void): void {
-    super.save(writer);
-    writer('Weight', String(this.weight));
-  }
-
-  load(reader: (name: string, defaultValue?: string) => string): void {
-    super.load(reader);
-    this.weight = parseFloat(reader('Weight', '0'));
-  }
 }

@@ -52,11 +52,4 @@ export abstract class Member extends DocumentData {
   isReferring(n: Node): boolean {
     return n === this.nodeI || n === this.nodeJ;
   }
-
-  save(writer: (name: string, value: string) => void): void {
-    super.save(writer);
-    writer('NodeI', String(this.nodeI!.number));
-    writer('NodeJ', String(this.nodeJ!.number));
-    if (this.section) writer('Section', this.section);
-  }
 }

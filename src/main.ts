@@ -196,9 +196,15 @@ fileInput.addEventListener('change', () => {
 
 // 保存ボタン
 document.getElementById('btn-save')?.addEventListener('click', () => {
-  const filename = doc.hasFileName ? doc.filename.replace(/\.xml$/i, '.json') : 'model.json';
+  const filename = doc.hasFileName ? toJsonFilename(doc.filename) : 'model.json';
   downloadJson(filename);
 });
+
+/** 任意の拡張子を .json に置き換える（拡張子なしならそのまま付与） */
+function toJsonFilename(name: string): string {
+  const base = name.replace(/\.[^.\\/]+$/, '');
+  return `${base || 'model'}.json`;
+}
 
 // 削除ボタン
 document.getElementById('btn-delete')?.addEventListener('click', () => {

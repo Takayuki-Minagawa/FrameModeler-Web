@@ -1,4 +1,4 @@
-import { DocumentData } from './DocumentData';
+import { DocumentData, type RemovableResult } from './DocumentData';
 import { Node } from './Node';
 import { Member } from './Member';
 import { Beam } from './Beam';
@@ -73,7 +73,10 @@ export class Document {
     const idx = this.dataList.indexOf(data);
     if (idx < 0) return;
 
-    const { removable, reason } = data.isRemovable();
+    // Node は他データからの参照チェックが必要（Member/Plane が参照中なら削除不可）
+    const { removable, reason } = data instanceof Node
+      ? this.checkNodeRemovable(data)
+      : data.isRemovable();
     if (!removable) {
       throw new Error('削除できないデータ: ' + reason);
     }
@@ -308,7 +311,7 @@ export class Document {
   }
 
   /** Node削除可能チェック用: 参照元があるかチェック */
-  checkNodeRemovable(node: Node): { removable: boolean; reason: string } {
+  checkNodeRemovable(node: Node): RemovableResult {
     for (const data of this.dataList) {
       if (data instanceof Member && data.isReferring(node)) {
         return { removable: false, reason: '他のデータから参照されているノードは削除できません' };

@@ -45,17 +45,4 @@ export class Floor extends Plane {
     if (p1.length > p2.length) return +1;
     return 0;
   }
-
-  save(writer: (name: string, value: string) => void): void {
-    super.save(writer);
-    writer('Weight', String(this.weight));
-    writer('Direction', this.direction);
-  }
-
-  load(reader: (name: string, defaultValue?: string) => string): void {
-    super.load(reader);
-    this.weight = parseFloat(reader('Weight', '0'));
-    const dirStr = reader('Direction', 'X');
-    this.direction = (FloorDirection as any)[dirStr] ?? FloorDirection.X;
-  }
 }

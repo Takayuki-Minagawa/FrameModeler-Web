@@ -74,13 +74,4 @@ export abstract class Plane extends DocumentData {
   isReferring(n: Node): boolean {
     return this.nodes.includes(n);
   }
-
-  save(writer: (name: string, value: string) => void): void {
-    super.save(writer);
-    writer('NodeCount', String(this.nodeCount));
-    for (let i = 0; i < this.nodes.length; i++) {
-      writer(`Node${i}`, String(this.nodes[i].number));
-    }
-    if (this.section) writer('Section', this.section);
-  }
 }

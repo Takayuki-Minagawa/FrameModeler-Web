@@ -29,16 +29,4 @@ export class Node extends DocumentData {
     if (this.pos.x > other.pos.x) return +1;
     return 0;
   }
-
-  save(writer: (name: string, value: string) => void): void {
-    super.save(writer);
-    writer('Pos', this.pos.toString());
-    writer('Select', String(this.select));
-  }
-
-  load(reader: (name: string, defaultValue?: string) => string): void {
-    super.load(reader);
-    this.pos = Point3D.parse(reader('Pos', '0 0 0'));
-    this.select = reader('Select', 'False') === 'True';
-  }
 }

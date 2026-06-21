@@ -1,22 +1,16 @@
+/** 削除可否の判定結果 */
+export interface RemovableResult {
+  removable: boolean;
+  reason: string;
+}
+
 export abstract class DocumentData {
   number: number = 0;
   select: boolean = false;
 
   abstract get typeText(): string;
 
-  isRemovable(): { removable: boolean; reason: string } {
+  isRemovable(): RemovableResult {
     return { removable: true, reason: '' };
-  }
-
-  /** 保存用: サブクラスでオーバーライド */
-  save(writer: (name: string, value: string) => void): void {
-    writer('Number', String(this.number));
-    writer('Select', String(this.select));
-  }
-
-  /** 読込用: サブクラスでオーバーライド */
-  load(reader: (name: string, defaultValue?: string) => string): void {
-    this.number = parseInt(reader('Number', '0'));
-    this.select = reader('Select', 'False') === 'True';
   }
 }
