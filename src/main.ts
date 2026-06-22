@@ -57,14 +57,27 @@ function updateThemeButton(): void {
   }
 }
 
+// ========== DOM ヘルパ ==========
+
+/** 必須要素を型付きで取得する。存在しなければ即座にエラー（V-12） */
+function byId<T extends HTMLElement>(id: string): T {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`Element not found: #${id}`);
+  return el as T;
+}
+
 // ========== アプリケーション初期化 ==========
 
 const doc = Document.instance;
-const canvas = document.getElementById('cad-canvas') as HTMLCanvasElement;
+const canvas = byId<HTMLCanvasElement>('cad-canvas');
+
+// テーマは CadView 生成より先に適用する（保存済みダークテーマの初期背景色を
+// CadView コンストラクタの setClearColor に反映させるため）
+initTheme();
+
 const cadView = new CadView(canvas);
 
-// テーマ・i18n 初期化
-initTheme();
+// i18n 初期化
 initI18n();
 updateLangButton();
 
@@ -83,56 +96,32 @@ async function showDataDialog(data: DocumentData): Promise<void> {
 
 // ========== ハンドラ管理 ==========
 
+/** ツールIDごとのハンドラ生成関数 */
+const handlerFactories: Record<string, () => ICadMouseHandler> = {
+  'btn-select': () => new SelectionHandler(),
+  'btn-move': () => new MoveNodeHandler(),
+  'btn-add-node': () => new AddNodeHandler(),
+  'btn-add-beam': () => new AddBeamHandler(),
+  'btn-add-pillar': () => new AddPillarHandler(),
+  'btn-add-floor': () => new AddFloorHandler(),
+  'btn-add-wall': () => new AddWallHandler(),
+  'btn-add-bearwall': () => new AddBearWallHandler(),
+};
+
 function createHandler(id: string): ICadMouseHandler {
-  switch (id) {
-    case 'btn-select': {
-      const h = new SelectionHandler();
-      h.setDialogCallback(showDataDialog);
-      return h;
-    }
-    case 'btn-move': {
-      const h = new MoveNodeHandler();
-      h.setDialogCallback(showDataDialog);
-      return h;
-    }
-    case 'btn-add-node':
-      return new AddNodeHandler();
-    case 'btn-add-beam': {
-      const h = new AddBeamHandler();
-      h.showDialog = showDataDialog;
-      return h;
-    }
-    case 'btn-add-pillar': {
-      const h = new AddPillarHandler();
-      h.showDialog = showDataDialog;
-      return h;
-    }
-    case 'btn-add-floor': {
-      const h = new AddFloorHandler();
-      h.showDialog = showDataDialog;
-      return h;
-    }
-    case 'btn-add-wall': {
-      const h = new AddWallHandler();
-      h.showDialog = showDataDialog;
-      return h;
-    }
-    case 'btn-add-bearwall': {
-      const h = new AddBearWallHandler();
-      h.showDialog = showDataDialog;
-      return h;
-    }
-    default: {
-      const h = new SelectionHandler();
-      h.setDialogCallback(showDataDialog);
-      return h;
-    }
-  }
+  const factory = handlerFactories[id] ?? handlerFactories['btn-select'];
+  const handler = factory();
+  // ダイアログ表示コールバックは統一APIで注入（対応ハンドラのみ）
+  handler.setDialogCallback?.(showDataDialog);
+  return handler;
 }
 
 let activeToolId = 'btn-select';
 
 function setActiveTool(id: string): void {
+  // 現ハンドラに切替を通知（途中状態のキャンセル等）
+  cadView.handler?.onDeactivate?.(cadView);
+
   activeToolId = id;
   cadView.handler = createHandler(id);
 
@@ -196,9 +185,15 @@ fileInput.addEventListener('change', () => {
 
 // 保存ボタン
 document.getElementById('btn-save')?.addEventListener('click', () => {
-  const filename = doc.hasFileName ? doc.filename.replace(/\.xml$/i, '.json') : 'model.json';
+  const filename = doc.hasFileName ? toJsonFilename(doc.filename) : 'model.json';
   downloadJson(filename);
 });
+
+/** 任意の拡張子を .json に置き換える（拡張子なしならそのまま付与） */
+function toJsonFilename(name: string): string {
+  const base = name.replace(/\.[^.\\/]+$/, '');
+  return `${base || 'model'}.json`;
+}
 
 // 削除ボタン
 document.getElementById('btn-delete')?.addEventListener('click', () => {
@@ -235,6 +230,7 @@ document.getElementById('btn-help')?.addEventListener('click', () => {
 // テーマ切替ボタン
 document.getElementById('btn-theme')?.addEventListener('click', () => {
   toggleTheme();
+  cadView.refreshTheme();
 });
 
 // 言語切替ボタン
@@ -257,11 +253,11 @@ setOnLocaleChanged(() => {
 
 // ========== チェックボックス ==========
 
-const chkGrid = document.getElementById('chk-grid') as HTMLInputElement;
-const chkSnap = document.getElementById('chk-snap') as HTMLInputElement;
-const chk3D = document.getElementById('chk-3d') as HTMLInputElement;
-const inputGridWidth = document.getElementById('input-grid-width') as HTMLInputElement;
-const inputSnapWidth = document.getElementById('input-snap-width') as HTMLInputElement;
+const chkGrid = byId<HTMLInputElement>('chk-grid');
+const chkSnap = byId<HTMLInputElement>('chk-snap');
+const chk3D = byId<HTMLInputElement>('chk-3d');
+const inputGridWidth = byId<HTMLInputElement>('input-grid-width');
+const inputSnapWidth = byId<HTMLInputElement>('input-snap-width');
 
 chkGrid.addEventListener('change', () => { cadView.showGrid = chkGrid.checked; });
 chkSnap.addEventListener('change', () => { cadView.snapping = chkSnap.checked; });
@@ -271,21 +267,29 @@ inputSnapWidth.addEventListener('change', () => { cadView.snapWidth = parseInt(i
 
 // ========== レイヤーパネル ==========
 
-const layerList = document.getElementById('layer-list') as HTMLUListElement;
+const layerList = byId<HTMLUListElement>('layer-list');
+
+// クリックは要素委譲で1つのリスナにまとめる（V-14）
+layerList.addEventListener('click', (e) => {
+  const li = (e.target as HTMLElement).closest('li');
+  if (!li?.dataset.index) return;
+  const layer = doc.layers[parseInt(li.dataset.index)];
+  if (layer) {
+    doc.shownLayer = layer;
+    updateLayerList();
+    cadView.render();
+  }
+});
 
 function updateLayerList(): void {
   layerList.innerHTML = '';
-  for (const layer of doc.layers) {
+  doc.layers.forEach((layer, i) => {
     const li = document.createElement('li');
     li.textContent = layer.toString();
+    li.dataset.index = String(i);
     li.classList.toggle('active', layer === doc.shownLayer);
-    li.addEventListener('click', () => {
-      doc.shownLayer = layer;
-      updateLayerList();
-      cadView.render();
-    });
     layerList.appendChild(li);
-  }
+  });
 }
 
 // レイヤー追加
@@ -318,9 +322,9 @@ doc.onLayerChanged = () => {
 
 // ========== ステータスバー ==========
 
-const statusVersion = document.getElementById('status-version')!;
-const statusCoord = document.getElementById('status-coord')!;
-const statusInfo = document.getElementById('status-info')!;
+const statusVersion = byId('status-version');
+const statusCoord = byId('status-coord');
+const statusInfo = byId('status-info');
 
 statusVersion.textContent = `Ver.${APP_VERSION}`;
 

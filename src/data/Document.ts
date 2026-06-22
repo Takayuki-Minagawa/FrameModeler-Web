@@ -1,20 +1,11 @@
-import { DocumentData } from './DocumentData';
+import { DocumentData, type RemovableResult } from './DocumentData';
 import { Node } from './Node';
 import { Member } from './Member';
-import { Beam } from './Beam';
-import { Pillar } from './Pillar';
 import { Plane } from './Plane';
-import { Floor } from './Floor';
-import { Wall } from './Wall';
-import { BearWall } from './BearWall';
 import { Point3D } from '../math/Point3D';
 import { Point2D } from '../math/Point2D';
 import { Layer } from '../ui/Layer';
-
-/** データ型の優先順位 */
-const TYPE_ORDER: Function[] = [
-  Node, Beam, Pillar, BearWall, Wall, Floor,
-];
+import { typeOrderIndex, categoryOf, CAD_ID_OFFSET, type NumberCategory } from './typeRegistry';
 
 export class Document {
   private static _instance: Document = new Document();
@@ -23,7 +14,6 @@ export class Document {
   private _layers: Layer[] = [];
   private _shownLayer: Layer | null = null;
   private _filename: string = '';
-  private suppressDataSort: boolean = false;
 
   /** 変更通知コールバック */
   onChanged: (() => void) | null = null;
@@ -37,8 +27,8 @@ export class Document {
 
   // ========== データリストアクセス ==========
 
-  chooseData<T>(type: Function): T[] {
-    return this.dataList.filter(d => d instanceof type) as unknown as T[];
+  chooseData<T extends DocumentData>(type: abstract new (...args: any[]) => T): T[] {
+    return this.dataList.filter((d): d is T => d instanceof type);
   }
 
   get allDataList(): ReadonlyArray<DocumentData> {
@@ -62,10 +52,7 @@ export class Document {
   add(data: DocumentData): void {
     if (this.dataList.includes(data)) return;
     this.dataList.push(data);
-    if (!this.suppressDataSort) {
-      this.sortDataList();
-      this.assignNumbers();
-    }
+    this.reindex();
     this.notifyChanged();
   }
 
@@ -73,48 +60,39 @@ export class Document {
     const idx = this.dataList.indexOf(data);
     if (idx < 0) return;
 
-    const { removable, reason } = data.isRemovable();
+    // Node は他データからの参照チェックが必要（Member/Plane が参照中なら削除不可）
+    const { removable, reason } = data instanceof Node
+      ? this.checkNodeRemovable(data)
+      : data.isRemovable();
     if (!removable) {
       throw new Error('削除できないデータ: ' + reason);
     }
 
     this.dataList.splice(idx, 1);
-    if (!this.suppressDataSort) {
-      this.sortDataList();
-      this.assignNumbers();
-    }
+    this.reindex();
     this.notifyChanged();
   }
 
-  private sortDataList(): void {
+  /** ソートと番号再割当を常に一体で行う（不変条件を保証, 5-3） */
+  private reindex(): void {
     this.dataList.sort((a, b) => Document.compareData(a, b));
+    this.assignNumbers();
   }
 
   private static compareData(a: DocumentData, b: DocumentData): number {
-    const typeIndexA = TYPE_ORDER.findIndex(t => a instanceof t);
-    const typeIndexB = TYPE_ORDER.findIndex(t => b instanceof t);
-    const idxA = typeIndexA >= 0 ? typeIndexA : TYPE_ORDER.length;
-    const idxB = typeIndexB >= 0 ? typeIndexB : TYPE_ORDER.length;
-
+    const idxA = typeOrderIndex(a);
+    const idxB = typeOrderIndex(b);
     if (idxA !== idxB) return idxA - idxB;
 
-    // 同じ型なら型固有のcompareTo
-    if (a instanceof Node && b instanceof Node) return a.compareTo(b);
-    if (a instanceof Beam && b instanceof Beam) return a.compareTo(b);
-    if (a instanceof Pillar && b instanceof Pillar) return a.compareTo(b);
-    if (a instanceof Floor && b instanceof Floor) return a.compareTo(b);
-    return 0;
+    // 同一型バケット内は型固有のcompareTo（未定義型は既定の0で安定）
+    return a.compareTo(b);
   }
 
   private assignNumbers(): void {
-    let nodeNum = 0;
-    let memberNum = 0;
-    let planeNum = 0;
-
+    const counters: Record<NumberCategory, number> = { node: 0, member: 0, plane: 0 };
     for (const data of this.dataList) {
-      if (data instanceof Node) data.number = nodeNum++;
-      else if (data instanceof Member) data.number = memberNum++;
-      else if (data instanceof Plane) data.number = planeNum++;
+      const category = categoryOf(data);
+      if (category) data.number = counters[category]++;
     }
   }
 
@@ -134,24 +112,31 @@ export class Document {
     return null;
   }
 
-  /** 直上のNodeを検索（柱配置用） */
-  getNodeAbove(p: Point3D): Node | null {
-    const abovePos = this.getPosAbove(p);
-    if (!abovePos) return null;
-
-    let node = this.getNodeAt(abovePos);
+  /** 指定座標のNodeを取得。無ければ生成して追加する */
+  getOrCreateNode(pos: Point3D): Node {
+    let node = this.getNodeAt(pos);
     if (!node) {
-      node = new Node(abovePos);
+      node = new Node(pos);
       this.add(node);
     }
     return node;
   }
 
-  /** 直上の位置を検索（Node or 部材交点） */
-  getPosAbove(p: Point3D): Point3D | null {
-    let minDist = Number.MAX_VALUE;
+  /** 直上のNodeを取得。位置が見つかれば（無ければ生成して）返す（柱配置用） */
+  getOrCreateNodeAbove(p: Point3D): Node | null {
+    const abovePos = this.getPosAbove(p);
+    if (!abovePos) return null;
+    return this.getOrCreateNode(abovePos);
+  }
 
-    // Node検索
+  /** 直上の位置を検索（Node優先、無ければ部材交点）（D-10） */
+  getPosAbove(p: Point3D): Point3D | null {
+    return this.findNodeAbove(p) ?? this.findMemberIntersectionAbove(p);
+  }
+
+  /** 同一XYで最も近い上方のNode位置 */
+  private findNodeAbove(p: Point3D): Point3D | null {
+    let minDist = Number.MAX_VALUE;
     let aboveNode: Node | null = null;
     for (const n of this.nodeList) {
       if (n.pos.x === p.x && n.pos.y === p.y) {
@@ -162,9 +147,12 @@ export class Document {
         }
       }
     }
-    if (aboveNode) return aboveNode.pos.clone();
+    return aboveNode ? aboveNode.pos.clone() : null;
+  }
 
-    // 部材交点検索
+  /** pを始点とする鉛直線が交わる、最も近い上方の部材交点 */
+  private findMemberIntersectionAbove(p: Point3D): Point3D | null {
+    let minDist = Number.MAX_VALUE;
     let abovePos: Point3D | null = null;
     for (const m of this.memberList) {
       const i = m.posI.toPointXY();
@@ -173,7 +161,7 @@ export class Document {
       const d2 = p.toPointXY().sub(i);
       const d1n = d1.getNormalized();
       const d2n = d2.getNormalized();
-      if (Point2D.dotProduct(d1n, d2n) > 0.999) {
+      if (Point2D.dotProduct(d1n, d2n) > Document.COLLINEAR_THRESHOLD) {
         const d1len = d1.length;
         const d2len = d2.length;
         if (d1len > d2len) {
@@ -190,6 +178,9 @@ export class Document {
     }
     return abovePos;
   }
+
+  /** 共線判定のしきい値（正規化ベクトルの内積） */
+  private static readonly COLLINEAR_THRESHOLD = 0.999;
 
   getMemberOf(i: Node, j: Node): Member | null {
     for (const m of this.memberList) {
@@ -210,18 +201,14 @@ export class Document {
   }
 
   get sceneCenter(): Point3D {
-    const nodes = this.nodeList;
-    if (nodes.length === 0) return new Point3D();
-    let sum = new Point3D();
-    for (const n of nodes) sum = sum.add(n.pos);
-    return sum.div(nodes.length);
+    return Point3D.average(this.nodeList.map(n => n.pos));
   }
 
   // ========== CAD ID ==========
 
-  readonly nodeCadIdOffset = 0;
-  readonly memberCadIdOffset = 100000;
-  readonly planeCadIdOffset = 200000;
+  readonly nodeCadIdOffset = CAD_ID_OFFSET.node;
+  readonly memberCadIdOffset = CAD_ID_OFFSET.member;
+  readonly planeCadIdOffset = CAD_ID_OFFSET.plane;
 
   // ========== レイヤー ==========
 
@@ -288,15 +275,16 @@ export class Document {
     this.onLayerChanged?.();
   }
 
-  /** 外部からデータ一括設定（XML読込用） */
+  /** 外部からデータ一括設定（JSON読込用） */
   bulkLoad(data: DocumentData[], layers: Layer[]): void {
-    this.suppressDataSort = true;
     this.dataList = data;
-    this.suppressDataSort = false;
-    this.sortDataList();
-    this.assignNumbers();
+    this.reindex();
 
-    this._layers = layers.sort((a, b) => a.compareTo(b));
+    // posZ 重複レイヤーを除外（addLayer と同じ不変条件を保つ, I-8）
+    const seenPosZ = new Set<number>();
+    this._layers = layers
+      .filter((l) => (seenPosZ.has(l.posZ) ? false : (seenPosZ.add(l.posZ), true)))
+      .sort((a, b) => a.compareTo(b));
     this._shownLayer = this._layers.length > 0 ? this._layers[0] : null;
 
     this.notifyChanged();
@@ -308,12 +296,9 @@ export class Document {
   }
 
   /** Node削除可能チェック用: 参照元があるかチェック */
-  checkNodeRemovable(node: Node): { removable: boolean; reason: string } {
+  checkNodeRemovable(node: Node): RemovableResult {
     for (const data of this.dataList) {
-      if (data instanceof Member && data.isReferring(node)) {
-        return { removable: false, reason: '他のデータから参照されているノードは削除できません' };
-      }
-      if (data instanceof Plane && data.isReferring(node)) {
+      if ((data instanceof Member || data instanceof Plane) && data.isReferring(node)) {
         return { removable: false, reason: '他のデータから参照されているノードは削除できません' };
       }
     }

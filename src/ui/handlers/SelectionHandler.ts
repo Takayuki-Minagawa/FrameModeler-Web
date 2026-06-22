@@ -6,6 +6,7 @@ import { Node } from '../../data/Node';
 import { Member } from '../../data/Member';
 import { Plane } from '../../data/Plane';
 import { Point3D } from '../../math/Point3D';
+import { MIN_RECT_SIZE } from './constants';
 
 /** 選択ハンドラ: クリック選択、矩形選択、ダブルクリックでダイアログ表示 */
 export class SelectionHandler implements ICadMouseHandler {
@@ -59,10 +60,12 @@ export class SelectionHandler implements ICadMouseHandler {
       const maxX = Math.max(p.x, q.x);
       const minY = Math.min(p.y, q.y);
       const maxY = Math.max(p.y, q.y);
-      view.addPreviewLine(new Point3D(minX, minY, z), new Point3D(maxX, minY, z), 0x0000ff);
-      view.addPreviewLine(new Point3D(maxX, minY, z), new Point3D(maxX, maxY, z), 0x0000ff);
-      view.addPreviewLine(new Point3D(maxX, maxY, z), new Point3D(minX, maxY, z), 0x0000ff);
-      view.addPreviewLine(new Point3D(minX, maxY, z), new Point3D(minX, minY, z), 0x0000ff);
+      view.addPreviewPolygon([
+        new Point3D(minX, minY, z),
+        new Point3D(maxX, minY, z),
+        new Point3D(maxX, maxY, z),
+        new Point3D(minX, maxY, z),
+      ], view.selectionRectColor);
       view.render();
     }
   }
@@ -83,7 +86,7 @@ export class SelectionHandler implements ICadMouseHandler {
     const maxY = Math.max(p.y, q.y);
 
     // 矩形が小さすぎれば無視
-    if (maxX - minX < 1 && maxY - minY < 1) {
+    if (maxX - minX < MIN_RECT_SIZE && maxY - minY < MIN_RECT_SIZE) {
       view.clearPreview();
       view.render();
       return;
@@ -116,19 +119,21 @@ function isOnLayer(data: DocumentData, layer: import('../Layer').Layer): boolean
   return false;
 }
 
+function posInRect(pos: Point3D, minX: number, maxX: number, minY: number, maxY: number): boolean {
+  return pos.x >= minX && pos.x <= maxX && pos.y >= minY && pos.y <= maxY;
+}
+
 function isInsideRect(data: DocumentData, minX: number, maxX: number, minY: number, maxY: number): boolean {
   if (data instanceof Node) {
-    return data.pos.x >= minX && data.pos.x <= maxX && data.pos.y >= minY && data.pos.y <= maxY;
+    return posInRect(data.pos, minX, maxX, minY, maxY);
   }
   if (data instanceof Member) {
     if (!data.ok) return false;
-    return isInsideRect(data.nodeI! as any, minX, maxX, minY, maxY) &&
-           isInsideRect(data.nodeJ! as any, minX, maxX, minY, maxY);
+    return posInRect(data.posI, minX, maxX, minY, maxY) &&
+           posInRect(data.posJ, minX, maxX, minY, maxY);
   }
   if (data instanceof Plane) {
-    return data.nodeList.every(n =>
-      n.pos.x >= minX && n.pos.x <= maxX && n.pos.y >= minY && n.pos.y <= maxY
-    );
+    return data.nodeList.every(n => posInRect(n.pos, minX, maxX, minY, maxY));
   }
   return false;
 }

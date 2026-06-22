@@ -1,6 +1,6 @@
 import { DocumentData } from './DocumentData';
 import { Point3D } from '../math/Point3D';
-import type { Layer } from '../ui/Layer';
+import { compareNumbers } from '../math/compare';
 
 export class Node extends DocumentData {
   pos: Point3D = new Point3D();
@@ -14,31 +14,16 @@ export class Node extends DocumentData {
     return 'ノード';
   }
 
-  /** 指定レイヤー上に存在するか */
-  existsOn(layer: Layer | null): boolean {
-    if (!layer) return false;
-    return this.pos.z === layer.posZ;
+  /** 点なのでZ範囲は単一高さ */
+  protected zRange(): { bottom: number; top: number } {
+    return { bottom: this.pos.z, top: this.pos.z };
   }
 
   compareTo(other: Node): number {
-    if (this.pos.z < other.pos.z) return -1;
-    if (this.pos.z > other.pos.z) return +1;
-    if (this.pos.y < other.pos.y) return -1;
-    if (this.pos.y > other.pos.y) return +1;
-    if (this.pos.x < other.pos.x) return -1;
-    if (this.pos.x > other.pos.x) return +1;
-    return 0;
-  }
-
-  save(writer: (name: string, value: string) => void): void {
-    super.save(writer);
-    writer('Pos', this.pos.toString());
-    writer('Select', String(this.select));
-  }
-
-  load(reader: (name: string, defaultValue?: string) => string): void {
-    super.load(reader);
-    this.pos = Point3D.parse(reader('Pos', '0 0 0'));
-    this.select = reader('Select', 'False') === 'True';
+    return compareNumbers(
+      [this.pos.z, other.pos.z],
+      [this.pos.y, other.pos.y],
+      [this.pos.x, other.pos.x],
+    );
   }
 }

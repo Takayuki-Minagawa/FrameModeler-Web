@@ -1,6 +1,6 @@
 import { APP_VERSION } from '../../version';
-import { t } from '../../i18n';
-import { createModalOverlay, createDialogBox, closeDialog } from './DialogUtil';
+import { t, type MessageKey } from '../../i18n';
+import { createModalOverlay, createDialogBox, showModal } from './DialogUtil';
 
 export function showHelpDialog(): void {
   const overlay = createModalOverlay();
@@ -14,7 +14,7 @@ export function showHelpDialog(): void {
   toolsH4.textContent = t('help.tools');
   content.appendChild(toolsH4);
 
-  const toolRows = [
+  const toolRows: [MessageKey, MessageKey][] = [
     ['help.select.name', 'help.select.desc'],
     ['help.move.name', 'help.move.desc'],
     ['help.addNode.name', 'help.addNode.desc'],
@@ -31,7 +31,7 @@ export function showHelpDialog(): void {
   cameraH4.textContent = t('help.camera');
   content.appendChild(cameraH4);
 
-  const cameraRows = [
+  const cameraRows: [MessageKey, MessageKey][] = [
     ['help.camera.rightDrag', 'help.camera.rightDrag.desc'],
     ['help.camera.middleDrag', 'help.camera.middleDrag.desc'],
     ['help.camera.wheel', 'help.camera.wheel.desc'],
@@ -55,18 +55,14 @@ export function showHelpDialog(): void {
   const closeBtn = document.createElement('button');
   closeBtn.textContent = t('close');
   closeBtn.className = 'primary';
-  closeBtn.addEventListener('click', () => closeDialog(overlay));
   btnRow.appendChild(closeBtn);
   box.appendChild(btnRow);
 
   overlay.appendChild(box);
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeDialog(overlay);
-  });
-  document.body.appendChild(overlay);
+  showModal(overlay, closeBtn);
 }
 
-function createTable(rows: string[][]): HTMLTableElement {
+function createTable(rows: [MessageKey, MessageKey][]): HTMLTableElement {
   const table = document.createElement('table');
   for (const [nameKey, descKey] of rows) {
     const tr = document.createElement('tr');

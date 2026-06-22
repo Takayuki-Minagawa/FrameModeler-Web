@@ -4,9 +4,10 @@ import { Pillar } from '../data/Pillar';
 import { Floor } from '../data/Floor';
 import { Wall } from '../data/Wall';
 import { BearWall } from '../data/BearWall';
+import { Member } from '../data/Member';
 import { Plane } from '../data/Plane';
 import { Document } from '../data/Document';
-import type { JsonDocument } from './JsonDeserializer';
+import type { JsonDocument, JsonMember } from './JsonDeserializer';
 
 /** DocumentをJSON文字列にシリアライズ */
 export function serializeJson(): string {
@@ -22,53 +23,45 @@ export function serializeJson(): string {
     layers: [],
   };
 
+  // 厳密なコンストラクタ同定で振り分ける（instanceof の継承順依存を排除, I-6）
   for (const data of doc.allDataList) {
-    if (data instanceof Node) {
+    if (data.constructor === Node) {
+      const node = data as Node;
       json.nodes.push({
-        number: data.number,
-        pos: { x: data.pos.x, y: data.pos.y, z: data.pos.z },
-        select: data.select,
+        number: node.number,
+        pos: { x: node.pos.x, y: node.pos.y, z: node.pos.z },
+        select: node.select,
       });
-    } else if (data instanceof Beam) {
-      json.beams.push({
-        number: data.number,
-        nodeI: data.nodeI!.number,
-        nodeJ: data.nodeJ!.number,
-        select: data.select,
-        section: data.section || undefined,
-      });
-    } else if (data instanceof Pillar) {
-      json.pillars.push({
-        number: data.number,
-        nodeI: data.nodeI!.number,
-        nodeJ: data.nodeJ!.number,
-        select: data.select,
-        section: data.section || undefined,
-      });
-    } else if (data instanceof Floor) {
+    } else if (data.constructor === Beam) {
+      json.beams.push(memberToJson(data as Beam));
+    } else if (data.constructor === Pillar) {
+      json.pillars.push(memberToJson(data as Pillar));
+    } else if (data.constructor === Floor) {
+      const floor = data as Floor;
       json.floors.push({
-        number: data.number,
-        nodes: getPlaneNodeNumbers(data),
-        select: data.select,
-        weight: data.weight,
-        direction: data.direction,
-        section: data.section || undefined,
+        number: floor.number,
+        nodes: getPlaneNodeNumbers(floor),
+        select: floor.select,
+        weight: floor.weight,
+        direction: floor.direction,
+        section: floor.section || undefined,
       });
-    } else if (data instanceof BearWall) {
-      // BearWall must be checked before Wall (BearWall extends Plane, not Wall)
+    } else if (data.constructor === BearWall) {
+      const bw = data as BearWall;
       json.bearWalls.push({
-        number: data.number,
-        nodes: getPlaneNodeNumbers(data),
-        select: data.select,
-        section: data.section || undefined,
+        number: bw.number,
+        nodes: getPlaneNodeNumbers(bw),
+        select: bw.select,
+        section: bw.section || undefined,
       });
-    } else if (data instanceof Wall) {
+    } else if (data.constructor === Wall) {
+      const wall = data as Wall;
       json.walls.push({
-        number: data.number,
-        nodes: getPlaneNodeNumbers(data),
-        select: data.select,
-        weight: data.weight,
-        section: data.section || undefined,
+        number: wall.number,
+        nodes: getPlaneNodeNumbers(wall),
+        select: wall.select,
+        weight: wall.weight,
+        section: wall.section || undefined,
       });
     }
   }
@@ -81,6 +74,16 @@ export function serializeJson(): string {
   }
 
   return JSON.stringify(json, null, 2);
+}
+
+function memberToJson(member: Member): JsonMember {
+  return {
+    number: member.number,
+    nodeI: member.nodeI!.number,
+    nodeJ: member.nodeJ!.number,
+    select: member.select,
+    section: member.section || undefined,
+  };
 }
 
 function getPlaneNodeNumbers(plane: Plane): number[] {

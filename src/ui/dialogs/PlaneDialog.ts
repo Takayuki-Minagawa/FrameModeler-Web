@@ -4,8 +4,8 @@ import { Wall } from '../../data/Wall';
 import { BearWall } from '../../data/BearWall';
 import { t } from '../../i18n';
 import {
-  createModalOverlay, createDialogBox, addFormRow, addSelectRow, addButtonRow,
-  showDialog, closeDialog,
+  createModalOverlay, createDialogBox, addFormRow, addNodeRow, addSelectRow, addButtonRow,
+  wireDialog,
 } from './DialogUtil';
 
 /** Plane（床/壁/耐力壁）編集ダイアログ */
@@ -22,7 +22,7 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
   // 節点情報（読み取り専用）
   for (let i = 0; i < plane.nodeCount; i++) {
     const n = plane.getNode(i);
-    addFormRow(box, `Node${i}`, 'text', `${n.number} (${n.pos.toString()})`, true);
+    addNodeRow(box, `Node${i}`, n);
   }
 
   const inputSection = addFormRow(box, t('section'), 'text', plane.section);
@@ -32,7 +32,12 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
   let selectDirection: HTMLSelectElement | null = null;
   if (plane instanceof Floor) {
     inputWeight = addFormRow(box, t('weight'), 'number', String(plane.weight));
-    selectDirection = addSelectRow(box, t('direction'), ['X', 'Y', 'XY'], plane.direction);
+    selectDirection = addSelectRow(
+      box,
+      t('direction'),
+      [FloorDirection.X, FloorDirection.Y, FloorDirection.XY],
+      plane.direction,
+    );
   }
 
   // 壁固有: 荷重
@@ -43,9 +48,7 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
   const { okBtn, cancelBtn } = addButtonRow(box);
   overlay.appendChild(box);
 
-  const { promise, resolve } = showDialog(overlay);
-
-  okBtn.addEventListener('click', () => {
+  return wireDialog(overlay, okBtn, cancelBtn, () => {
     plane.section = inputSection.value;
 
     if (plane instanceof Floor) {
@@ -59,14 +62,6 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
       plane.weight = parseFloat(inputWeight.value) || 0;
     }
 
-    closeDialog(overlay);
-    resolve(true);
+    return true;
   });
-
-  cancelBtn.addEventListener('click', () => {
-    closeDialog(overlay);
-    resolve(false);
-  });
-
-  return promise;
 }

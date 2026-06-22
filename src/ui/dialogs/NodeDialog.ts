@@ -3,7 +3,7 @@ import { Point3D } from '../../math/Point3D';
 import { t } from '../../i18n';
 import {
   createModalOverlay, createDialogBox, addFormRow, addButtonRow,
-  showDialog, closeDialog,
+  wireDialog,
 } from './DialogUtil';
 
 /** Node編集ダイアログ */
@@ -18,23 +18,12 @@ export async function showNodeDialog(node: Node): Promise<boolean> {
   const { okBtn, cancelBtn } = addButtonRow(box);
   overlay.appendChild(box);
 
-  const { promise, resolve } = showDialog(overlay);
-
-  okBtn.addEventListener('click', () => {
+  return wireDialog(overlay, okBtn, cancelBtn, () => {
     const x = parseFloat(inputX.value);
     const y = parseFloat(inputY.value);
     const z = parseFloat(inputZ.value);
-    if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
-      node.pos = new Point3D(x, y, z);
-      closeDialog(overlay);
-      resolve(true);
-    }
+    if (isNaN(x) || isNaN(y) || isNaN(z)) return false;
+    node.pos = new Point3D(x, y, z);
+    return true;
   });
-
-  cancelBtn.addEventListener('click', () => {
-    closeDialog(overlay);
-    resolve(false);
-  });
-
-  return promise;
 }

@@ -5,7 +5,7 @@ const STORAGE_KEY = 'framemodeler-locale';
 let currentLocale: Locale = (localStorage.getItem(STORAGE_KEY) as Locale) || 'ja';
 let onLocaleChanged: (() => void) | null = null;
 
-const messages: Record<string, Record<Locale, string>> = {
+const messages = {
   // Toolbar - File
   new: { ja: '新規', en: 'New' },
   open: { ja: '開く', en: 'Open' },
@@ -75,6 +75,10 @@ const messages: Record<string, Record<Locale, string>> = {
   'msg.fileError': { ja: 'ファイル読込エラー: ', en: 'File load error: ' },
   'msg.duplicateLayer': { ja: '同一Z位置のレイヤーが既に存在します', en: 'A layer at the same Z position already exists' },
   'msg.defaultLayerName': { ja: '新規レイヤー', en: 'New Layer' },
+  'msg.memberExists': { ja: '既に接続されたメンバーが存在します', en: 'A connected member already exists' },
+  'msg.floorExists': { ja: '既に同一の床が存在します', en: 'The same floor already exists' },
+  'msg.wallExists': { ja: '既に同一の壁が存在します', en: 'The same wall already exists' },
+  'msg.bearwallExists': { ja: '既に同一の耐力壁が存在します', en: 'The same bearing wall already exists' },
 
   // Help dialog
   'help.title': { ja: '操作マニュアル', en: 'Operation Manual' },
@@ -107,12 +111,15 @@ const messages: Record<string, Record<Locale, string>> = {
   'help.camera.wheel.desc': { ja: 'ズーム', en: 'Zoom' },
 
   'help.data.desc': { ja: 'JSON形式でモデルデータを保存・読込します。\n座標系: X=右, Y=奥, Z=上（mm単位）', en: 'Save/load model data in JSON format.\nCoordinates: X=right, Y=depth, Z=up (mm unit)' },
-};
+} as const;
 
-export function t(key: string): string {
+/** 翻訳キー（messages のキーに限定。タイポはコンパイルエラーになる） */
+export type MessageKey = keyof typeof messages;
+
+export function t(key: MessageKey): string {
   const entry = messages[key];
   if (!entry) return key;
-  return entry[currentLocale] ?? entry['ja'] ?? key;
+  return entry[currentLocale] ?? entry.ja ?? key;
 }
 
 export function getLocale(): Locale {
@@ -134,39 +141,59 @@ export function setOnLocaleChanged(callback: () => void): void {
   onLocaleChanged = callback;
 }
 
-/** data-i18n 属性を持つ全要素のテキストを更新 */
+/**
+ * data 属性ごとの更新ルール。属性値を MessageKey とみなし apply で要素へ反映する。
+ * label/after はテキストノード走査を含むため、各 apply 内で従来の挙動を厳密に維持する。
+ */
+const domUpdateRules: { attr: string; apply: (el: Element, text: string) => void }[] = [
+  {
+    attr: 'data-i18n',
+    apply: (el, text) => {
+      el.textContent = text;
+    },
+  },
+  {
+    attr: 'data-i18n-title',
+    apply: (el, text) => {
+      (el as HTMLElement).title = text;
+    },
+  },
+  {
+    // ラベル "text: input" 形式: ラベル直下のテキストノードを更新
+    attr: 'data-i18n-label',
+    apply: (el, text) => {
+      const label = el as HTMLLabelElement;
+      const input = label.querySelector('input, select');
+      if (input) {
+        label.childNodes.forEach((node) => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            node.textContent = text + ' ';
+          }
+        });
+      }
+    },
+  },
+  {
+    // チェックボックスラベル: input 直後のテキストノードを更新
+    attr: 'data-i18n-after',
+    apply: (el, text) => {
+      const label = el as HTMLLabelElement;
+      const input = label.querySelector('input');
+      if (input && input.nextSibling) {
+        input.nextSibling.textContent = ' ' + text;
+      }
+    },
+  },
+];
+
+/** data-i18n 系属性を持つ全要素のテキストを更新 */
 export function updateDom(): void {
-  document.querySelectorAll('[data-i18n]').forEach((el) => {
-    const key = el.getAttribute('data-i18n')!;
-    el.textContent = t(key);
-  });
-  document.querySelectorAll('[data-i18n-title]').forEach((el) => {
-    const key = el.getAttribute('data-i18n-title')!;
-    (el as HTMLElement).title = t(key);
-  });
-  // Update labels with format "text: input"
-  document.querySelectorAll('[data-i18n-label]').forEach((el) => {
-    const key = el.getAttribute('data-i18n-label')!;
-    const label = el as HTMLLabelElement;
-    const input = label.querySelector('input, select');
-    if (input) {
-      label.childNodes.forEach((node) => {
-        if (node.nodeType === Node.TEXT_NODE) {
-          node.textContent = t(key) + ' ';
-        }
-      });
-    }
-  });
-  // Update checkbox labels
-  document.querySelectorAll('[data-i18n-after]').forEach((el) => {
-    const key = el.getAttribute('data-i18n-after')!;
-    const label = el as HTMLLabelElement;
-    // Find the text node after the input
-    const input = label.querySelector('input');
-    if (input && input.nextSibling) {
-      input.nextSibling.textContent = ' ' + t(key);
-    }
-  });
+  for (const { attr, apply } of domUpdateRules) {
+    document.querySelectorAll(`[${attr}]`).forEach((el) => {
+      const key = el.getAttribute(attr) as MessageKey;
+      apply(el, t(key));
+    });
+  }
 }
 
 /** 初期化: DOMロード後に呼ぶ */
