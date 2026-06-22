@@ -70,10 +70,14 @@ function byId<T extends HTMLElement>(id: string): T {
 
 const doc = Document.instance;
 const canvas = byId<HTMLCanvasElement>('cad-canvas');
+
+// テーマは CadView 生成より先に適用する（保存済みダークテーマの初期背景色を
+// CadView コンストラクタの setClearColor に反映させるため）
+initTheme();
+
 const cadView = new CadView(canvas);
 
-// テーマ・i18n 初期化
-initTheme();
+// i18n 初期化
 initI18n();
 updateLangButton();
 
