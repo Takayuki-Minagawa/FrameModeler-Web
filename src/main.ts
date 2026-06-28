@@ -6,6 +6,7 @@ import { Member } from './data/Member';
 import { Plane } from './data/Plane';
 import { CadView } from './ui/CadView';
 import { Layer } from './ui/Layer';
+import { deserializeCalcYaml } from './io/CalcYamlDeserializer';
 import { deserializeJson } from './io/JsonDeserializer';
 import { downloadJson } from './io/JsonSerializer';
 import type { ICadMouseHandler } from './ui/handlers/ICadMouseHandler';
@@ -22,6 +23,7 @@ import { showMemberDialog } from './ui/dialogs/MemberDialog';
 import { showPlaneDialog } from './ui/dialogs/PlaneDialog';
 import { showLayerDialog } from './ui/dialogs/LayerDialog';
 import { showHelpDialog } from './ui/dialogs/HelpDialog';
+import { showImportInfoDialog } from './ui/dialogs/ImportInfoDialog';
 import { t, initI18n, toggleLocale, getLocale, setOnLocaleChanged } from './i18n';
 import { APP_VERSION } from './version';
 
@@ -84,12 +86,16 @@ updateLangButton();
 // ========== ダイアログ表示関数 ==========
 
 async function showDataDialog(data: DocumentData): Promise<void> {
+  let changed = false;
   if (data instanceof Node) {
-    await showNodeDialog(data);
+    changed = await showNodeDialog(data);
   } else if (data instanceof Member) {
-    await showMemberDialog(data);
+    changed = await showMemberDialog(data);
   } else if (data instanceof Plane) {
-    await showPlaneDialog(data);
+    changed = await showPlaneDialog(data);
+  }
+  if (changed && doc.importMetadata) {
+    doc.setImportMetadata(null);
   }
   cadView.render();
 }
@@ -151,6 +157,7 @@ document.getElementById('btn-new')?.addEventListener('click', () => {
     doc.init();
     doc.filename = '';
     updateLayerList();
+    updateImportInfoButton();
     cadView.render();
   }
 });
@@ -165,14 +172,25 @@ fileInput.addEventListener('change', () => {
   if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
-      deserializeJson(reader.result as string);
+      const content = reader.result as string;
+      if (isYamlFile(file.name, content)) {
+        await deserializeCalcYaml(content);
+      } else if (isJsonFile(file.name, content)) {
+        deserializeJson(content);
+      } else {
+        throw new Error(t('msg.unsupportedFileType'));
+      }
       doc.filename = file.name;
       updateLayerList();
       cadView.fitToScene();
       cadView.render();
       updateStatusInfo();
+      updateImportInfoButton();
+      if (doc.importMetadata) {
+        await showImportInfoDialog(doc.importMetadata);
+      }
     } catch (e) {
       alert(t('msg.fileError') + (e as Error).message);
     }
@@ -183,11 +201,30 @@ fileInput.addEventListener('change', () => {
   fileInput.value = '';
 });
 
+function isJsonFile(name: string, content: string): boolean {
+  return /\.json$/i.test(name) || /^[\s\r\n]*[{\[]/.test(content);
+}
+
+function isYamlFile(name: string, content: string): boolean {
+  return /\.ya?ml$/i.test(name) || /^[\s\r\n]*schema_version\s*:/i.test(content);
+}
+
 // 保存ボタン
 document.getElementById('btn-save')?.addEventListener('click', () => {
   const filename = doc.hasFileName ? toJsonFilename(doc.filename) : 'model.json';
   downloadJson(filename);
 });
+
+const importInfoButton = byId<HTMLButtonElement>('btn-import-info');
+importInfoButton.addEventListener('click', () => {
+  if (doc.importMetadata) {
+    showImportInfoDialog(doc.importMetadata);
+  }
+});
+
+function updateImportInfoButton(): void {
+  importInfoButton.disabled = !doc.importMetadata;
+}
 
 /** 任意の拡張子を .json に置き換える（拡張子なしならそのまま付与） */
 function toJsonFilename(name: string): string {
@@ -341,10 +378,12 @@ function updateStatusInfo(): void {
 
 doc.onChanged = () => {
   updateStatusInfo();
+  updateImportInfoButton();
 };
 
 // ========== 初期描画 ==========
 
 updateLayerList();
 updateStatusInfo();
+updateImportInfoButton();
 cadView.render();

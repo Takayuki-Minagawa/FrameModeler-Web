@@ -10,6 +10,7 @@ const messages = {
   new: { ja: '新規', en: 'New' },
   open: { ja: '開く', en: 'Open' },
   save: { ja: '保存', en: 'Save' },
+  importInfo: { ja: '読込情報', en: 'Import Info' },
 
   // Toolbar - Tools
   select: { ja: '選択', en: 'Select' },
@@ -26,6 +27,7 @@ const messages = {
   'title.new': { ja: '新規作成', en: 'New' },
   'title.open': { ja: '開く', en: 'Open' },
   'title.save': { ja: '保存', en: 'Save' },
+  'title.importInfo': { ja: 'YAML読込情報', en: 'YAML import info' },
   'title.select': { ja: '選択', en: 'Select' },
   'title.move': { ja: '移動', en: 'Move' },
   'title.node': { ja: '節点追加', en: 'Add Node' },
@@ -64,6 +66,7 @@ const messages = {
   'dialog.planeProps': { ja: '面要素プロパティ', en: 'Plane Properties' },
   'dialog.layerAdd': { ja: 'レイヤー追加', en: 'Add Layer' },
   'dialog.layerEdit': { ja: 'レイヤー編集', en: 'Edit Layer' },
+  'dialog.importInfo': { ja: '読込情報', en: 'Import Info' },
   section: { ja: '断面', en: 'Section' },
   weight: { ja: '荷重', en: 'Weight' },
   direction: { ja: '方向', en: 'Direction' },
@@ -73,6 +76,7 @@ const messages = {
   // Messages
   'msg.confirmNew': { ja: '現在のデータを破棄して新規作成しますか？', en: 'Discard current data and create new?' },
   'msg.fileError': { ja: 'ファイル読込エラー: ', en: 'File load error: ' },
+  'msg.unsupportedFileType': { ja: '未対応のファイル形式です', en: 'Unsupported file type' },
   'msg.duplicateLayer': { ja: '同一Z位置のレイヤーが既に存在します', en: 'A layer at the same Z position already exists' },
   'msg.defaultLayerName': { ja: '新規レイヤー', en: 'New Layer' },
   'msg.memberExists': { ja: '既に接続されたメンバーが存在します', en: 'A connected member already exists' },
@@ -110,7 +114,33 @@ const messages = {
   'help.camera.wheel': { ja: 'ホイール', en: 'Wheel' },
   'help.camera.wheel.desc': { ja: 'ズーム', en: 'Zoom' },
 
-  'help.data.desc': { ja: 'JSON形式でモデルデータを保存・読込します。\n座標系: X=右, Y=奥, Z=上（mm単位）', en: 'Save/load model data in JSON format.\nCoordinates: X=right, Y=depth, Z=up (mm unit)' },
+  'help.data.desc': { ja: '保存形式はJSONです。構造解析用YAMLはCAD形状へ変換して読み込めます。\n座標系: X=右, Y=奥, Z=上（mm単位）', en: 'JSON is the save format. Structural analysis YAML can be imported by converting it to CAD geometry.\nCoordinates: X=right, Y=depth, Z=up (mm unit)' },
+
+  // Import info
+  'import.summary': { ja: '概要', en: 'Summary' },
+  'import.modelName': { ja: 'モデル名', en: 'Model' },
+  'import.sourceJson': { ja: '元JSON', en: 'Source JSON' },
+  'import.analysisProfile': { ja: '解析プロファイル', en: 'Analysis profile' },
+  'import.units': { ja: '単位', en: 'Units' },
+  'import.counts': { ja: '件数', en: 'Counts' },
+  'import.item': { ja: '項目', en: 'Item' },
+  'import.value': { ja: '値', en: 'Value' },
+  'import.sourceIdMap': { ja: '元ID対応', en: 'Source ID Map' },
+  'import.kind': { ja: '分類', en: 'Kind' },
+  'import.type': { ja: '種類', en: 'Type' },
+  'import.sourceId': { ja: '元ID', en: 'Source ID' },
+  'import.sourceType': { ja: '元種類', en: 'Source Type' },
+  'import.appNumber': { ja: 'アプリ番号', en: 'App No.' },
+  'import.detail': { ja: '詳細', en: 'Detail' },
+  'import.materials': { ja: '材料', en: 'Materials' },
+  'import.sections': { ja: '断面性能', en: 'Sections' },
+  'import.material': { ja: '材料', en: 'Material' },
+  'import.elementTags': { ja: '解析要素タグ', en: 'Element Tags' },
+  'import.warnings': { ja: '警告', en: 'Warnings' },
+  'import.noWarnings': { ja: '警告はありません', en: 'No warnings' },
+  'import.code': { ja: 'コード', en: 'Code' },
+  'import.path': { ja: 'パス', en: 'Path' },
+  'import.message': { ja: 'メッセージ', en: 'Message' },
 } as const;
 
 /** 翻訳キー（messages のキーに限定。タイポはコンパイルエラーになる） */

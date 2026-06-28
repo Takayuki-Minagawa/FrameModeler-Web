@@ -1,4 +1,5 @@
 import { Plane } from '../../data/Plane';
+import { Document } from '../../data/Document';
 import { Floor, FloorDirection } from '../../data/Floor';
 import { Wall } from '../../data/Wall';
 import { BearWall } from '../../data/BearWall';
@@ -26,6 +27,16 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
   }
 
   const inputSection = addFormRow(box, t('section'), 'text', plane.section);
+  const sourceElements = Document.instance.getImportSourceElements(plane);
+  if (sourceElements && sourceElements.length > 0) {
+    const info = sourceElements[0];
+    addFormRow(box, t('import.sourceId'), 'text', info.sourceId, true);
+    addFormRow(box, t('import.sourceType'), 'text', info.sourceType, true);
+    addFormRow(box, t('import.material'), 'text', info.material ?? '', true);
+    if (info.elementTags && info.elementTags.length > 0) {
+      addFormRow(box, t('import.elementTags'), 'text', info.elementTags.join(', '), true);
+    }
+  }
 
   // 床固有: 荷重、方向
   let inputWeight: HTMLInputElement | null = null;
@@ -48,20 +59,40 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
   const { okBtn, cancelBtn } = addButtonRow(box);
   overlay.appendChild(box);
 
-  return wireDialog(overlay, okBtn, cancelBtn, () => {
-    plane.section = inputSection.value;
+  let changed = false;
+  const confirmed = await wireDialog(overlay, okBtn, cancelBtn, () => {
+    const nextSection = inputSection.value;
+    if (plane.section !== nextSection) {
+      plane.section = nextSection;
+      changed = true;
+    }
 
     if (plane instanceof Floor) {
-      if (inputWeight) plane.weight = parseFloat(inputWeight.value) || 0;
+      if (inputWeight) {
+        const nextWeight = parseFloat(inputWeight.value) || 0;
+        if (plane.weight !== nextWeight) {
+          plane.weight = nextWeight;
+          changed = true;
+        }
+      }
       if (selectDirection) {
-        plane.direction = selectDirection.value as FloorDirection;
+        const nextDirection = selectDirection.value as FloorDirection;
+        if (plane.direction !== nextDirection) {
+          plane.direction = nextDirection;
+          changed = true;
+        }
       }
     }
 
     if (plane instanceof Wall && inputWeight) {
-      plane.weight = parseFloat(inputWeight.value) || 0;
+      const nextWeight = parseFloat(inputWeight.value) || 0;
+      if (plane.weight !== nextWeight) {
+        plane.weight = nextWeight;
+        changed = true;
+      }
     }
 
     return true;
   });
+  return confirmed && changed;
 }

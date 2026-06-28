@@ -30,10 +30,16 @@ export class MoveNodeHandler extends SelectionHandler {
   onMouseMove(view: CadView, pos: Point3D): void {
     if (this.moving) {
       const move = pos.sub(this.prevPos);
+      if (move.length === 0) return;
+      let moved = false;
       for (const n of Document.instance.nodeList) {
         if (n.select) {
           n.pos = n.pos.add(move);
+          moved = true;
         }
+      }
+      if (moved && Document.instance.importMetadata) {
+        Document.instance.setImportMetadata(null);
       }
       this.prevPos = pos.clone();
       view.render();
