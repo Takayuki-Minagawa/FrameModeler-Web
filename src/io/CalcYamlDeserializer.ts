@@ -58,7 +58,7 @@ export async function deserializeCalcYaml(yamlString: string, options: CalcYamlD
   }
 
   const model = asRecord(root.model, 'model');
-  const traceability = asOptionalRecord(model.traceability);
+  const traceability = readTraceability(model, mode);
 
   const ctx: BuildContext = {
     warnings: [],
@@ -67,7 +67,7 @@ export async function deserializeCalcYaml(yamlString: string, options: CalcYamlD
     sourceNodeInfo: new Map(),
     sourceElementInfo: new Map(),
     sourceIdMapObjects: [],
-    elementsByTag: indexElements(asArray(model.elements, 'model.elements')),
+    elementsByTag: mode === 'source' ? indexElements(readOptionalArray(model.elements, 'model.elements')) : new Map(),
     materials: toPropertyTable(model.materials, 'model.materials'),
     sections: toPropertyTable(model.sections, 'model.sections'),
   };
@@ -76,7 +76,8 @@ export async function deserializeCalcYaml(yamlString: string, options: CalcYamlD
   let layers: Layer[];
 
   if (mode === 'generated') {
-    const generatedNodes = buildGeneratedNodes(model, allData, ctx);
+    const referencedNodeTags = collectGeneratedReferencedNodeTags(model);
+    const generatedNodes = buildGeneratedNodes(model, referencedNodeTags, allData, ctx);
     layers = buildGeneratedLayers(generatedNodes, traceability);
     buildGeneratedElements(model, generatedNodes, allData, ctx, traceability);
     collectUnsupportedWarnings(model, ctx.warnings, { springsImported: true });
@@ -114,9 +115,45 @@ export async function deserializeCalcYaml(yamlString: string, options: CalcYamlD
   return summary;
 }
 
-function buildGeneratedNodes(model: UnknownRecord, allData: DocumentData[], ctx: BuildContext): Map<number, Node> {
+function readTraceability(model: UnknownRecord, mode: CalcYamlImportMode): UnknownRecord {
+  if (mode === 'source') {
+    return asRecord(model.traceability, 'model.traceability');
+  }
+  if (model.traceability === undefined) {
+    return {};
+  }
+  return asRecord(model.traceability, 'model.traceability');
+}
+
+function collectGeneratedReferencedNodeTags(model: UnknownRecord): Set<number> {
+  const referenced = new Set<number>();
+  const elements = asArray(model.elements, 'model.elements');
+  for (let i = 0; i < elements.length; i++) {
+    const raw = asRecord(elements[i], `model.elements[${i}]`);
+    const type = asString(raw.type, `model.elements[${i}].type`);
+    if (!isGeneratedLineElementType(type)) continue;
+    referenced.add(asNumber(raw.node_i, `model.elements[${i}].node_i`));
+    referenced.add(asNumber(raw.node_j, `model.elements[${i}].node_j`));
+  }
+  if (referenced.size === 0) {
+    throw new Error('model.elements must contain at least one supported generated line element');
+  }
+  return referenced;
+}
+
+function buildGeneratedNodes(
+  model: UnknownRecord,
+  referencedNodeTags: Set<number>,
+  allData: DocumentData[],
+  ctx: BuildContext,
+): Map<number, Node> {
   const rawNodes = asArray(model.nodes, 'model.nodes');
+  if (rawNodes.length === 0) {
+    throw new Error('model.nodes must contain at least one generated node');
+  }
   const nodesByTag = new Map<number, Node>();
+  const usedCoords = new Map<string, string[]>();
+  let skippedNodeCount = 0;
   for (let i = 0; i < rawNodes.length; i++) {
     const raw = asRecord(rawNodes[i], `model.nodes[${i}]`);
     const tag = asNumber(raw.tag, `model.nodes[${i}].tag`);
@@ -128,8 +165,14 @@ function buildGeneratedNodes(model: UnknownRecord, allData: DocumentData[], ctx:
       asNumber(raw.y, `model.nodes[${i}].y`),
       asNumber(raw.z, `model.nodes[${i}].z`),
     );
+    if (!referencedNodeTags.has(tag)) {
+      skippedNodeCount++;
+      continue;
+    }
     const node = new Node(coord);
     nodesByTag.set(tag, node);
+    const key = coordKey(coord);
+    usedCoords.set(key, [...(usedCoords.get(key) ?? []), String(tag)]);
     allData.push(node);
     addSourceNodeInfo(ctx, node, { sourceId: String(tag), tag, coord: [coord.x, coord.y, coord.z] });
     addSourceIdMapObject(ctx, {
@@ -137,6 +180,24 @@ function buildGeneratedNodes(model: UnknownRecord, allData: DocumentData[], ctx:
       data: node,
       kind: 'node',
       type: 'Generated Node',
+    });
+  }
+  if (nodesByTag.size === 0) {
+    throw new Error('model.nodes does not contain any nodes referenced by supported generated line elements');
+  }
+  if (skippedNodeCount > 0) {
+    ctx.warnings.push({
+      code: 'UNREFERENCED_GENERATED_NODES_SKIPPED',
+      message: `${skippedNodeCount} unreferenced generated nodes were skipped.`,
+      path: 'model.nodes',
+    });
+  }
+  const duplicateCoordGroups = [...usedCoords.values()].filter((tags) => tags.length > 1);
+  if (duplicateCoordGroups.length > 0) {
+    ctx.warnings.push({
+      code: 'DUPLICATE_GENERATED_NODE_COORDS',
+      message: `${duplicateCoordGroups.length} generated node coordinate groups contain multiple tags and were kept separate.`,
+      path: 'model.nodes',
     });
   }
   return nodesByTag;
@@ -147,10 +208,10 @@ function buildGeneratedLayers(nodesByTag: Map<number, Node>, traceability: Unkno
   const sourceLevel = asOptionalRecord(traceability.source_level);
   const sourceLevelZ = typeof sourceLevel.z === 'number' ? sourceLevel.z : undefined;
   const sourceLevelName = optString(sourceLevel.level_id);
-  return uniqueZ.map((z, i) => {
-    const name = sourceLevelName && sourceLevelZ === z ? sourceLevelName : `Generated Z=${z}`;
-    return new Layer(z, uniqueZ.length === 1 && sourceLevelName ? sourceLevelName : name || `Generated ${i + 1}`);
-  });
+  return uniqueZ.map((z) => new Layer(
+    z,
+    sourceLevelName && sourceLevelZ === z ? sourceLevelName : `Generated Z=${z}`,
+  ));
 }
 
 function buildGeneratedElements(
@@ -164,6 +225,7 @@ function buildGeneratedElements(
   const elements = asArray(model.elements, 'model.elements');
   const seenTags = new Set<number>();
   let importedSpringCount = 0;
+  let zeroLengthSpringCount = 0;
   for (let i = 0; i < elements.length; i++) {
     const raw = asRecord(elements[i], `model.elements[${i}]`);
     const type = asString(raw.type, `model.elements[${i}].type`);
@@ -187,13 +249,17 @@ function buildGeneratedElements(
     if (!nodeI || !nodeJ) {
       throw new Error(`generated element ${tag} references missing node: ${!nodeI ? nodeITag : nodeJTag}`);
     }
-    if (nodeI === nodeJ || nodeI.pos.sub(nodeJ.pos).length <= MIN_GEOMETRY_LENGTH) {
+    const length = nodeI.pos.sub(nodeJ.pos).length;
+    if (type !== 'twoNodeLink3D' && (nodeI === nodeJ || length <= MIN_GEOMETRY_LENGTH)) {
       throw new Error(`generated element ${tag} resolves to a zero-length Beam`);
     }
-    if (type === 'twoNodeLink3D') importedSpringCount++;
+    if (type === 'twoNodeLink3D') {
+      importedSpringCount++;
+      if (nodeI === nodeJ || length <= MIN_GEOMETRY_LENGTH) zeroLengthSpringCount++;
+    }
 
     const beam = new Beam(nodeI, nodeJ);
-    beam.section = optString(raw.section_ref) ?? generatedFallbackSection(type);
+    beam.section = optString(raw.section_ref) ?? type;
     allData.push(beam);
 
     const origin = originsByTag.get(tag);
@@ -225,7 +291,7 @@ function buildGeneratedElements(
   if (importedSpringCount > 0) {
     ctx.warnings.push({
       code: 'SPRINGS_IMPORTED_AS_BEAM',
-      message: `${importedSpringCount} twoNodeLink3D spring elements were imported as display Beams.`,
+      message: `${importedSpringCount} twoNodeLink3D spring elements were imported as display Beams${zeroLengthSpringCount > 0 ? `, including ${zeroLengthSpringCount} zero-length springs` : ''}.`,
       path: 'model.elements',
     });
   }
@@ -233,10 +299,6 @@ function buildGeneratedElements(
 
 function isGeneratedLineElementType(type: string): boolean {
   return type === 'elasticTimoshenkoBeam3D' || type === 'truss3D' || type === 'twoNodeLink3D';
-}
-
-function generatedFallbackSection(type: string): string {
-  return type;
 }
 
 function generatedElementNotes(
@@ -649,6 +711,11 @@ function asArray(value: unknown, label: string): unknown[] {
 
 function optionalArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function readOptionalArray(value: unknown, label: string): unknown[] {
+  if (value === undefined) return [];
+  return asArray(value, label);
 }
 
 function isRecord(value: unknown): value is UnknownRecord {

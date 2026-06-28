@@ -83,7 +83,7 @@ describe('Calc YAML import', () => {
   });
 
   it('keeps generated node tags separate even when coordinates are identical', async () => {
-    await deserializeCalcYaml(readSample('Test0202_calc.yaml'), { mode: 'generated' });
+    const summary = await deserializeCalcYaml(readSample('Test0202_calc.yaml'), { mode: 'generated' });
 
     const duplicateCoordNodes = doc.nodeList.filter((node) => (
       node.pos.x === 250 && node.pos.y === 0 && node.pos.z === 2800
@@ -95,6 +95,7 @@ describe('Calc YAML import', () => {
       .map((info) => info.sourceId)
       .sort();
     expect(sourceIds).toEqual(['101', '3001']);
+    expect(summary.warnings.map((warning) => warning.code)).toContain('DUPLICATE_GENERATED_NODE_COORDS');
   });
 
   it('keeps generated element type, section, material, and origin metadata', async () => {
@@ -146,6 +147,25 @@ describe('Calc YAML import', () => {
     expect(spring5001?.notes?.join(' ')).toContain('analysis element display');
     expect(summary.warnings.map((warning) => warning.code)).not.toContain('SPRINGS_NOT_IMPORTED');
     expect(summary.warnings.map((warning) => warning.code)).toContain('SPRINGS_IMPORTED_AS_BEAM');
+  });
+
+  it('allows zero-length twoNodeLink3D elements in generated mode', async () => {
+    const calc = readCalcObject();
+    const spring = calc.model.elements.find((element: any) => element.tag === 5001);
+    const nodeI = calc.model.nodes.find((node: any) => node.tag === spring.node_i);
+    const nodeJ = calc.model.nodes.find((node: any) => node.tag === spring.node_j);
+    nodeJ.x = nodeI.x;
+    nodeJ.y = nodeI.y;
+    nodeJ.z = nodeI.z;
+
+    const summary = await deserializeCalcYaml(stringify(calc), { mode: 'generated' });
+
+    expect(summary.beams).toBe(79);
+    const springBeam = doc.memberList.find((member) => (
+      doc.getImportSourceElements(member)?.some((info) => info.sourceId === '5001')
+    ));
+    expect(springBeam?.posI.sub(springBeam.posJ).length).toBe(0);
+    expect(summary.warnings.find((warning) => warning.code === 'SPRINGS_IMPORTED_AS_BEAM')?.message).toContain('zero-length');
   });
 
   it('creates the expected shared CAD nodes from source nodes and floor boundaries', async () => {
@@ -240,6 +260,18 @@ describe('Calc YAML import', () => {
     expect(summary.warnings.find((warning) => warning.code === 'NODAL_MASSES_NOT_IMPORTED')?.message).toContain('64');
     expect(summary.warnings.find((warning) => warning.code === 'CONSTRAINTS_NOT_IMPORTED')?.message).toContain('72');
     expect(summary.warnings.find((warning) => warning.code === 'SPRINGS_NOT_IMPORTED')?.message).toContain('13');
+  });
+
+  it('does not require model.elements for source mode', async () => {
+    const calc = readCalcObject();
+    delete calc.model.elements;
+
+    const summary = await deserializeCalcYaml(stringify(calc));
+
+    expect(summary.nodes).toBe(10);
+    expect(summary.beams).toBe(6);
+    expect(summary.floors).toBe(4);
+    expect(summary.warnings.map((warning) => warning.code)).not.toContain('SPRINGS_NOT_IMPORTED');
   });
 
   it('rejects unsupported length units and leaves Document unchanged', async () => {
@@ -375,6 +407,37 @@ describe('Calc YAML import', () => {
 
     await expect(deserializeCalcYaml(stringify(calc), { mode: 'generated' })).rejects.toThrow(/1001.*99999/);
     expect(serializeJson()).toBe(before);
+  });
+
+  it('rejects malformed generated traceability instead of silently dropping metadata', async () => {
+    doc.bulkLoad([new Node(new Point3D(1, 2, 3))], []);
+    const before = serializeJson();
+    const calc = readCalcObject();
+    calc.model.traceability = [];
+
+    await expect(deserializeCalcYaml(stringify(calc), { mode: 'generated' })).rejects.toThrow(/model\.traceability/);
+    expect(serializeJson()).toBe(before);
+  });
+
+  it('rejects empty generated node lists before clearing the current document', async () => {
+    doc.bulkLoad([new Node(new Point3D(1, 2, 3))], []);
+    const before = serializeJson();
+    const calc = readCalcObject();
+    calc.model.nodes = [];
+
+    await expect(deserializeCalcYaml(stringify(calc), { mode: 'generated' })).rejects.toThrow(/model\.nodes/);
+    expect(serializeJson()).toBe(before);
+  });
+
+  it('skips generated nodes that are not referenced by supported generated elements', async () => {
+    const calc = readCalcObject();
+    calc.model.nodes.push({ tag: 999001, x: 999, y: 999, z: 2800 });
+
+    const summary = await deserializeCalcYaml(stringify(calc), { mode: 'generated' });
+
+    expect(summary.nodes).toBe(76);
+    expect(doc.getImportSourceNodes(doc.nodeList[doc.nodeList.length - 1])?.some((info) => info.sourceId === '999001')).not.toBe(true);
+    expect(summary.warnings.map((warning) => warning.code)).toContain('UNREFERENCED_GENERATED_NODES_SKIPPED');
   });
 
   it('clears import metadata when the document is edited after import', async () => {

@@ -214,13 +214,16 @@ twoNodeLink3D: 13 elements, length 1-500 mm
 - `truss3D` 2 件が表示される
 - `twoNodeLink3D` 13 件が表示される
 - `twoNodeLink3D` は `SPRINGS_IMPORTED_AS_BEAM` として表示用 Beam 変換を警告する
+- `twoNodeLink3D` はゼロ長でもエラーにせず、表示用 Beam として保持する
+- source モードでは `model.elements` がなくても元 CAD 形状を読み込める
+- generated モードで不正な `model.traceability` がある場合は黙って捨てずにエラーにする
+- generated モードでは未参照の解析ノードをスキップする
 - 材料 `steel`, `alc` と断面 `B`, `ALC_S_center_beam` を読込情報で確認できる
 - 既存の元 CAD 形状復元モードは従来通り 10 Node / 6 Beam / 4 Floor で読み込める
 
 ## 実行した検証
 
 ```bash
-npm test -- --run tests/CalcYamlDeserializer.test.ts
 npm test
 npm run build
 ```
@@ -231,10 +234,11 @@ npm run build
 - generated モードは 76 Node / 79 Beam / 0 Floor / 1 Layer
 - 同一座標でも YAML node tag が異なる節点は統合しない
 - generated element の type / section / material / 元 source 逆引きが読込情報に残る
-- `twoNodeLink3D` は未読込警告ではなく表示用 Beam として扱う
+- `twoNodeLink3D` は未読込警告ではなく表示用 Beam として扱い、ゼロ長でも許容する
 - JSON 保存形式には materials / sections / traceability / importMetadata を出さない
 - JSON round-trip 後は件数を維持し、import metadata は消える
 - missing generated node 参照時は Document を変更せずエラーにする
+- malformed traceability / empty generated nodes は Document を変更せずエラーにする
 
 ## 結論
 

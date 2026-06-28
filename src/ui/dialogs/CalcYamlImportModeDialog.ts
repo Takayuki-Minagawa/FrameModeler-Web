@@ -3,6 +3,7 @@ import { t } from '../../i18n';
 import {
   createDialogBox,
   createModalOverlay,
+  showModalBase,
 } from './DialogUtil';
 
 export async function showCalcYamlImportModeDialog(): Promise<CalcYamlImportMode | null> {
@@ -36,28 +37,11 @@ export async function showCalcYamlImportModeDialog(): Promise<CalcYamlImportMode
   box.appendChild(buttonRow);
   overlay.appendChild(box);
 
-  return new Promise((resolve) => {
-    let closed = false;
-    let close: (mode: CalcYamlImportMode | null) => void;
-    const onKeydown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') close(null);
-    };
-    close = (mode: CalcYamlImportMode | null): void => {
-      if (closed) return;
-      closed = true;
-      document.removeEventListener('keydown', onKeydown);
-      overlay.remove();
-      resolve(mode);
-    };
-
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) close(null);
-    });
-    cancelBtn.addEventListener('click', () => close(null));
-    sourceBtn.addEventListener('click', () => close('source'));
-    generatedBtn.addEventListener('click', () => close('generated'));
-    document.addEventListener('keydown', onKeydown);
-    document.body.appendChild(overlay);
+  const { promise, dismiss } = showModalBase<CalcYamlImportMode | null>(overlay, null, () => {
     sourceBtn.focus();
   });
+  cancelBtn.addEventListener('click', () => dismiss(null));
+  sourceBtn.addEventListener('click', () => dismiss('source'));
+  generatedBtn.addEventListener('click', () => dismiss('generated'));
+  return promise;
 }
