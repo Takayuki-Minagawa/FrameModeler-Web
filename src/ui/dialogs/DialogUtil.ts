@@ -87,6 +87,20 @@ export function addButtonRow(container: HTMLElement): { okBtn: HTMLButtonElement
   return { okBtn, cancelBtn };
 }
 
+/** 閉じるボタンのみの行を追加 */
+export function addCloseButtonRow(container: HTMLElement): HTMLButtonElement {
+  const row = document.createElement('div');
+  row.className = 'button-row';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = t('close');
+  closeBtn.className = 'primary';
+  row.appendChild(closeBtn);
+
+  container.appendChild(row);
+  return closeBtn;
+}
+
 /**
  * ESC・オーバーレイクリックで閉じられるモーダルとして overlay を表示する共通基盤。
  * dismiss(result) は (a) ESCリスナ除去 (b) overlay除去 (c) resolve を必ずセットで行い、

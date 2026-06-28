@@ -6,6 +6,7 @@ import { Point3D } from '../math/Point3D';
 import { Point2D } from '../math/Point2D';
 import { Layer } from '../ui/Layer';
 import { typeOrderIndex, categoryOf, CAD_ID_OFFSET, type NumberCategory } from './typeRegistry';
+import type { ImportMetadata, ImportSourceElementInfo, ImportSourceNodeInfo } from './ImportMetadata';
 
 export class Document {
   private static _instance: Document = new Document();
@@ -14,6 +15,7 @@ export class Document {
   private _layers: Layer[] = [];
   private _shownLayer: Layer | null = null;
   private _filename: string = '';
+  private _importMetadata: ImportMetadata | null = null;
 
   /** 変更通知コールバック */
   onChanged: (() => void) | null = null;
@@ -52,6 +54,7 @@ export class Document {
   add(data: DocumentData): void {
     if (this.dataList.includes(data)) return;
     this.dataList.push(data);
+    this._importMetadata = null;
     this.reindex();
     this.notifyChanged();
   }
@@ -69,6 +72,7 @@ export class Document {
     }
 
     this.dataList.splice(idx, 1);
+    this._importMetadata = null;
     this.reindex();
     this.notifyChanged();
   }
@@ -264,6 +268,25 @@ export class Document {
     return this._filename !== '';
   }
 
+  // ========== Import metadata ==========
+
+  get importMetadata(): ImportMetadata | null {
+    return this._importMetadata;
+  }
+
+  setImportMetadata(metadata: ImportMetadata | null): void {
+    this._importMetadata = metadata;
+    this.notifyChanged();
+  }
+
+  getImportSourceNodes(data: DocumentData): ImportSourceNodeInfo[] | undefined {
+    return this._importMetadata?.sourceNodes.get(data);
+  }
+
+  getImportSourceElements(data: DocumentData): ImportSourceElementInfo[] | undefined {
+    return this._importMetadata?.sourceElements.get(data);
+  }
+
   // ========== 初期化 ==========
 
   init(): void {
@@ -271,6 +294,7 @@ export class Document {
     this.dataList = [];
     this._layers = [];
     this._shownLayer = null;
+    this._importMetadata = null;
     this.notifyChanged();
     this.onLayerChanged?.();
   }
@@ -278,6 +302,7 @@ export class Document {
   /** 外部からデータ一括設定（JSON読込用） */
   bulkLoad(data: DocumentData[], layers: Layer[]): void {
     this.dataList = data;
+    this._importMetadata = null;
     this.reindex();
 
     // posZ 重複レイヤーを除外（addLayer と同じ不変条件を保つ, I-8）
