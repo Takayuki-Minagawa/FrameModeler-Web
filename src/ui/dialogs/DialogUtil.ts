@@ -106,18 +106,19 @@ export function addCloseButtonRow(container: HTMLElement): HTMLButtonElement {
  * dismiss(result) は (a) ESCリスナ除去 (b) overlay除去 (c) resolve を必ずセットで行い、
  * リスナ漏れ・Promise未解決リークを防ぐ。
  */
-function showModalBase(
+export function showModalBase<T>(
   overlay: HTMLDivElement,
-  onDismiss?: (dismiss: (result: boolean) => void) => void,
-): { promise: Promise<boolean>; dismiss: (result: boolean) => void } {
-  let resolveFunc!: (result: boolean) => void;
+  defaultResult: T,
+  onDismiss?: (dismiss: (result: T) => void) => void,
+): { promise: Promise<T>; dismiss: (result: T) => void } {
+  let resolveFunc!: (result: T) => void;
   let closed = false;
 
   const onKeydown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') dismiss(false);
+    if (e.key === 'Escape') dismiss(defaultResult);
   };
 
-  const dismiss = (result: boolean): void => {
+  const dismiss = (result: T): void => {
     if (closed) return;
     closed = true;
     document.removeEventListener('keydown', onKeydown);
@@ -125,18 +126,17 @@ function showModalBase(
     resolveFunc(result);
   };
 
-  const promise = new Promise<boolean>((resolve) => {
+  const promise = new Promise<T>((resolve) => {
     resolveFunc = resolve;
   });
 
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) dismiss(false);
+    if (e.target === overlay) dismiss(defaultResult);
   });
   document.addEventListener('keydown', onKeydown);
 
-  if (onDismiss) onDismiss(dismiss);
-
   document.body.appendChild(overlay);
+  if (onDismiss) onDismiss(dismiss);
   return { promise, dismiss };
 }
 
@@ -153,7 +153,7 @@ export function wireDialog(
   cancelBtn: HTMLButtonElement,
   onOk: () => boolean,
 ): Promise<boolean> {
-  const { promise, dismiss } = showModalBase(overlay);
+  const { promise, dismiss } = showModalBase(overlay, false);
 
   okBtn.addEventListener('click', () => {
     if (onOk()) dismiss(true);
@@ -168,7 +168,7 @@ export function wireDialog(
  * 閉じるボタン / ESC / オーバーレイクリックで閉じる。
  */
 export function showModal(overlay: HTMLDivElement, closeBtn: HTMLButtonElement): Promise<boolean> {
-  const { promise, dismiss } = showModalBase(overlay);
+  const { promise, dismiss } = showModalBase(overlay, false);
   closeBtn.addEventListener('click', () => dismiss(false));
   return promise;
 }

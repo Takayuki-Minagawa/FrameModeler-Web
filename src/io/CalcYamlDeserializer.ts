@@ -15,6 +15,12 @@ import { Point3D } from '../math/Point3D';
 import { Layer } from '../ui/Layer';
 
 type UnknownRecord = Record<string, unknown>;
+export type CalcYamlImportMode = 'source' | 'generated';
+
+export interface CalcYamlDeserializeOptions {
+  mode?: CalcYamlImportMode;
+}
+
 const MIN_GEOMETRY_LENGTH = 1e-9;
 
 interface BuildContext {
@@ -30,7 +36,8 @@ interface BuildContext {
 }
 
 /** 構造解析用 YAML を既存 CAD Document へ変換して読み込む */
-export async function deserializeCalcYaml(yamlString: string): Promise<ImportSummary> {
+export async function deserializeCalcYaml(yamlString: string, options: CalcYamlDeserializeOptions = {}): Promise<ImportSummary> {
+  const mode = options.mode ?? 'source';
   const { parse } = await import('yaml');
   let parsedUnknown: unknown;
   try {
@@ -51,8 +58,7 @@ export async function deserializeCalcYaml(yamlString: string): Promise<ImportSum
   }
 
   const model = asRecord(root.model, 'model');
-  const traceability = asRecord(model.traceability, 'model.traceability');
-  const sourceLevel = asRecord(traceability.source_level, 'model.traceability.source_level');
+  const traceability = readTraceability(model, mode);
 
   const ctx: BuildContext = {
     warnings: [],
@@ -61,20 +67,31 @@ export async function deserializeCalcYaml(yamlString: string): Promise<ImportSum
     sourceNodeInfo: new Map(),
     sourceElementInfo: new Map(),
     sourceIdMapObjects: [],
-    elementsByTag: indexElements(asArray(model.elements, 'model.elements')),
+    elementsByTag: mode === 'source' ? indexElements(readOptionalArray(model.elements, 'model.elements')) : new Map(),
     materials: toPropertyTable(model.materials, 'model.materials'),
     sections: toPropertyTable(model.sections, 'model.sections'),
   };
 
   const allData: DocumentData[] = [];
-  const layerZ = asNumber(sourceLevel.z, 'model.traceability.source_level.z');
-  const layerName = optString(sourceLevel.level_id) ?? 'YAML Level';
-  const layers = [new Layer(layerZ, layerName)];
+  let layers: Layer[];
 
-  buildSourceNodes(traceability, layerZ, allData, ctx);
-  buildSourceMembers(traceability, allData, ctx);
-  buildSourceFloors(traceability, layerZ, allData, ctx);
-  collectUnsupportedWarnings(model, ctx.warnings);
+  if (mode === 'generated') {
+    const referencedNodeTags = collectGeneratedReferencedNodeTags(model);
+    const generatedNodes = buildGeneratedNodes(model, referencedNodeTags, allData, ctx);
+    layers = buildGeneratedLayers(generatedNodes, traceability);
+    buildGeneratedElements(model, generatedNodes, allData, ctx, traceability);
+    collectUnsupportedWarnings(model, ctx.warnings, { springsImported: true });
+  } else {
+    const sourceLevel = asRecord(traceability.source_level, 'model.traceability.source_level');
+    const layerZ = asNumber(sourceLevel.z, 'model.traceability.source_level.z');
+    const layerName = optString(sourceLevel.level_id) ?? 'YAML Level';
+    layers = [new Layer(layerZ, layerName)];
+
+    buildSourceNodes(traceability, layerZ, allData, ctx);
+    buildSourceMembers(traceability, allData, ctx);
+    buildSourceFloors(traceability, layerZ, allData, ctx);
+    collectUnsupportedWarnings(model, ctx.warnings);
+  }
 
   const doc = Document.instance;
   doc.bulkLoad(allData, layers);
@@ -84,6 +101,7 @@ export async function deserializeCalcYaml(yamlString: string): Promise<ImportSum
     units,
     doc,
     ctx,
+    mode,
   );
   const metadata: ImportMetadata = {
     summary,
@@ -95,6 +113,254 @@ export async function deserializeCalcYaml(yamlString: string): Promise<ImportSum
   doc.setImportMetadata(metadata);
 
   return summary;
+}
+
+function readTraceability(model: UnknownRecord, mode: CalcYamlImportMode): UnknownRecord {
+  if (mode === 'source') {
+    return asRecord(model.traceability, 'model.traceability');
+  }
+  if (model.traceability === undefined) {
+    return {};
+  }
+  return asRecord(model.traceability, 'model.traceability');
+}
+
+function collectGeneratedReferencedNodeTags(model: UnknownRecord): Set<number> {
+  const referenced = new Set<number>();
+  const elements = asArray(model.elements, 'model.elements');
+  for (let i = 0; i < elements.length; i++) {
+    const raw = asRecord(elements[i], `model.elements[${i}]`);
+    const type = asString(raw.type, `model.elements[${i}].type`);
+    if (!isGeneratedLineElementType(type)) continue;
+    referenced.add(asNumber(raw.node_i, `model.elements[${i}].node_i`));
+    referenced.add(asNumber(raw.node_j, `model.elements[${i}].node_j`));
+  }
+  if (referenced.size === 0) {
+    throw new Error('model.elements must contain at least one supported generated line element');
+  }
+  return referenced;
+}
+
+function buildGeneratedNodes(
+  model: UnknownRecord,
+  referencedNodeTags: Set<number>,
+  allData: DocumentData[],
+  ctx: BuildContext,
+): Map<number, Node> {
+  const rawNodes = asArray(model.nodes, 'model.nodes');
+  if (rawNodes.length === 0) {
+    throw new Error('model.nodes must contain at least one generated node');
+  }
+  const nodesByTag = new Map<number, Node>();
+  const usedCoords = new Map<string, string[]>();
+  let skippedNodeCount = 0;
+  for (let i = 0; i < rawNodes.length; i++) {
+    const raw = asRecord(rawNodes[i], `model.nodes[${i}]`);
+    const tag = asNumber(raw.tag, `model.nodes[${i}].tag`);
+    if (nodesByTag.has(tag)) {
+      throw new Error(`Duplicate generated node tag: ${tag}`);
+    }
+    const coord = new Point3D(
+      asNumber(raw.x, `model.nodes[${i}].x`),
+      asNumber(raw.y, `model.nodes[${i}].y`),
+      asNumber(raw.z, `model.nodes[${i}].z`),
+    );
+    if (!referencedNodeTags.has(tag)) {
+      skippedNodeCount++;
+      continue;
+    }
+    const node = new Node(coord);
+    nodesByTag.set(tag, node);
+    const key = coordKey(coord);
+    usedCoords.set(key, [...(usedCoords.get(key) ?? []), String(tag)]);
+    allData.push(node);
+    addSourceNodeInfo(ctx, node, { sourceId: String(tag), tag, coord: [coord.x, coord.y, coord.z] });
+    addSourceIdMapObject(ctx, {
+      sourceId: String(tag),
+      data: node,
+      kind: 'node',
+      type: 'Generated Node',
+    });
+  }
+  if (nodesByTag.size === 0) {
+    throw new Error('model.nodes does not contain any nodes referenced by supported generated line elements');
+  }
+  if (skippedNodeCount > 0) {
+    ctx.warnings.push({
+      code: 'UNREFERENCED_GENERATED_NODES_SKIPPED',
+      message: `${skippedNodeCount} unreferenced generated nodes were skipped.`,
+      path: 'model.nodes',
+    });
+  }
+  const duplicateCoordGroups = [...usedCoords.values()].filter((tags) => tags.length > 1);
+  if (duplicateCoordGroups.length > 0) {
+    ctx.warnings.push({
+      code: 'DUPLICATE_GENERATED_NODE_COORDS',
+      message: `${duplicateCoordGroups.length} generated node coordinate groups contain multiple tags and were kept separate.`,
+      path: 'model.nodes',
+    });
+  }
+  return nodesByTag;
+}
+
+function buildGeneratedLayers(nodesByTag: Map<number, Node>, traceability: UnknownRecord): Layer[] {
+  const uniqueZ = [...new Set([...nodesByTag.values()].map((node) => node.pos.z))].sort((a, b) => a - b);
+  const sourceLevel = asOptionalRecord(traceability.source_level);
+  const sourceLevelZ = typeof sourceLevel.z === 'number' ? sourceLevel.z : undefined;
+  const sourceLevelName = optString(sourceLevel.level_id);
+  return uniqueZ.map((z) => new Layer(
+    z,
+    sourceLevelName && sourceLevelZ === z ? sourceLevelName : `Generated Z=${z}`,
+  ));
+}
+
+function buildGeneratedElements(
+  model: UnknownRecord,
+  nodesByTag: Map<number, Node>,
+  allData: DocumentData[],
+  ctx: BuildContext,
+  traceability: UnknownRecord,
+): void {
+  const originsByTag = buildGeneratedElementOrigins(traceability);
+  const elements = asArray(model.elements, 'model.elements');
+  const seenTags = new Set<number>();
+  let importedSpringCount = 0;
+  let zeroLengthSpringCount = 0;
+  for (let i = 0; i < elements.length; i++) {
+    const raw = asRecord(elements[i], `model.elements[${i}]`);
+    const type = asString(raw.type, `model.elements[${i}].type`);
+    const tag = asNumber(raw.tag, `model.elements[${i}].tag`);
+    if (seenTags.has(tag)) throw new Error(`Duplicate generated element tag: ${tag}`);
+    seenTags.add(tag);
+
+    if (!isGeneratedLineElementType(type)) {
+      ctx.warnings.push({
+        code: 'UNSUPPORTED_GENERATED_ELEMENT',
+        message: `Skipped unsupported generated element type '${type}' (${tag})`,
+        path: `model.elements[${i}]`,
+      });
+      continue;
+    }
+
+    const nodeITag = asNumber(raw.node_i, `model.elements[${i}].node_i`);
+    const nodeJTag = asNumber(raw.node_j, `model.elements[${i}].node_j`);
+    const nodeI = nodesByTag.get(nodeITag);
+    const nodeJ = nodesByTag.get(nodeJTag);
+    if (!nodeI || !nodeJ) {
+      throw new Error(`generated element ${tag} references missing node: ${!nodeI ? nodeITag : nodeJTag}`);
+    }
+    const length = nodeI.pos.sub(nodeJ.pos).length;
+    if (type !== 'twoNodeLink3D' && (nodeI === nodeJ || length <= MIN_GEOMETRY_LENGTH)) {
+      throw new Error(`generated element ${tag} resolves to a zero-length Beam`);
+    }
+    if (type === 'twoNodeLink3D') {
+      importedSpringCount++;
+      if (nodeI === nodeJ || length <= MIN_GEOMETRY_LENGTH) zeroLengthSpringCount++;
+    }
+
+    const beam = new Beam(nodeI, nodeJ);
+    beam.section = optString(raw.section_ref) ?? type;
+    allData.push(beam);
+
+    const origin = originsByTag.get(tag);
+    const material = optString(raw.material_ref) ?? origin?.material;
+    const notes = generatedElementNotes(type, origin);
+    const info: ImportSourceElementInfo = {
+      sourceId: String(tag),
+      sourceType: type,
+      sourceRef: origin?.sourceRef,
+      elementTags: [tag],
+      nodeSourceIds: [String(nodeITag), String(nodeJTag)],
+      section: beam.section,
+      material,
+      notes,
+    };
+    addSourceElementInfo(ctx, beam, info);
+    addSourceIdMapObject(ctx, {
+      sourceId: String(tag),
+      data: beam,
+      kind: 'member',
+      type,
+      detail: [
+        `section=${beam.section}`,
+        material ? `material=${material}` : '',
+        origin ? `source=${origin.sourceId}` : '',
+      ].filter(Boolean).join(' '),
+    });
+  }
+  if (importedSpringCount > 0) {
+    ctx.warnings.push({
+      code: 'SPRINGS_IMPORTED_AS_BEAM',
+      message: `${importedSpringCount} twoNodeLink3D spring elements were imported as display Beams${zeroLengthSpringCount > 0 ? `, including ${zeroLengthSpringCount} zero-length springs` : ''}.`,
+      path: 'model.elements',
+    });
+  }
+}
+
+function isGeneratedLineElementType(type: string): boolean {
+  return type === 'elasticTimoshenkoBeam3D' || type === 'truss3D' || type === 'twoNodeLink3D';
+}
+
+function generatedElementNotes(
+  type: string,
+  origin?: { sourceId: string; sourceType: string; sourceSection?: string; material?: string },
+): string[] | undefined {
+  const notes: string[] = [];
+  if (origin) {
+    notes.push(`Generated from ${origin.sourceId} (${origin.sourceType}${origin.sourceSection ? ` section=${origin.sourceSection}` : ''}).`);
+  }
+  if (type === 'truss3D') {
+    notes.push('Imported as Beam because no dedicated truss class exists.');
+  } else if (type === 'twoNodeLink3D') {
+    notes.push('Imported as Beam for generated analysis element display.');
+  }
+  return notes.length > 0 ? notes : undefined;
+}
+
+function buildGeneratedElementOrigins(traceability: UnknownRecord): Map<number, {
+  sourceId: string;
+  sourceType: string;
+  sourceRef?: string;
+  sourceSection?: string;
+  material?: string;
+}> {
+  const origins = new Map<number, {
+    sourceId: string;
+    sourceType: string;
+    sourceRef?: string;
+    sourceSection?: string;
+    material?: string;
+  }>();
+  addGeneratedOrigins(origins, optionalArray(traceability.source_members), 'source_member_id');
+  addGeneratedOrigins(origins, optionalArray(traceability.source_surfaces), 'source_surface_id');
+  return origins;
+}
+
+function addGeneratedOrigins(
+  origins: Map<number, { sourceId: string; sourceType: string; sourceRef?: string; sourceSection?: string; material?: string }>,
+  rows: unknown[],
+  idKey: 'source_member_id' | 'source_surface_id',
+): void {
+  rows.forEach((row) => {
+    if (!isRecord(row)) return;
+    const sourceId = optString(row[idKey]);
+    const sourceType = optString(row.source_type);
+    if (!sourceId || !sourceType) return;
+    const tags = readOptionalNumberArray(row.generated_element_chain) ?? [];
+    const sourceSection = optString(row.source_section);
+    const material = inferMaterial(sourceType, sourceSection ?? '');
+    tags.forEach((tag) => {
+      if (!origins.has(tag)) {
+        origins.set(tag, {
+          sourceId,
+          sourceType,
+          sourceRef: optString(row.source_ref),
+          sourceSection,
+          material,
+        });
+      }
+    });
+  });
 }
 
 function buildSourceNodes(traceability: UnknownRecord, layerZ: number, allData: DocumentData[], ctx: BuildContext): void {
@@ -292,7 +558,11 @@ function addSourceIdMapObject(
   ctx.sourceIdMapObjects.push(row);
 }
 
-function collectUnsupportedWarnings(model: UnknownRecord, warnings: ImportWarning[]): void {
+function collectUnsupportedWarnings(
+  model: UnknownRecord,
+  warnings: ImportWarning[],
+  options: { springsImported?: boolean } = {},
+): void {
   const supports = optionalArray(model.supports);
   const nodalMasses = optionalArray(model.nodal_masses);
   const constraints = optionalArray(model.constraints);
@@ -307,7 +577,7 @@ function collectUnsupportedWarnings(model: UnknownRecord, warnings: ImportWarnin
   if (constraints.length > 0) {
     warnings.push({ code: 'CONSTRAINTS_NOT_IMPORTED', message: `${constraints.length} constraints were not imported.`, path: 'model.constraints' });
   }
-  if (twoNodeLinks.length > 0) {
+  if (twoNodeLinks.length > 0 && !options.springsImported) {
     warnings.push({ code: 'SPRINGS_NOT_IMPORTED', message: `${twoNodeLinks.length} twoNodeLink3D spring elements were not imported.`, path: 'model.elements' });
   }
   if (Object.keys(asOptionalRecord(model.materials)).length > 0 || Object.keys(asOptionalRecord(model.sections)).length > 0) {
@@ -324,6 +594,7 @@ function buildSummary(
   units: Record<string, string>,
   doc: Document,
   ctx: BuildContext,
+  mode: CalcYamlImportMode,
 ): ImportSummary {
   const counts = {
     nodes: doc.nodeList.length,
@@ -336,7 +607,8 @@ function buildSummary(
   };
   return {
     ...counts,
-    format: 'calc-yaml',
+    format: mode === 'generated' ? 'calc-yaml-generated' : 'calc-yaml',
+    importMode: mode,
     modelName: optString(model.name) ?? '',
     sourceJson: optString(model.source_json),
     analysisProfile: optString(model.analysis_profile),
@@ -439,6 +711,11 @@ function asArray(value: unknown, label: string): unknown[] {
 
 function optionalArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function readOptionalArray(value: unknown, label: string): unknown[] {
+  if (value === undefined) return [];
+  return asArray(value, label);
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
