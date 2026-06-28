@@ -24,6 +24,7 @@ import { showPlaneDialog } from './ui/dialogs/PlaneDialog';
 import { showLayerDialog } from './ui/dialogs/LayerDialog';
 import { showHelpDialog } from './ui/dialogs/HelpDialog';
 import { showImportInfoDialog } from './ui/dialogs/ImportInfoDialog';
+import { showCalcYamlImportModeDialog } from './ui/dialogs/CalcYamlImportModeDialog';
 import { t, initI18n, toggleLocale, getLocale, setOnLocaleChanged } from './i18n';
 import { APP_VERSION } from './version';
 
@@ -176,7 +177,9 @@ fileInput.addEventListener('change', () => {
     try {
       const content = reader.result as string;
       if (isYamlFile(file.name, content)) {
-        await deserializeCalcYaml(content);
+        const mode = await showCalcYamlImportModeDialog();
+        if (!mode) return;
+        await deserializeCalcYaml(content, { mode });
       } else if (isJsonFile(file.name, content)) {
         deserializeJson(content);
       } else {

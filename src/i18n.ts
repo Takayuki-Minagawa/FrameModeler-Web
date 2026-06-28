@@ -67,6 +67,7 @@ const messages = {
   'dialog.layerAdd': { ja: 'レイヤー追加', en: 'Add Layer' },
   'dialog.layerEdit': { ja: 'レイヤー編集', en: 'Edit Layer' },
   'dialog.importInfo': { ja: '読込情報', en: 'Import Info' },
+  'dialog.calcYamlImportMode': { ja: 'YAML読込モード', en: 'YAML Import Mode' },
   section: { ja: '断面', en: 'Section' },
   weight: { ja: '荷重', en: 'Weight' },
   direction: { ja: '方向', en: 'Direction' },
@@ -118,6 +119,7 @@ const messages = {
 
   // Import info
   'import.summary': { ja: '概要', en: 'Summary' },
+  'import.mode': { ja: '読込モード', en: 'Import mode' },
   'import.modelName': { ja: 'モデル名', en: 'Model' },
   'import.sourceJson': { ja: '元JSON', en: 'Source JSON' },
   'import.analysisProfile': { ja: '解析プロファイル', en: 'Analysis profile' },
@@ -141,6 +143,12 @@ const messages = {
   'import.code': { ja: 'コード', en: 'Code' },
   'import.path': { ja: 'パス', en: 'Path' },
   'import.message': { ja: 'メッセージ', en: 'Message' },
+  'importMode.description': {
+    ja: '構造解析用YAMLの表示方法を選択してください。元CAD形状は従来の床・部材として復元し、生成済み解析要素は置換後の節点・線材を表示します。',
+    en: 'Choose how to display the structural analysis YAML. Source CAD restores the original floors and members; generated elements displays the replaced analysis nodes and line elements.',
+  },
+  'importMode.source': { ja: '元CAD形状', en: 'Source CAD' },
+  'importMode.generated': { ja: '生成済み解析要素', en: 'Generated elements' },
 } as const;
 
 /** 翻訳キー（messages のキーに限定。タイポはコンパイルエラーになる） */

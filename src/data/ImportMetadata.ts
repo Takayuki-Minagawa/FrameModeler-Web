@@ -45,6 +45,7 @@ export interface ImportIdMapRow {
 
 export interface ImportSummary extends ImportCountSummary {
   format: string;
+  importMode?: string;
   modelName: string;
   sourceJson?: string;
   analysisProfile?: string;

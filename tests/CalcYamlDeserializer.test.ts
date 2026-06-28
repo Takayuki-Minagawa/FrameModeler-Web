@@ -53,6 +53,101 @@ describe('Calc YAML import', () => {
     expect(doc.layers[0].posZ).toBe(2800);
   });
 
+  it('keeps explicit source mode compatible with the default import', async () => {
+    const summary = await deserializeCalcYaml(readSample('Test0202_calc.yaml'), { mode: 'source' });
+
+    expect(summary.format).toBe('calc-yaml');
+    expect(summary.importMode).toBe('source');
+    expect(summary.nodes).toBe(10);
+    expect(summary.beams).toBe(6);
+    expect(summary.floors).toBe(4);
+    expect(exactCount(Node)).toBe(10);
+    expect(exactCount(Beam)).toBe(6);
+    expect(exactCount(Floor)).toBe(4);
+  });
+
+  it('imports generated analysis elements as line members', async () => {
+    const summary = await deserializeCalcYaml(readSample('Test0202_calc.yaml'), { mode: 'generated' });
+
+    expect(summary.format).toBe('calc-yaml-generated');
+    expect(summary.importMode).toBe('generated');
+    expect(summary.nodes).toBe(76);
+    expect(summary.beams).toBe(79);
+    expect(summary.floors).toBe(0);
+    expect(summary.layers).toBe(1);
+    expect(exactCount(Node)).toBe(76);
+    expect(exactCount(Beam)).toBe(79);
+    expect(exactCount(Floor)).toBe(0);
+    expect(doc.layers[0].name).toBe('L1');
+    expect(doc.layers[0].posZ).toBe(2800);
+  });
+
+  it('keeps generated node tags separate even when coordinates are identical', async () => {
+    await deserializeCalcYaml(readSample('Test0202_calc.yaml'), { mode: 'generated' });
+
+    const duplicateCoordNodes = doc.nodeList.filter((node) => (
+      node.pos.x === 250 && node.pos.y === 0 && node.pos.z === 2800
+    ));
+    expect(duplicateCoordNodes).toHaveLength(2);
+
+    const sourceIds = duplicateCoordNodes
+      .flatMap((node) => doc.getImportSourceNodes(node) ?? [])
+      .map((info) => info.sourceId)
+      .sort();
+    expect(sourceIds).toEqual(['101', '3001']);
+  });
+
+  it('keeps generated element type, section, material, and origin metadata', async () => {
+    const summary = await deserializeCalcYaml(readSample('Test0202_calc.yaml'), { mode: 'generated' });
+
+    const typeCounts = summary.sourceIdMap
+      .filter((row) => row.kind === 'member')
+      .reduce<Record<string, number>>((acc, row) => {
+        acc[row.type] = (acc[row.type] ?? 0) + 1;
+        return acc;
+      }, {});
+    expect(typeCounts).toEqual({
+      elasticTimoshenkoBeam3D: 64,
+      truss3D: 2,
+      twoNodeLink3D: 13,
+    });
+
+    const sectionCounts = doc.memberList
+      .filter((member): member is Beam => member.constructor === Beam)
+      .reduce<Record<string, number>>((acc, beam) => {
+        acc[beam.section] = (acc[beam.section] ?? 0) + 1;
+        return acc;
+      }, {});
+    expect(sectionCounts).toEqual({
+      B: 32,
+      ALC_S_center_beam: 32,
+      truss3D: 2,
+      twoNodeLink3D: 13,
+    });
+
+    const sourceElements = doc.memberList.flatMap((member) => doc.getImportSourceElements(member) ?? []);
+    const beam1001 = sourceElements.find((info) => info.sourceId === '1001');
+    expect(beam1001?.sourceType).toBe('elasticTimoshenkoBeam3D');
+    expect(beam1001?.nodeSourceIds).toEqual(['1', '101']);
+    expect(beam1001?.section).toBe('B');
+    expect(beam1001?.material).toBe('steel');
+    expect(beam1001?.notes?.join(' ')).toContain('Generated from M');
+
+    const floorBeam3001 = sourceElements.find((info) => (
+      info.section === 'ALC_S_center_beam' && info.material === 'alc' && info.notes?.join(' ').includes('S')
+    ));
+    expect(floorBeam3001?.section).toBe('ALC_S_center_beam');
+    expect(floorBeam3001?.material).toBe('alc');
+    expect(floorBeam3001?.notes?.join(' ')).toContain('Generated from S');
+
+    const spring5001 = sourceElements.find((info) => info.sourceId === '5001');
+    expect(spring5001?.sourceType).toBe('twoNodeLink3D');
+    expect(spring5001?.section).toBe('twoNodeLink3D');
+    expect(spring5001?.notes?.join(' ')).toContain('analysis element display');
+    expect(summary.warnings.map((warning) => warning.code)).not.toContain('SPRINGS_NOT_IMPORTED');
+    expect(summary.warnings.map((warning) => warning.code)).toContain('SPRINGS_IMPORTED_AS_BEAM');
+  });
+
   it('creates the expected shared CAD nodes from source nodes and floor boundaries', async () => {
     await deserializeCalcYaml(readSample('Test0202_calc.yaml'));
 
@@ -227,6 +322,21 @@ describe('Calc YAML import', () => {
     expect(json.traceability).toBeUndefined();
   });
 
+  it('serializes generated element imports as existing JSON format without metadata tables', async () => {
+    await deserializeCalcYaml(readSample('Test0202_calc.yaml'), { mode: 'generated' });
+    const json = JSON.parse(serializeJson());
+
+    expect(Object.keys(json).sort()).toEqual(['beams', 'bearWalls', 'floors', 'layers', 'nodes', 'pillars', 'walls']);
+    expect(json.nodes).toHaveLength(76);
+    expect(json.beams).toHaveLength(79);
+    expect(json.floors).toHaveLength(0);
+    expect(json.layers).toHaveLength(1);
+    expect(json.materials).toBeUndefined();
+    expect(json.sections).toBeUndefined();
+    expect(json.traceability).toBeUndefined();
+    expect(json.importMetadata).toBeUndefined();
+  });
+
   it('round-trips YAML-imported model through JSON without count changes', async () => {
     await deserializeCalcYaml(readSample('Test0202_calc.yaml'));
     const json = serializeJson();
@@ -241,6 +351,30 @@ describe('Calc YAML import', () => {
     expect(doc.memberList.map((m) => m.section).sort()).toEqual(['B', 'B', 'B', 'B', 'V', 'V']);
     expect(doc.planeList.filter((p): p is Floor => p.constructor === Floor).map((floor) => floor.section)).toEqual(['S', 'S', 'S', 'S']);
     expect(doc.importMetadata).toBeNull();
+  });
+
+  it('round-trips generated element imports through JSON without count changes', async () => {
+    await deserializeCalcYaml(readSample('Test0202_calc.yaml'), { mode: 'generated' });
+    const json = serializeJson();
+
+    doc.init();
+    deserializeJson(json);
+
+    expect(exactCount(Node)).toBe(76);
+    expect(exactCount(Beam)).toBe(79);
+    expect(exactCount(Floor)).toBe(0);
+    expect(doc.layers.length).toBe(1);
+    expect(doc.importMetadata).toBeNull();
+  });
+
+  it('rejects generated elements that reference missing generated nodes and leaves Document unchanged', async () => {
+    doc.bulkLoad([new Node(new Point3D(1, 2, 3))], []);
+    const before = serializeJson();
+    const calc = readCalcObject();
+    calc.model.elements[0].node_j = 99999;
+
+    await expect(deserializeCalcYaml(stringify(calc), { mode: 'generated' })).rejects.toThrow(/1001.*99999/);
+    expect(serializeJson()).toBe(before);
   });
 
   it('clears import metadata when the document is edited after import', async () => {

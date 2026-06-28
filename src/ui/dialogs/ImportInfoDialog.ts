@@ -31,6 +31,7 @@ function addSummary(container: HTMLElement, summary: ImportSummary): void {
   addSectionTitle(container, t('import.summary'));
   const rows = [
     [t('import.modelName'), summary.modelName || '-'],
+    [t('import.mode'), summary.importMode ? t(summary.importMode === 'generated' ? 'importMode.generated' : 'importMode.source') : summary.format],
     [t('import.sourceJson'), summary.sourceJson || '-'],
     [t('import.analysisProfile'), summary.analysisProfile || '-'],
     [t('import.units'), Object.entries(summary.units).map(([k, v]) => `${k}=${v}`).join(', ')],
