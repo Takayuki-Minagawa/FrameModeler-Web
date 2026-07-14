@@ -24,15 +24,11 @@ jobs:
           cache: npm
 
       - run: npm ci
-      - name: Type-check application
-        run: npm run typecheck
-      - name: Type-check tests
-        run: npm run typecheck:test
-      - name: Lint
-        run: npm run lint
-      - name: Test
-        run: npm test
-      - name: Build
-        run: npm run build
+      - name: Quality, coverage, build and bundle budget
+        run: npm run check
       - name: Audit high-severity dependencies
         run: npm audit --audit-level=high
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser E2E and visual regression
+        run: npm run test:e2e

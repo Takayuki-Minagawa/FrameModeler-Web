@@ -1,4 +1,5 @@
 import type { PortableDocumentSnapshot } from '../io/DocumentSnapshotCodec';
+import { applySnapshotDelta, createSnapshotDelta, type SnapshotDelta } from './SnapshotDelta';
 
 export type DocumentSnapshot = PortableDocumentSnapshot;
 
@@ -12,8 +13,8 @@ export interface HistoryState {
 
 interface HistoryEntry {
   label: string;
-  before: DocumentSnapshot;
-  after: DocumentSnapshot;
+  forward: SnapshotDelta;
+  backward: SnapshotDelta;
 }
 
 type CaptureSnapshot = () => DocumentSnapshot;
@@ -21,7 +22,7 @@ type RestoreSnapshot = (snapshot: DocumentSnapshot) => void;
 type HistoryListener = (state: HistoryState) => void;
 
 /**
- * Document の変更履歴を、保存可能なスナップショット単位で管理する。
+ * Document の変更履歴を、portable snapshot間の構造差分として管理する。
  *
  * 既存の Document シングルトンは維持し、UI 操作の開始前/確定後をこのクラスへ
  * 渡すことで、追加・編集・削除・import を同じ Undo/Redo 契約に載せる。
@@ -50,7 +51,11 @@ export class DocumentHistory {
     if (fingerprint(before) === fingerprint(after)) return false;
 
     this.entries.splice(this.cursor);
-    this.entries.push({ label, before, after });
+    this.entries.push({
+      label,
+      forward: createSnapshotDelta(before, after),
+      backward: createSnapshotDelta(after, before),
+    });
     this.cursor = this.entries.length;
 
     if (this.entries.length > this.maxEntries) {
@@ -74,7 +79,7 @@ export class DocumentHistory {
   undo(): boolean {
     if (!this.canUndo) return false;
     const entry = this.entries[this.cursor - 1];
-    this.restoreSnapshot(entry.before);
+    this.restoreSnapshot(applySnapshotDelta(this.captureSnapshot(), entry.backward));
     this.cursor--;
     this.notify();
     return true;
@@ -83,7 +88,7 @@ export class DocumentHistory {
   redo(): boolean {
     if (!this.canRedo) return false;
     const entry = this.entries[this.cursor];
-    this.restoreSnapshot(entry.after);
+    this.restoreSnapshot(applySnapshotDelta(this.captureSnapshot(), entry.forward));
     this.cursor++;
     this.notify();
     return true;

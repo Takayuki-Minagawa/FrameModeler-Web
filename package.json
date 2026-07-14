@@ -18,10 +18,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "check": "npm run typecheck && npm run typecheck:test && npm run lint && npm test && npm run build"
+    "test:e2e": "playwright test",
+    "test:e2e:update": "playwright test --update-snapshots",
+    "check:bundle": "node scripts/check-bundle-size.mjs",
+    "check": "npm run format:check && npm run typecheck && npm run typecheck:test && npm run lint && npm test && npm run test:coverage && npm run build && npm run check:bundle"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.55.0",
     "@types/node": "^22.20.1",
     "@types/three": "^0.182.0",
     "@vitest/coverage-v8": "^4.1.10",

@@ -54,6 +54,11 @@ export interface CadPalette {
   node: number;
   /** 通常の部材（梁・柱・耐力壁） */
   member: number;
+  truss: number;
+  spring: number;
+  support: number;
+  constraint: number;
+  mass: number;
   /** 壁 */
   wall: number;
   /** プレビュー（要素追加中の仮表示） */
@@ -70,6 +75,11 @@ const LIGHT_PALETTE: CadPalette = {
   select: 0xff0000,
   node: 0x0000ff,
   member: 0x0000ff,
+  truss: 0xd97706,
+  spring: 0x8b5cf6,
+  support: 0xdc2626,
+  constraint: 0x0891b2,
+  mass: 0x7c3aed,
   wall: 0x00aa00,
   preview: 0xff0000,
   selectionRect: 0x0000ff,
@@ -83,6 +93,11 @@ const DARK_PALETTE: CadPalette = {
   select: 0xff6666,
   node: 0x66aaff,
   member: 0x66aaff,
+  truss: 0xffb347,
+  spring: 0xc4a7ff,
+  support: 0xff6b6b,
+  constraint: 0x5ee7f2,
+  mass: 0xd8b4fe,
   wall: 0x44bb66,
   preview: 0xff6666,
   selectionRect: 0x66aaff,

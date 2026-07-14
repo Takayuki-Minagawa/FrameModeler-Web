@@ -3,6 +3,7 @@ import { Point3D } from '../math/Point3D';
 import { CAD } from './CadConfig';
 
 export type WorkPlaneIntersectionError = 'viewport-unavailable' | 'parallel' | 'behind';
+export type StandardCameraView = 'top' | 'front' | 'right' | 'isometric';
 
 export interface GridBounds {
   minX: number;
@@ -21,6 +22,7 @@ export class CameraController {
   private _camera: THREE.OrthographicCamera | THREE.PerspectiveCamera;
 
   private _show3D = false;
+  private _standardView: StandardCameraView | null = 'top';
   readonly cameraCenter = new THREE.Vector3(0, 0, 0);
   cameraDistance = 2000;
 
@@ -50,9 +52,34 @@ export class CameraController {
     return this._show3D;
   }
   set show3D(value: boolean) {
-    if (this._show3D === value) return;
+    if (value && this._show3D) return;
+    if (!value && !this._show3D && this._standardView === 'top') return;
     this._show3D = value;
     this._camera = value ? this.perspCamera : this.orthoCamera;
+    this._standardView = value ? null : 'top';
+    this.updateCamera();
+  }
+
+  /** 手動回転後はnull。top/front/right/isometric設定時は対応する値を返す。 */
+  get standardView(): StandardCameraView | null {
+    return this._standardView;
+  }
+
+  /**
+   * Z-upモデルの標準ビューへ切り替える。top/front/rightは平行投影、
+   * isometricは(+X,+Y,+Z)から中心を見る透視投影とする。
+   */
+  setStandardView(view: StandardCameraView): void {
+    this._standardView = view;
+    if (view === 'isometric') {
+      this._show3D = true;
+      this._camera = this.perspCamera;
+      this.spherePhi = Math.PI / 4;
+      this.sphereTheta = Math.acos(1 / Math.sqrt(3));
+    } else {
+      this._show3D = false;
+      this._camera = this.orthoCamera;
+    }
     this.updateCamera();
   }
 
@@ -70,13 +97,24 @@ export class CameraController {
       this.perspCamera.up.set(0, 0, 1);
       this.perspCamera.lookAt(this.cameraCenter);
     } else {
-      this.orthoCamera.position.set(
-        this.cameraCenter.x,
-        this.cameraCenter.y,
-        this.cameraCenter.z + this.orthoElevation,
-      );
-      // 平面図では画面上方向を常に+Yにする。
-      this.orthoCamera.up.set(0, 1, 0);
+      const elevation = this.orthoElevation;
+      switch (this._standardView) {
+        case 'front':
+          // -Y側から+Yを見る。画面右=+X、画面上=+Z。
+          this.orthoCamera.position.set(this.cameraCenter.x, this.cameraCenter.y - elevation, this.cameraCenter.z);
+          this.orthoCamera.up.set(0, 0, 1);
+          break;
+        case 'right':
+          // +X側から-Xを見る。画面右=+Y、画面上=+Z。
+          this.orthoCamera.position.set(this.cameraCenter.x + elevation, this.cameraCenter.y, this.cameraCenter.z);
+          this.orthoCamera.up.set(0, 0, 1);
+          break;
+        default:
+          this.orthoCamera.position.set(this.cameraCenter.x, this.cameraCenter.y, this.cameraCenter.z + elevation);
+          // topは視線と+Zが平行なため、画面上方向を+Yにする。
+          this.orthoCamera.up.set(0, 1, 0);
+          break;
+      }
       this.orthoCamera.lookAt(this.cameraCenter);
       this.updateOrthoFrustum();
     }
@@ -131,9 +169,10 @@ export class CameraController {
       const limitingHalfFov = Math.max(0.01, Math.min(verticalHalfFov, horizontalHalfFov));
       this.cameraDistance = (this.sceneRadius / Math.sin(limitingHalfFov)) * CAD.FIT_PADDING;
     } else {
-      const halfX = size.x / (2 * this.safeAspect());
-      const halfY = size.y / 2;
-      this.cameraDistance = Math.max(halfX, halfY, CAD.MIN_DISTANCE) * CAD.FIT_PADDING;
+      const visible = this.orthographicVisibleSize(size);
+      const halfHorizontal = visible.horizontal / (2 * this.safeAspect());
+      const halfVertical = visible.vertical / 2;
+      this.cameraDistance = Math.max(halfHorizontal, halfVertical, CAD.MIN_DISTANCE) * CAD.FIT_PADDING;
     }
 
     this.cameraDistance = clampDistance(this.cameraDistance);
@@ -142,7 +181,7 @@ export class CameraController {
 
   /** 平面図カメラを現在レイヤーの直上へ置き、上層でも作業平面を前方に保つ。 */
   set2DWorkPlaneElevation(layerZ: number): void {
-    if (this._show3D || this.cameraCenter.z === layerZ) return;
+    if (this._show3D || this._standardView !== 'top' || this.cameraCenter.z === layerZ) return;
     this.cameraCenter.z = layerZ;
     this.updateCamera();
   }
@@ -170,6 +209,7 @@ export class CameraController {
     this.spherePhi -= dx * CAD.ROTATE_SENSITIVITY;
     this.sphereTheta += dy * CAD.ROTATE_SENSITIVITY;
     this.sphereTheta = Math.max(0.01, Math.min(Math.PI - 0.01, this.sphereTheta));
+    if (this._show3D) this._standardView = null;
     this.updateCamera();
   }
 
@@ -304,6 +344,17 @@ export class CameraController {
   private safeAspect(): number {
     const aspect = this.getAspect();
     return Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  }
+
+  private orthographicVisibleSize(size: THREE.Vector3): { horizontal: number; vertical: number } {
+    switch (this._standardView) {
+      case 'front':
+        return { horizontal: size.x, vertical: size.z };
+      case 'right':
+        return { horizontal: size.y, vertical: size.z };
+      default:
+        return { horizontal: size.x, vertical: size.y };
+    }
   }
 
   private updateClippingPlanes(): void {

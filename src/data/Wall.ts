@@ -2,6 +2,7 @@ import { Plane } from './Plane';
 import { Node } from './Node';
 
 export class Wall extends Plane {
+  readonly kind = 'wall' as const;
   weight: number = 0;
 
   constructor(nodes?: Node[]) {

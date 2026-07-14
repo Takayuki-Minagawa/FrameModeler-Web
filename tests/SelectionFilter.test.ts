@@ -2,9 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Beam } from '../src/data/Beam';
 import { BearWall } from '../src/data/BearWall';
 import { Document } from '../src/data/Document';
+import { Constraint } from '../src/data/Constraint';
 import { Floor } from '../src/data/Floor';
+import { Layer } from '../src/data/Layer';
 import { Node } from '../src/data/Node';
 import { Pillar } from '../src/data/Pillar';
+import { Spring } from '../src/data/Spring';
+import { Support } from '../src/data/Support';
+import { Truss } from '../src/data/Truss';
 import { Wall } from '../src/data/Wall';
 import { Point3D } from '../src/math/Point3D';
 import { DEFAULT_SELECTION_SETTINGS, SelectionFilter, selectionKindOf } from '../src/selection/SelectionFilter';
@@ -20,6 +25,10 @@ describe('SelectionFilter', () => {
     expect(selectionKindOf(new Node())).toBe('node');
     expect(selectionKindOf(new Beam())).toBe('beam');
     expect(selectionKindOf(new Pillar())).toBe('pillar');
+    expect(selectionKindOf(new Truss())).toBe('truss');
+    expect(selectionKindOf(new Spring())).toBe('spring');
+    expect(selectionKindOf(new Support())).toBe('support');
+    expect(selectionKindOf(new Constraint())).toBe('constraint');
     expect(selectionKindOf(new Floor())).toBe('floor');
     expect(selectionKindOf(new Wall())).toBe('wall');
     expect(selectionKindOf(new BearWall())).toBe('bearWall');
@@ -27,7 +36,18 @@ describe('SelectionFilter', () => {
 
   it('allows all supported types by default', () => {
     const filter = new SelectionFilter();
-    const values = [new Node(), new Beam(), new Pillar(), new Floor(), new Wall(), new BearWall()];
+    const values = [
+      new Node(),
+      new Beam(),
+      new Pillar(),
+      new Truss(),
+      new Spring(),
+      new Support(),
+      new Constraint(),
+      new Floor(),
+      new Wall(),
+      new BearWall(),
+    ];
 
     expect(values.every((data) => filter.allows(data))).toBe(true);
     expect(filter.settings).toEqual(DEFAULT_SELECTION_SETTINGS);
@@ -59,12 +79,16 @@ describe('SelectionFilter', () => {
 
   it('supports enabling only multiple requested types', () => {
     const filter = new SelectionFilter();
-    filter.enableOnly('beam', 'bearWall');
+    filter.enableOnly('beam', 'spring', 'support', 'bearWall');
 
     expect(filter.allows(new Beam())).toBe(true);
+    expect(filter.allows(new Spring())).toBe(true);
+    expect(filter.allows(new Support())).toBe(true);
     expect(filter.allows(new BearWall())).toBe(true);
     expect(filter.allows(new Node())).toBe(false);
     expect(filter.allows(new Pillar())).toBe(false);
+    expect(filter.allows(new Truss())).toBe(false);
+    expect(filter.allows(new Constraint())).toBe(false);
   });
 });
 
@@ -130,6 +154,57 @@ describe('SelectionHandler filtering', () => {
     expect(beam.select).toBe(true);
     expect(nodeI.select).toBe(false);
     expect(nodeJ.select).toBe(false);
+  });
+
+  it('rectangle-selects dedicated structural types through a combined filter', () => {
+    const nodeI = new Node(new Point3D(0, 0, 0));
+    const nodeJ = new Node(new Point3D(10, 0, 0));
+    const truss = new Truss(nodeI, nodeJ);
+    truss.area = 100;
+    const spring = new Spring(nodeI, nodeJ);
+    spring.components = [{ dof: 'ux', stiffness: 10, unit: 'N/mm' }];
+    const support = new Support(nodeI, ['ux']);
+    const constraint = new Constraint(nodeJ, 'ux', [{ node: nodeI, dof: 'ux', coefficient: 1 }]);
+    doc.addMany([nodeI, nodeJ, truss, spring, support, constraint]);
+    const filter = new SelectionFilter();
+    filter.enableOnly('spring', 'support');
+    const handler = new SelectionHandler(filter);
+    const view = createView(() => null);
+
+    handler.onClick(view, new Point3D(-1, -1, 0), mouseEvent());
+    handler.onEndDrag(view, new Point3D(11, 1, 0), mouseEvent(), 20);
+
+    expect(spring.select).toBe(true);
+    expect(support.select).toBe(true);
+    expect(truss.select).toBe(false);
+    expect(constraint.select).toBe(false);
+    expect(nodeI.select).toBe(false);
+    expect(nodeJ.select).toBe(false);
+  });
+
+  it('does not rectangle-select data on hidden or locked layers', () => {
+    const { nodeI, nodeJ, beam } = addBeamModel();
+    const layer = new Layer(0, '1F', { id: 'layer-selection' });
+    doc.addLayer(layer);
+    doc.shownLayer = layer;
+    const handler = new SelectionHandler();
+    const view = createView(() => null);
+    const drag = (): void => {
+      handler.onClick(view, new Point3D(-1, -1, 0), mouseEvent());
+      handler.onEndDrag(view, new Point3D(11, 1, 0), mouseEvent(), 20);
+    };
+
+    doc.updateLayer(layer, { visible: false });
+    drag();
+    expect([nodeI.select, nodeJ.select, beam.select]).toEqual([false, false, false]);
+
+    doc.updateLayer(layer, { visible: true, locked: true });
+    drag();
+    expect([nodeI.select, nodeJ.select, beam.select]).toEqual([false, false, false]);
+
+    doc.updateLayer(layer, { locked: false });
+    drag();
+    expect([nodeI.select, nodeJ.select, beam.select]).toEqual([true, true, true]);
   });
 
   it('opens a dialog only for an allowed double-click target', () => {

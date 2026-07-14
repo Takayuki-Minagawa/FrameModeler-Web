@@ -7,6 +7,7 @@ import { Point3D } from '../../math/Point3D';
 import { t } from '../../i18n';
 import { TwoClickAddHandler } from './TwoClickAddHandler';
 import { createQuadPoints, planNodes } from './geometry';
+import { AddElementsCommand } from '../../commands/DocumentCommands';
 
 /**
  * 壁系（壁/耐力壁）追加ハンドラの基底:
@@ -19,30 +20,36 @@ export abstract class AddQuadPlaneHandler extends TwoClickAddHandler<Point3D> {
   /** 重複時の alert 文言 */
   protected abstract duplicateMessage(): string;
 
-  protected acquireAnchor(pos: Point3D): Point3D | null {
+  protected acquireAnchor(view: CadView, pos: Point3D): Point3D | null {
     // 直上に何かあるか確認
     if (Document.instance.getPosAbove(pos)) {
       return pos.clone();
     }
+    view.setOperationStatus('noPointAbove');
     return null;
   }
 
-  protected commit(anchor: Point3D, pos: Point3D): void {
+  protected commit(view: CadView, anchor: Point3D, pos: Point3D): void {
     const doc = Document.instance;
-    if (!pos.toPointXY().equals(anchor.toPointXY())) {
-      const { points, aboveExists } = createQuadPoints(pos, anchor);
+    if (pos.toPointXY().equals(anchor.toPointXY())) {
+      view.setOperationStatus('coincidentPoints');
+      return;
+    }
+    const { points, aboveExists } = createQuadPoints(pos, anchor);
 
-      if (aboveExists) {
-        const { nodes, additions } = planNodes(points);
+    if (!aboveExists) {
+      view.setOperationStatus('noPointAbove');
+      return;
+    }
+    const { nodes, additions } = planNodes(points);
 
-        if (doc.getPlaneOf(nodes)) {
-          alert(this.duplicateMessage());
-        } else {
-          const plane = this.createPlane(nodes);
-          doc.addMany([...additions, plane]);
-          if (this.showDialog) this.showDialog(plane);
-        }
-      }
+    if (doc.getPlaneOf(nodes)) {
+      view.setOperationStatus('duplicateElement');
+      alert(this.duplicateMessage());
+    } else {
+      const plane = this.createPlane(nodes);
+      doc.execute(new AddElementsCommand([...additions, plane], '壁要素追加'));
+      if (this.showDialog) this.showDialog(plane);
     }
   }
 

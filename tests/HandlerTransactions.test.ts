@@ -8,6 +8,8 @@ import { Point3D } from '../src/math/Point3D';
 import type { CadView } from '../src/ui/CadView';
 import { AddBeamHandler } from '../src/ui/handlers/AddBeamHandler';
 import { AddFloorHandler } from '../src/ui/handlers/AddFloorHandler';
+import { AddPillarHandler } from '../src/ui/handlers/AddPillarHandler';
+import { AddWallHandler } from '../src/ui/handlers/AddWallHandler';
 
 const doc = Document.instance;
 const event = { shiftKey: false, ctrlKey: false } as MouseEvent;
@@ -20,6 +22,7 @@ function view(overrides: Record<string, unknown> = {}): CadView {
     renderElements() {},
     renderPreview() {},
     renderSelection() {},
+    setOperationStatus: vi.fn(),
     ...overrides,
   } as unknown as CadView;
 }
@@ -47,6 +50,46 @@ describe('drawing handler atomic commits', () => {
     expect(doc.memberList).toHaveLength(1);
     expect(doc.memberList[0].nodeI).toBe(doc.getNodeAt(new Point3D(0, 0, 0)));
     expect(doc.memberList[0].nodeJ).toBe(doc.getNodeAt(new Point3D(1000, 0, 0)));
+  });
+
+  it('publishes the two-click anchor status and clears it on commit or cancel', () => {
+    const status = vi.fn();
+    const handler = new AddBeamHandler();
+    const cadView = view({ setOperationStatus: status });
+
+    handler.onClick(cadView, new Point3D(0, 0, 0), event);
+    expect(status).toHaveBeenLastCalledWith('firstPointSelected');
+
+    handler.onDeactivate(cadView);
+    expect(status).toHaveBeenLastCalledWith(null);
+
+    handler.onClick(cadView, new Point3D(0, 0, 0), event);
+    handler.onClick(cadView, new Point3D(1000, 0, 0), event);
+    expect(status).toHaveBeenLastCalledWith(null);
+    expect(doc.memberList).toHaveLength(1);
+  });
+
+  it('reports why pillar and wall placement cannot find an upper point', () => {
+    const pillarStatus = vi.fn();
+    new AddPillarHandler().onClick(view({ setOperationStatus: pillarStatus }), new Point3D(0, 0, 0), event);
+    expect(pillarStatus).toHaveBeenLastCalledWith('noPointAbove');
+
+    const wallStatus = vi.fn();
+    new AddWallHandler().onClick(view({ setOperationStatus: wallStatus }), new Point3D(0, 0, 0), event);
+    expect(wallStatus).toHaveBeenLastCalledWith('noPointAbove');
+    expect(doc.allDataList).toHaveLength(0);
+  });
+
+  it('reports coincident points instead of silently discarding a two-click operation', () => {
+    const status = vi.fn();
+    const handler = new AddBeamHandler();
+    const cadView = view({ setOperationStatus: status });
+
+    handler.onClick(cadView, new Point3D(10, 20, 0), event);
+    handler.onClick(cadView, new Point3D(10, 20, 0), event);
+
+    expect(status).toHaveBeenLastCalledWith('coincidentPoints');
+    expect(doc.allDataList).toHaveLength(0);
   });
 
   it('reports a degenerate floor without leaving planned nodes behind', () => {

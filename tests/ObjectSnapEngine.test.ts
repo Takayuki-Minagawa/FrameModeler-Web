@@ -3,7 +3,14 @@ import { Beam } from '../src/data/Beam';
 import type { Member } from '../src/data/Member';
 import { Node } from '../src/data/Node';
 import { Point3D } from '../src/math/Point3D';
-import { ObjectSnapEngine, type ObjectSnapRequest } from '../src/ui/ObjectSnapEngine';
+import {
+  cycleObjectSnapCandidate,
+  getObjectSnapCandidateKind,
+  getObjectSnapKindInfo,
+  ObjectSnapEngine,
+  type AnchorConstraintRequest,
+  type ObjectSnapRequest,
+} from '../src/ui/ObjectSnapEngine';
 
 const engine = new ObjectSnapEngine();
 
@@ -15,7 +22,7 @@ function beam(from: Node, to: Node): Beam {
   return new Beam(from, to);
 }
 
-function resolve(options: {
+interface ResolveOptions {
   pointer: { x: number; y: number };
   position?: Point3D;
   nodes?: Node[];
@@ -24,9 +31,12 @@ function resolve(options: {
   gridSpacing?: number;
   tolerancePx?: number;
   project?: ObjectSnapRequest['project'];
-}) {
+  constraints?: AnchorConstraintRequest;
+}
+
+function request(options: ResolveOptions): ObjectSnapRequest {
   const workPlaneZ = options.workPlaneZ ?? 0;
-  return engine.resolve({
+  return {
     position: options.position ?? new Point3D(options.pointer.x, options.pointer.y, workPlaneZ),
     screenPoint: options.pointer,
     workPlaneZ,
@@ -35,7 +45,12 @@ function resolve(options: {
     nodes: options.nodes ?? [],
     members: options.members ?? [],
     project: options.project ?? ((point) => ({ x: point.x, y: point.y })),
-  });
+    constraints: options.constraints,
+  };
+}
+
+function resolve(options: ResolveOptions) {
+  return engine.resolve(request(options));
 }
 
 describe('ObjectSnapEngine', () => {
@@ -166,5 +181,161 @@ describe('ObjectSnapEngine', () => {
     });
 
     expect(result.kind).toBe('grid');
+  });
+
+  it('generates stable world X/Y axis constraints from an anchor', () => {
+    const anchor = new Point3D(10, 20, 500);
+    const xAxis = resolve({
+      pointer: { x: 34, y: 23 },
+      position: new Point3D(34, 23, 500),
+      workPlaneZ: 500,
+      constraints: { anchor, kinds: ['axis-x', 'axis-y'] },
+      tolerancePx: 5,
+    });
+    expect(getObjectSnapCandidateKind(xAxis)).toBe('axis-x');
+    expect(xAxis.kind).toBe('none');
+    expect(xAxis.position).toEqual(new Point3D(34, 20, 500));
+
+    const yAxis = resolve({
+      pointer: { x: 13, y: 44 },
+      position: new Point3D(13, 44, 500),
+      workPlaneZ: 500,
+      constraints: { anchor, kinds: ['axis-x', 'axis-y'] },
+      tolerancePx: 5,
+    });
+    expect(getObjectSnapCandidateKind(yAxis)).toBe('axis-y');
+    expect(yAxis.position).toEqual(new Point3D(10, 44, 500));
+  });
+
+  it('keeps screen horizontal/vertical distinct from world axes in a rotated view', () => {
+    const project = (point: Point3D) => ({ x: point.y, y: -point.x });
+    const screenToWorkPlane = (screen: { x: number; y: number }) => new Point3D(-screen.y, screen.x, 200);
+    const result = resolve({
+      pointer: { x: 40, y: 3 },
+      position: new Point3D(-3, 40, 200),
+      workPlaneZ: 200,
+      project,
+      constraints: {
+        anchor: new Point3D(0, 0, 200),
+        kinds: ['horizontal', 'vertical'],
+        screenToWorkPlane,
+      },
+      tolerancePx: 5,
+    });
+
+    expect(getObjectSnapCandidateKind(result)).toBe('horizontal');
+    expect(result.position).toEqual(new Point3D(0, 40, 200));
+    expect(result.distancePx).toBe(3);
+  });
+
+  it('projects onto the line through anchor orthogonal to a reference XY direction', () => {
+    const result = resolve({
+      pointer: { x: 10, y: -8 },
+      position: new Point3D(10, -8, 0),
+      constraints: {
+        anchor: new Point3D(0, 0, 0),
+        kinds: ['orthogonal'],
+        orthogonalTo: new Point3D(1, 1, 0),
+      },
+      tolerancePx: 2,
+    });
+
+    expect(getObjectSnapCandidateKind(result)).toBe('orthogonal');
+    expect(result.position.x).toBeCloseTo(9);
+    expect(result.position.y).toBeCloseTo(-9);
+    expect(result.position.x + result.position.y).toBeCloseTo(0);
+  });
+
+  it('enumerates equal-distance candidates deterministically and cycles by stable ID', () => {
+    const upper = node(0, 1);
+    const lower = node(0, -1);
+    const snapRequest = request({
+      pointer: { x: 0, y: 0 },
+      nodes: [upper, lower],
+      tolerancePx: 2,
+    });
+
+    const candidates = engine.resolveCandidates(snapRequest);
+    const repeated = engine.resolveCandidates(snapRequest);
+    const reordered = engine.resolveCandidates({ ...snapRequest, nodes: [lower, upper] });
+    expect(candidates).toHaveLength(2);
+    expect(candidates.map((candidate) => candidate.distancePx)).toEqual([1, 1]);
+    expect(candidates.map((candidate) => candidate.candidateId)).toEqual(
+      repeated.map((candidate) => candidate.candidateId),
+    );
+    expect(candidates.map((candidate) => candidate.source)).toEqual([upper, lower]);
+    const idFor = (list: ReadonlyArray<(typeof candidates)[number]>, source: Node) =>
+      list.find((candidate) => candidate.source === source)?.candidateId;
+    expect(idFor(reordered, upper)).toBe(idFor(candidates, upper));
+    expect(idFor(reordered, lower)).toBe(idFor(candidates, lower));
+
+    const next = cycleObjectSnapCandidate(candidates, candidates[0].candidateId, 1);
+    expect(next?.index).toBe(1);
+    expect(next?.candidate.source).toBe(lower);
+    const wrapped = cycleObjectSnapCandidate(candidates, next?.candidate.candidateId, 1);
+    expect(wrapped?.index).toBe(0);
+    expect(wrapped?.candidate.source).toBe(upper);
+    const previous = cycleObjectSnapCandidate(candidates, candidates[0].candidateId, -1);
+    expect(previous?.index).toBe(1);
+    expect(cycleObjectSnapCandidate(candidates, null, 1)?.index).toBe(0);
+    expect(cycleObjectSnapCandidate(candidates, 'removed-candidate', -1)?.index).toBe(1);
+  });
+
+  it('keeps object snaps ahead of exact constraint candidates and exposes glyph metadata', () => {
+    const existing = node(4, 0);
+    const snapRequest = request({
+      pointer: { x: 0, y: 0 },
+      nodes: [existing],
+      constraints: {
+        anchor: new Point3D(-20, 0, 0),
+        kinds: ['axis-x'],
+      },
+      tolerancePx: 5,
+    });
+    const candidates = engine.resolveCandidates(snapRequest);
+
+    expect(getObjectSnapCandidateKind(candidates[0])).toBe('node');
+    expect(getObjectSnapCandidateKind(candidates[1])).toBe('axis-x');
+    expect(getObjectSnapKindInfo('axis-x')).toEqual({
+      kind: 'axis-x',
+      labelKey: 'snap.axisX',
+      label: 'X axis',
+      glyph: 'x-axis',
+    });
+    expect(getObjectSnapKindInfo('orthogonal').glyph).toBe('right-angle');
+  });
+
+  it('ignores a zero orthogonal reference without producing non-finite coordinates', () => {
+    const result = resolve({
+      pointer: { x: 13, y: 17 },
+      constraints: {
+        anchor: new Point3D(0, 0, 0),
+        kinds: ['orthogonal'],
+        orthogonalTo: new Point3D(0, 0, 0),
+      },
+      gridSpacing: 10,
+    });
+
+    expect(getObjectSnapCandidateKind(result)).toBe('grid');
+    expect(result.position).toEqual(new Point3D(10, 20, 0));
+  });
+
+  it('deduplicates coincident world/screen constraints while retaining alternate kind metadata', () => {
+    const snapRequest = request({
+      pointer: { x: 20, y: 2 },
+      position: new Point3D(20, 2, 0),
+      constraints: {
+        anchor: new Point3D(0, 0, 0),
+        kinds: ['axis-x', 'horizontal'],
+        screenToWorkPlane: (screen) => new Point3D(screen.x, screen.y, 0),
+      },
+      tolerancePx: 3,
+    });
+
+    const candidates = engine.resolveCandidates(snapRequest);
+    expect(candidates).toHaveLength(1);
+    expect(getObjectSnapCandidateKind(candidates[0])).toBe('axis-x');
+    expect(candidates[0].equivalentKinds).toEqual(['horizontal']);
+    expect(candidates[0].position).toEqual(new Point3D(20, 0, 0));
   });
 });

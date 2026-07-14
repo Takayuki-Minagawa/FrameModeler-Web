@@ -5,26 +5,30 @@ import { Point3D } from '../../math/Point3D';
 import { t } from '../../i18n';
 import { TwoClickAddHandler } from './TwoClickAddHandler';
 import { createRectPoints, planNodes } from './geometry';
+import { AddElementsCommand, UpdatePropertiesCommand } from '../../commands/DocumentCommands';
 
 /** 床追加ハンドラ: 2クリック矩形で床を生成 */
 export class AddFloorHandler extends TwoClickAddHandler<Point3D> {
-  protected acquireAnchor(pos: Point3D): Point3D {
+  protected acquireAnchor(_view: CadView, pos: Point3D): Point3D {
     return pos.clone();
   }
 
-  protected commit(anchor: Point3D, pos: Point3D): void {
+  protected commit(view: CadView, anchor: Point3D, pos: Point3D): void {
     const doc = Document.instance;
-    if (!pos.equals(anchor)) {
-      const points = createRectPoints(pos, anchor);
-      const { nodes, additions } = planNodes(points);
+    if (pos.equals(anchor)) {
+      view.setOperationStatus('coincidentPoints');
+      return;
+    }
+    const points = createRectPoints(pos, anchor);
+    const { nodes, additions } = planNodes(points);
 
-      if (doc.getPlaneOf(nodes)) {
-        alert(t('msg.floorExists'));
-      } else {
-        const floor = new Floor(nodes);
-        doc.addMany([...additions, floor]);
-        if (this.showDialog) this.showDialog(floor);
-      }
+    if (doc.getPlaneOf(nodes)) {
+      view.setOperationStatus('duplicateElement');
+      alert(t('msg.floorExists'));
+    } else {
+      const floor = new Floor(nodes);
+      doc.execute(new AddElementsCommand([...additions, floor], '床追加'));
+      if (this.showDialog) this.showDialog(floor);
     }
   }
 
@@ -36,9 +40,8 @@ export class AddFloorHandler extends TwoClickAddHandler<Point3D> {
   onDoubleClick(view: CadView, pos: Point3D, _event: MouseEvent): void {
     const hit = view.hitTest(pos);
     if (!(hit instanceof Floor)) return;
-    Document.instance.update(() => {
-      hit.direction = hit.direction === FloorDirection.X ? FloorDirection.Y : FloorDirection.X;
-    });
+    const direction = hit.direction === FloorDirection.X ? FloorDirection.Y : FloorDirection.X;
+    Document.instance.execute(new UpdatePropertiesCommand('床方向変更', hit, (floor) => (floor.direction = direction)));
     view.renderSelection();
   }
 }

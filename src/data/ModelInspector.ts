@@ -2,9 +2,11 @@ import { Beam } from './Beam';
 import type { Document } from './Document';
 import type { DocumentData } from './DocumentData';
 import { Member } from './Member';
-import { ModelValidationError, ModelValidator } from './ModelValidator';
+import { collectModelErrors, ModelValidator } from './ModelValidator';
 import { Node } from './Node';
 import { Plane } from './Plane';
+import { Support } from './Support';
+import { Constraint } from './Constraint';
 
 export type ModelIssueSeverity = 'error' | 'warning';
 
@@ -22,29 +24,35 @@ export function inspectModel(doc: Document): ModelIssue[] {
   const issues: ModelIssue[] = [];
   const allData = [...doc.allDataList];
 
-  try {
-    ModelValidator.validateModel(allData, doc.layers);
-  } catch (error) {
-    const validation = error instanceof ModelValidationError ? error : null;
+  for (const validation of collectModelErrors(allData, doc.layers)) {
     issues.push({
       severity: 'error',
       code: 'MODEL_INVALID',
-      path: validation?.path,
-      messageJa: `モデル不変条件に違反しています: ${(error as Error).message}`,
-      messageEn: `The model violates an invariant: ${(error as Error).message}`,
-      targets: targetFromPath(allData, validation?.path),
+      path: validation.path,
+      messageJa: `モデル不変条件に違反しています: ${validation.message}`,
+      messageEn: `The model violates an invariant: ${validation.message}`,
+      targets: targetFromPath(allData, validation.path),
     });
   }
 
   const nodes = allData.filter((data): data is Node => data instanceof Node);
   const members = allData.filter((data): data is Member => data instanceof Member);
   const planes = allData.filter((data): data is Plane => data instanceof Plane);
+  const supports = allData.filter((data): data is Support => data instanceof Support);
+  const constraints = allData.filter((data): data is Constraint => data instanceof Constraint);
   const referencedNodes = new Set<Node>();
   members.forEach((member) => {
     if (member.nodeI) referencedNodes.add(member.nodeI);
     if (member.nodeJ) referencedNodes.add(member.nodeJ);
   });
   planes.forEach((plane) => plane.nodeList.forEach((node) => referencedNodes.add(node)));
+  supports.forEach((support) => {
+    if (support.node) referencedNodes.add(support.node);
+  });
+  constraints.forEach((constraint) => {
+    if (constraint.slaveNode) referencedNodes.add(constraint.slaveNode);
+    constraint.terms.forEach((term) => referencedNodes.add(term.node));
+  });
 
   const orphanNodes = nodes.filter((node) => !referencedNodes.has(node));
   if (orphanNodes.length > 0) {
@@ -79,7 +87,9 @@ export function inspectModel(doc: Document): ModelIssue[] {
     });
   }
 
-  const missingSection = [...members, ...planes].filter((data) => data.section.trim() === '');
+  const missingSection = [...members, ...planes].filter(
+    (data) => typeof data.section === 'string' && data.section.trim() === '',
+  );
   if (missingSection.length > 0) {
     issues.push({
       severity: 'warning',
@@ -123,6 +133,19 @@ export function inspectModel(doc: Document): ModelIssue[] {
     });
   }
 
+  const hasAnalysisEntities = allData.some(
+    (data) => data.kind === 'truss' || data.kind === 'spring' || data.kind === 'constraint' || data.kind === 'support',
+  );
+  if (hasAnalysisEntities && supports.length === 0) {
+    issues.push({
+      severity: 'warning',
+      code: 'NO_SUPPORTS',
+      messageJa: '解析要素がありますが支点がありません。剛体モードを拘束できるか確認してください。',
+      messageEn: 'The model has analysis entities but no supports; verify that rigid-body modes are restrained.',
+      targets: [],
+    });
+  }
+
   const metadata = doc.importMetadata;
   if (metadata) {
     const dataSet = new Set(allData);
@@ -161,12 +184,17 @@ function coordinateKey(node: Node): string {
 function memberKey(member: Member): string {
   const i = member.nodeI?.number ?? -1;
   const j = member.nodeJ?.number ?? -1;
-  return `${member.constructor.name}\u0000${Math.min(i, j)}\u0000${Math.max(i, j)}`;
+  return `${member.kind}\u0000${Math.min(i, j)}\u0000${Math.max(i, j)}`;
 }
 
 function targetFromPath(allData: ReadonlyArray<DocumentData>, path?: string): DocumentData[] {
-  const match = /^data\[(\d+)]/.exec(path ?? '');
-  if (!match) return [];
-  const target = allData[Number(match[1])];
+  const dataMatch = /^data\[(\d+)]/.exec(path ?? '');
+  if (dataMatch) {
+    const target = allData[Number(dataMatch[1])];
+    return target ? [target] : [];
+  }
+  const nodeMatch = /^nodes\[(\d+)]/.exec(path ?? '');
+  if (!nodeMatch) return [];
+  const target = allData.filter((data): data is Node => data instanceof Node)[Number(nodeMatch[1])];
   return target ? [target] : [];
 }

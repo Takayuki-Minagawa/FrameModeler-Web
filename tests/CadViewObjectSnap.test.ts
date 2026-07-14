@@ -77,4 +77,67 @@ describe('CadView object snap integration', () => {
     view.dispose();
     expect(canvas.dataset.snapKind).toBeUndefined();
   });
+
+  it('does not snap to display-filtered data and clears stale candidates when snapping is disabled', () => {
+    const node = new Node(new Point3D(0, 0, 0));
+    Document.instance.add(node);
+    const canvas = new FakeCanvas();
+    const view = new CadView(canvas as unknown as HTMLCanvasElement);
+
+    expect(view.getMouseCoord(mouseEvent(502, 500))).toEqual(new Point3D(0, 0, 0));
+    expect(view.currentSnapKind).toBe('node');
+
+    view.displayFilter.hide(node);
+    expect(view.getMouseCoord(mouseEvent(502, 500))).toEqual(new Point3D(10, 0, 0));
+    expect(view.currentSnapKind).toBe('grid');
+
+    view.snapping = false;
+    expect(view.cycleSnapCandidate()).toBe(false);
+    expect(view.currentSnapKind).toBe('none');
+    view.dispose();
+  });
+
+  it('drops a snap source when the rendered model or layer context changes', () => {
+    Document.instance.add(new Node(new Point3D(0, 0, 0)));
+    const canvas = new FakeCanvas();
+    const view = new CadView(canvas as unknown as HTMLCanvasElement);
+
+    view.getMouseCoord(mouseEvent(500, 500));
+    expect(view.currentSnapKind).toBe('node');
+    expect(view.currentSnapResult.source).not.toBeNull();
+
+    view.renderElements();
+    expect(view.currentSnapKind).toBe('none');
+    expect(view.currentSnapResult.source).toBeNull();
+    view.dispose();
+  });
+
+  it('mirrors operation and selection status to canvas datasets and callbacks', () => {
+    const selected = new Node(new Point3D(0, 0, 0));
+    selected.select = true;
+    Document.instance.add(selected);
+    const canvas = new FakeCanvas();
+    const view = new CadView(canvas as unknown as HTMLCanvasElement);
+    const operationChanges: Array<string | null> = [];
+    const selectionCounts: number[] = [];
+    view.onOperationStatusChanged = (status) => operationChanges.push(status);
+    view.onSelectionChanged = (items) => selectionCounts.push(items.length);
+
+    view.setOperationStatus('firstPointSelected');
+    view.renderSelection();
+    expect(canvas.dataset.operationStatus).toBe('firstPointSelected');
+    expect(canvas.dataset.selectedCount).toBe('1');
+
+    view.setOperationStatus(null);
+    Document.instance.init();
+    view.renderSelection();
+    expect(canvas.dataset.operationStatus).toBeUndefined();
+    expect(canvas.dataset.selectedCount).toBe('0');
+    expect(operationChanges).toEqual(['firstPointSelected', null]);
+    expect(selectionCounts).toEqual([1, 0]);
+
+    view.dispose();
+    expect(canvas.dataset.operationStatus).toBeUndefined();
+    expect(canvas.dataset.selectedCount).toBeUndefined();
+  });
 });

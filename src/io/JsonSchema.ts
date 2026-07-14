@@ -5,15 +5,38 @@ import type {
   ImportSourceNodeInfo,
   ImportSummary,
 } from '../data/ImportMetadata';
+import type { SpringComponent } from '../data/Spring';
+import type { DofVector6, StructuralDof } from '../data/StructuralDof';
 import type { NumberCategory } from '../data/typeRegistry';
+import { validateDocumentDataCollections } from './DocumentDataCodecRegistry';
+import {
+  asFiniteNumber,
+  asId,
+  asRecord,
+  asString,
+  cloneJsonRecord,
+  optionalArray,
+  optionalBoolean,
+  optionalIdArray,
+  optionalString,
+  optionalStringArray,
+  requiredArray,
+  type UnknownRecord,
+} from './JsonValueValidation';
 
-type UnknownRecord = Record<string, unknown>;
+export const JSON_SCHEMA_VERSION = 2 as const;
+export type JsonSchemaSourceVersion = 0 | 1 | typeof JSON_SCHEMA_VERSION;
 
-export const JSON_SCHEMA_VERSION = 1 as const;
+export interface JsonNodeMass {
+  values: DofVector6;
+  translationalUnit: string;
+  rotationalUnit: string;
+}
 
 export interface JsonNode {
   number: number;
   pos: { x: number; y: number; z: number };
+  mass?: JsonNodeMass;
 }
 
 export interface JsonMember {
@@ -21,6 +44,23 @@ export interface JsonMember {
   nodeI: number;
   nodeJ: number;
   section?: string;
+  isNodeReverse?: boolean;
+}
+
+export interface JsonTruss extends JsonMember {
+  material?: string;
+  area: number;
+  areaUnit: string;
+  elasticModulus?: number;
+  stressUnit: string;
+}
+
+export interface JsonSpring extends JsonMember {
+  components: SpringComponent[];
+  orientX?: { x: number; y: number; z: number };
+  orientY?: { x: number; y: number; z: number };
+  shearDistance?: [number, number];
+  note?: string;
 }
 
 export interface JsonPlane {
@@ -38,9 +78,45 @@ export interface JsonWall extends JsonPlane {
   weight: number;
 }
 
-export interface JsonLayer {
+export interface JsonSupport {
+  number: number;
+  node: number;
+  fixedDofs: StructuralDof[];
+}
+
+export interface JsonConstraintTerm {
+  node: number;
+  dof: StructuralDof;
+  coefficient: number;
+}
+
+export interface JsonConstraint {
+  number: number;
+  kind: 'equalDOF';
+  slave: { node: number; dof: StructuralDof };
+  terms: JsonConstraintTerm[];
+}
+
+/** 未知optional fieldをmigration/round-tripで落とさない。 */
+export interface JsonLayer extends Record<string, unknown> {
+  id?: string;
   name: string;
   posZ: number;
+  visible?: boolean;
+  locked?: boolean;
+}
+
+export interface JsonDataCollections {
+  nodes: JsonNode[];
+  beams: JsonMember[];
+  pillars: JsonMember[];
+  trusses: JsonTruss[];
+  springs: JsonSpring[];
+  floors: JsonFloor[];
+  walls: JsonWall[];
+  bearWalls: JsonPlane[];
+  supports: JsonSupport[];
+  constraints: JsonConstraint[];
 }
 
 export interface JsonDataReference {
@@ -66,20 +142,14 @@ export interface JsonImportMetadata {
   sections: ImportPropertyTable;
 }
 
-export interface JsonDocument {
+export interface JsonDocument extends JsonDataCollections {
   schemaVersion: typeof JSON_SCHEMA_VERSION;
-  nodes: JsonNode[];
-  beams: JsonMember[];
-  pillars: JsonMember[];
-  floors: JsonFloor[];
-  walls: JsonWall[];
-  bearWalls: JsonPlane[];
   layers: JsonLayer[];
   importMetadata?: JsonImportMetadata;
 }
 
-interface ValidatedJsonDocument {
-  sourceVersion: 0 | typeof JSON_SCHEMA_VERSION;
+export interface ValidatedJsonDocument {
+  sourceVersion: JsonSchemaSourceVersion;
   model: Omit<JsonDocument, 'schemaVersion'>;
 }
 
@@ -92,137 +162,110 @@ export function parseJsonText(jsonString: string): unknown {
   }
 }
 
-/** legacy v0 / v1 の型・ID・一意性を検証し、まだ移行は行わない。 */
+/** legacy v0/v1とv2を検証し、全DocumentData collectionをv2形へ正規化する。 */
 export function validateJsonSchema(value: unknown): ValidatedJsonDocument {
   const root = asRecord(value, 'JSON document');
   const sourceVersion = readSourceVersion(root);
-
-  const nodes = requiredArray(root.nodes, 'nodes').map(validateNode);
-  const beams = optionalArray(root.beams, 'beams').map((raw, index) => validateMember(raw, index, 'beams'));
-  const pillars = optionalArray(root.pillars, 'pillars').map((raw, index) => validateMember(raw, index, 'pillars'));
-  const floors = optionalArray(root.floors, 'floors').map(validateFloor);
-  const walls = optionalArray(root.walls, 'walls').map(validateWall);
-  const bearWalls = optionalArray(root.bearWalls, 'bearWalls').map((raw, index) =>
-    validatePlane(raw, index, 'bearWalls'),
+  const strictV2 = sourceVersion === JSON_SCHEMA_VERSION;
+  const collections = validateDocumentDataCollections(root, { strictV2 });
+  const layers = (strictV2 ? requiredArray(root.layers, 'layers') : optionalArray(root.layers, 'layers')).map(
+    (raw, index) => validateLayer(raw, index, strictV2),
   );
-  const layers = optionalArray(root.layers, 'layers').map(validateLayer);
   const importMetadata =
-    root.importMetadata === undefined ? undefined : validateJsonImportMetadata(root.importMetadata, 'importMetadata');
+    root.importMetadata === undefined
+      ? undefined
+      : validateJsonImportMetadata(root.importMetadata, 'importMetadata', { allowLegacyCounts: sourceVersion < 2 });
 
-  assertUniqueNumbers(nodes, 'node');
-  assertUniqueNumbers([...beams, ...pillars], 'member');
-  assertUniqueNumbers([...bearWalls, ...walls, ...floors], 'plane');
   const layerElevations = new Set<number>();
+  const layerIds = new Set<string>();
   layers.forEach((layer, index) => {
     if (layerElevations.has(layer.posZ)) {
       throw new Error(`Invalid layers[${index}].posZ: duplicate layer elevation ${layer.posZ}`);
     }
     layerElevations.add(layer.posZ);
+    if (layer.id !== undefined) {
+      if (layerIds.has(layer.id)) {
+        throw new Error(`Invalid layers[${index}].id: duplicate layer id '${layer.id}'`);
+      }
+      layerIds.add(layer.id);
+    }
   });
 
   return {
     sourceVersion,
-    model: { nodes, beams, pillars, floors, walls, bearWalls, layers, importMetadata },
+    model: { ...collections, layers, importMetadata },
   };
 }
 
-/** v0は一時UI状態を捨ててv1へ正規化する。 */
+/** v0/v1をv2へ移行する。一時選択状態は各codecのvalidation時に破棄済み。 */
 export function migrateJsonSchema(validated: ValidatedJsonDocument): JsonDocument {
   return {
     schemaVersion: JSON_SCHEMA_VERSION,
     ...validated.model,
+    layers: migrateLayers(validated.model.layers),
   };
 }
 
-/** parse → validate → migrate の公開入口。 */
 export function parseJsonDocument(jsonString: string): JsonDocument {
   return migrateJsonSchema(validateJsonSchema(parseJsonText(jsonString)));
 }
 
-function readSourceVersion(root: UnknownRecord): 0 | typeof JSON_SCHEMA_VERSION {
+function readSourceVersion(root: UnknownRecord): JsonSchemaSourceVersion {
   if (root.schemaVersion === undefined) return 0;
   const version = asId(root.schemaVersion, 'schemaVersion');
-  if (version !== JSON_SCHEMA_VERSION) {
+  if (version !== 1 && version !== JSON_SCHEMA_VERSION) {
     throw new Error(`Unsupported JSON schemaVersion: ${version}`);
   }
-  return JSON_SCHEMA_VERSION;
+  return version;
 }
 
-function validateNode(raw: unknown, index: number): JsonNode {
-  const path = `node[${index}]`;
-  const row = asRecord(raw, path);
-  validateLegacySelection(row.select, `${path}.select`);
-  const pos = asRecord(row.pos, `${path}.pos`);
-  return {
-    number: asId(row.number, `${path}.number`),
-    pos: {
-      x: asFiniteNumber(pos.x, `${path}.pos.x`),
-      y: asFiniteNumber(pos.y, `${path}.pos.y`),
-      z: asFiniteNumber(pos.z, `${path}.pos.z`),
-    },
-  };
-}
-
-function validateMember(raw: unknown, index: number, collection: 'beams' | 'pillars'): JsonMember {
-  const path = `${collection}[${index}]`;
-  const row = asRecord(raw, path);
-  validateLegacySelection(row.select, `${path}.select`);
-  return {
-    number: asId(row.number, `${path}.number`),
-    nodeI: asId(row.nodeI, `${path}.nodeI`),
-    nodeJ: asId(row.nodeJ, `${path}.nodeJ`),
-    section: optionalString(row.section, `${path}.section`),
-  };
-}
-
-function validatePlane(raw: unknown, index: number, collection: 'floors' | 'walls' | 'bearWalls'): JsonPlane {
-  const path = `${collection}[${index}]`;
-  const row = asRecord(raw, path);
-  validateLegacySelection(row.select, `${path}.select`);
-  return {
-    number: asId(row.number, `${path}.number`),
-    nodes: asIdArray(row.nodes, `${path}.nodes`),
-    section: optionalString(row.section, `${path}.section`),
-  };
-}
-
-function validateFloor(raw: unknown, index: number): JsonFloor {
-  const path = `floors[${index}]`;
-  const row = asRecord(raw, path);
-  const plane = validatePlane(row, index, 'floors');
-  const direction = optionalString(row.direction, `${path}.direction`) ?? FloorDirection.X;
-  return {
-    ...plane,
-    weight: optionalFiniteNumber(row.weight, `${path}.weight`) ?? 0,
-    // v0の不正な文字列値は従来互換でXへ正規化する。
-    direction: (Object.values(FloorDirection) as string[]).includes(direction)
-      ? (direction as FloorDirection)
-      : FloorDirection.X,
-  };
-}
-
-function validateWall(raw: unknown, index: number): JsonWall {
-  const path = `walls[${index}]`;
-  const row = asRecord(raw, path);
-  return {
-    ...validatePlane(row, index, 'walls'),
-    weight: optionalFiniteNumber(row.weight, `${path}.weight`) ?? 0,
-  };
-}
-
-function validateLayer(raw: unknown, index: number): JsonLayer {
+function validateLayer(raw: unknown, index: number, strictV2: boolean): JsonLayer {
   const path = `layers[${index}]`;
   const row = asRecord(raw, path);
+  const cloned = cloneJsonRecord(row, path);
+  const id = optionalString(row.id, `${path}.id`);
+  const visible = optionalBoolean(row.visible, `${path}.visible`);
+  const locked = optionalBoolean(row.locked, `${path}.locked`);
+  if (strictV2 && (!id || row.name === undefined || visible === undefined || locked === undefined)) {
+    throw new Error(`Invalid ${path}: schema v2 requires non-empty id, name, visible, and locked fields`);
+  }
   return {
+    ...cloned,
+    id,
     name: optionalString(row.name, `${path}.name`) ?? '',
     posZ: asFiniteNumber(row.posZ, `${path}.posZ`),
+    visible,
+    locked,
   };
+}
+
+function migrateLayers(layers: ReadonlyArray<JsonLayer>): JsonLayer[] {
+  const usedIds = new Set(layers.flatMap((layer) => (layer.id ? [layer.id] : [])));
+  return layers.map((layer, index) => {
+    let id = layer.id;
+    if (!id) {
+      id = `layer-migrated-${index}`;
+      let suffix = 1;
+      while (usedIds.has(id)) id = `layer-migrated-${index}-${suffix++}`;
+      usedIds.add(id);
+    }
+    return {
+      ...layer,
+      id,
+      visible: layer.visible ?? true,
+      locked: layer.locked ?? false,
+    };
+  });
 }
 
 /** serializer側からも利用するmetadata正規化・検証。 */
-export function validateJsonImportMetadata(value: unknown, path: string = 'importMetadata'): JsonImportMetadata {
+export function validateJsonImportMetadata(
+  value: unknown,
+  path: string = 'importMetadata',
+  options: { allowLegacyCounts?: boolean } = {},
+): JsonImportMetadata {
   const row = asRecord(value, path);
-  const summary = validateImportSummary(row.summary, `${path}.summary`);
+  const summary = validateImportSummary(row.summary, `${path}.summary`, options.allowLegacyCounts ?? false);
   const sourceNodes = requiredArray(row.sourceNodes, `${path}.sourceNodes`).map((item, index) =>
     validateSourceNodeMapping(item, index, `${path}.sourceNodes`),
   );
@@ -240,7 +283,7 @@ export function validateJsonImportMetadata(value: unknown, path: string = 'impor
   };
 }
 
-function validateImportSummary(value: unknown, path: string): ImportSummary {
+function validateImportSummary(value: unknown, path: string, allowLegacyCounts: boolean): ImportSummary {
   const row = asRecord(value, path);
   const warnings = requiredArray(row.warnings, `${path}.warnings`).map((item, index) => {
     const itemPath = `${path}.warnings[${index}]`;
@@ -254,11 +297,10 @@ function validateImportSummary(value: unknown, path: string): ImportSummary {
   const sourceIdMap = requiredArray(row.sourceIdMap, `${path}.sourceIdMap`).map((item, index) => {
     const itemPath = `${path}.sourceIdMap[${index}]`;
     const mapRow = asRecord(item, itemPath);
-    const kind = validateCategory(mapRow.kind, `${itemPath}.kind`);
     return {
       sourceId: asString(mapRow.sourceId, `${itemPath}.sourceId`),
       appNumber: asId(mapRow.appNumber, `${itemPath}.appNumber`),
-      kind,
+      kind: validateCategory(mapRow.kind, `${itemPath}.kind`),
       type: asString(mapRow.type, `${itemPath}.type`),
       detail: optionalString(mapRow.detail, `${itemPath}.detail`),
     };
@@ -268,9 +310,13 @@ function validateImportSummary(value: unknown, path: string): ImportSummary {
     nodes: asId(row.nodes, `${path}.nodes`),
     beams: asId(row.beams, `${path}.beams`),
     pillars: asId(row.pillars, `${path}.pillars`),
+    trusses: readCurrentCount(row, 'trusses', path, allowLegacyCounts),
+    springs: readCurrentCount(row, 'springs', path, allowLegacyCounts),
     floors: asId(row.floors, `${path}.floors`),
     walls: asId(row.walls, `${path}.walls`),
     bearWalls: asId(row.bearWalls, `${path}.bearWalls`),
+    supports: readCurrentCount(row, 'supports', path, allowLegacyCounts),
+    constraints: readCurrentCount(row, 'constraints', path, allowLegacyCounts),
     layers: asId(row.layers, `${path}.layers`),
     format: asString(row.format, `${path}.format`),
     importMode: optionalString(row.importMode, `${path}.importMode`),
@@ -283,6 +329,11 @@ function validateImportSummary(value: unknown, path: string): ImportSummary {
     materials: validatePropertyTable(row.materials, `${path}.materials`),
     sections: validatePropertyTable(row.sections, `${path}.sections`),
   };
+}
+
+function readCurrentCount(row: UnknownRecord, key: string, path: string, allowLegacy: boolean): number {
+  if (row[key] === undefined && allowLegacy) return 0;
+  return asId(row[key], `${path}.${key}`);
 }
 
 function validateSourceNodeMapping(value: unknown, index: number, collectionPath: string): JsonSourceNodeMapping {
@@ -348,8 +399,8 @@ function validateDataReference(value: unknown, path: string): JsonDataReference 
 }
 
 function validateCategory(value: unknown, path: string): NumberCategory {
-  if (value !== 'node' && value !== 'member' && value !== 'plane') {
-    throw new Error(`Invalid ${path}: expected 'node', 'member', or 'plane'`);
+  if (value !== 'node' && value !== 'member' && value !== 'plane' && value !== 'constraint') {
+    throw new Error(`Invalid ${path}: expected 'node', 'member', 'plane', or 'constraint'`);
   }
   return value;
 }
@@ -372,112 +423,7 @@ function validatePropertyTable(value: unknown, path: string): ImportPropertyTabl
   const row = asRecord(value, path);
   const result: ImportPropertyTable = {};
   for (const [key, item] of Object.entries(row)) {
-    const property = asRecord(item, `${path}.${key}`);
-    result[key] = cloneJsonRecord(property, `${path}.${key}`);
+    result[key] = cloneJsonRecord(asRecord(item, `${path}.${key}`), `${path}.${key}`);
   }
   return result;
-}
-
-function cloneJsonRecord(value: UnknownRecord, path: string): Record<string, unknown> {
-  const stack = new WeakSet<object>();
-  return cloneJsonValue(value, path, stack) as Record<string, unknown>;
-}
-
-function cloneJsonValue(value: unknown, path: string, stack: WeakSet<object>): unknown {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
-  if (typeof value === 'number') return asFiniteNumber(value, path);
-  if (typeof value !== 'object') throw new Error(`Invalid ${path}: expected JSON-compatible value`);
-  if (stack.has(value)) throw new Error(`Invalid ${path}: circular value`);
-  stack.add(value);
-  let result: unknown;
-  if (Array.isArray(value)) {
-    result = value.map((item, index) => cloneJsonValue(item, `${path}[${index}]`, stack));
-  } else {
-    result = Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, cloneJsonValue(item, `${path}.${key}`, stack)]),
-    );
-  }
-  stack.delete(value);
-  return result;
-}
-
-function assertUniqueNumbers(rows: ReadonlyArray<{ number: number }>, label: string): void {
-  const used = new Set<number>();
-  rows.forEach((row, index) => {
-    if (used.has(row.number)) {
-      throw new Error(`Duplicate ${label} number at ${label}[${index}]: ${row.number}`);
-    }
-    used.add(row.number);
-  });
-}
-
-function asRecord(value: unknown, path: string): UnknownRecord {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error(`Invalid ${path}: expected object`);
-  }
-  return value as UnknownRecord;
-}
-
-function requiredArray(value: unknown, path: string): unknown[] {
-  if (value === undefined) throw new Error(`Invalid JSON field '${path}': required array`);
-  if (!Array.isArray(value)) throw new Error(`Invalid JSON field '${path}': expected array`);
-  return value;
-}
-
-function optionalArray(value: unknown, path: string): unknown[] {
-  if (value === undefined) return [];
-  if (!Array.isArray(value)) throw new Error(`Invalid JSON field '${path}': expected array`);
-  return value;
-}
-
-function asFiniteNumber(value: unknown, path: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new Error(`Invalid ${path}: expected finite number`);
-  }
-  return value;
-}
-
-function optionalFiniteNumber(value: unknown, path: string): number | undefined {
-  if (value === undefined) return undefined;
-  return asFiniteNumber(value, path);
-}
-
-function asId(value: unknown, path: string): number {
-  const number = asFiniteNumber(value, path);
-  if (!Number.isInteger(number) || number < 0) {
-    throw new Error(`Invalid ${path}: expected a non-negative integer`);
-  }
-  return number;
-}
-
-function asIdArray(value: unknown, path: string): number[] {
-  if (!Array.isArray(value)) throw new Error(`Invalid ${path}: expected number array`);
-  return value.map((item, index) => asId(item, `${path}[${index}]`));
-}
-
-function optionalIdArray(value: unknown, path: string): number[] | undefined {
-  if (value === undefined) return undefined;
-  return asIdArray(value, path);
-}
-
-function optionalStringArray(value: unknown, path: string): string[] | undefined {
-  if (value === undefined) return undefined;
-  if (!Array.isArray(value)) throw new Error(`Invalid ${path}: expected string array`);
-  return value.map((item, index) => asString(item, `${path}[${index}]`));
-}
-
-function asString(value: unknown, path: string): string {
-  if (typeof value !== 'string') throw new Error(`Invalid ${path}: expected string`);
-  return value;
-}
-
-function optionalString(value: unknown, path: string): string | undefined {
-  if (value === undefined) return undefined;
-  return asString(value, path);
-}
-
-function validateLegacySelection(value: unknown, path: string): void {
-  if (value !== undefined && typeof value !== 'boolean') {
-    throw new Error(`Invalid ${path}: expected boolean`);
-  }
 }

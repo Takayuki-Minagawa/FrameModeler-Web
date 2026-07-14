@@ -7,73 +7,55 @@
 
 ## 実装サマリー
 
-この文書は、最初のコードレビューで挙げた提案と、その後このブランチで実装した結果を同じIDで追跡する。既存の `Document` シングルトン、Z-up、mm単位、静的ホスティングは維持したまま、モデル境界、入出力、履歴、描画・入力、アクセシビリティ、CIを強化した。
+この文書は、最初のコードレビューで挙げた提案と、このブランチでの実装結果を同じ ID で追跡する。既存の `Document` シングルトン、Z-up、mm 単位、静的ホスティングを維持したまま、P1、P2、P3 と F1〜F6 の全項目を実装した。以下の表を現在の実装状態の正とし、後半の「レビュー詳細」は着手前の問題と判断根拠を残した履歴として扱う。
 
-ステータスの意味は次のとおりである。
+### 完了項目
 
-- **完了**: レビューで意図した安全性または利用者向け機能を実装し、対応する自動テストがある。
-- **部分対応**: 中核は利用可能だが、提案に含まれた高度な拡張またはE2E検証が残る。
-- **将来拡張**: 現ブランチでは実装せず、設計候補として残す。
-
-### 完了
-
-| ID   | 実装結果                                                                                                               | 主な実装・テスト                                                                                                                                                                                                                          |
-| ---- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1-1 | 2点作図の1点目をDocumentへ追加しない構成へ変更し、New/Open/Delete/レイヤー/2D・3D/Esc/ツール切替で途中操作を破棄       | [TwoClickAddHandler.ts](src/ui/handlers/TwoClickAddHandler.ts)、[geometry.ts](src/ui/handlers/geometry.ts)、[HandlerTransactions.test.ts](tests/HandlerTransactions.test.ts)                                                              |
-| P1-2 | 有限値、ID、参照所属、零長部材、頂点数、面積、平面性、自己交差、レイヤー高さをDocument境界で検証                       | [ModelValidator.ts](src/data/ModelValidator.ts)、[Document.ts](src/data/Document.ts)、[Document.test.ts](tests/Document.test.ts)、[JsonValidation.test.ts](tests/JsonValidation.test.ts)                                                  |
-| P1-3 | 3Dを実geometryのRaycaster、2DをCSS pixel基準の専用判定に変更。作業平面が平行・後方なら `null`                          | [CadView.ts](src/ui/CadView.ts)、[CadRenderer.ts](src/ui/CadRenderer.ts)、[CameraController.ts](src/ui/CameraController.ts)、[CadRenderer.test.ts](tests/CadRenderer.test.ts)、[CameraController.test.ts](tests/CameraController.test.ts) |
-| P1-5 | dirty時のNew/Open/beforeunload確認、atomic delete/import、エラー表示、IndexedDB draft復旧を追加                        | [main.ts](src/main.ts)、[DraftStore.ts](src/history/DraftStore.ts)、[DocumentSnapshotCodec.test.ts](tests/DocumentSnapshotCodec.test.ts)                                                                                                  |
-| P1-6 | YAMLのsource ID・element tag重複と、指定されたoptional値の型不正をpath付きで拒否                                       | [CalcYamlDeserializer.ts](src/io/CalcYamlDeserializer.ts)、[CalcYamlDeserializer.test.ts](tests/CalcYamlDeserializer.test.ts)                                                                                                             |
-| P1-7 | Pointer Eventsの全clickを作図へ渡し、native `dblclick` は選択ツールだけに限定                                          | [InputController.ts](src/ui/InputController.ts)、[SelectionHandler.ts](src/ui/handlers/SelectionHandler.ts)、[InputController.test.ts](tests/InputController.test.ts)                                                                     |
-| P1-8 | Vite/Vitest等を更新し、PR CIとPages deployへ型検査・lint・test・build・auditを追加。Dependabotも追加                   | [package.json](package.json)、[ci.yml](.github/workflows/ci.yml)、[deploy.yml](.github/workflows/deploy.yml)、[dependabot.yml](.github/dependabot.yml)                                                                                    |
-| P2-1 | camera/grid/elements/selection/previewのdirty flag、Node/Memberバッチ、動的preview bufferを実装                        | [CadView.ts](src/ui/CadView.ts)、[CadRenderer.ts](src/ui/CadRenderer.ts)                                                                                                                                                                  |
-| P2-2 | 可視範囲へ揃う1/2/5/10グリッド、Box3 fit、ResizeObserver、DPR上限、camera基底panを実装                                 | [CadRenderer.ts](src/ui/CadRenderer.ts)、[CameraController.ts](src/ui/CameraController.ts)、[CameraController.test.ts](tests/CameraController.test.ts)                                                                                    |
-| P2-3 | Pointer Events、pointer capture/cancel/lost、CSS pixel drag、冪等disposeを実装                                         | [InputController.ts](src/ui/InputController.ts)、[CadView.ts](src/ui/CadView.ts)、[InputController.test.ts](tests/InputController.test.ts)                                                                                                |
-| P2-5 | `schemaVersion: 1`、legacy v0 migration、parse/validate/migrate/domain build、意味的round-tripを実装                   | [JsonSchema.ts](src/io/JsonSchema.ts)、[JsonDeserializer.ts](src/io/JsonDeserializer.ts)、[JsonSerializer.ts](src/io/JsonSerializer.ts)、[JsonRoundtrip.test.ts](tests/JsonRoundtrip.test.ts)                                             |
-| P2-6 | dialog ARIA、label関連付け、focus管理、Enter/Esc、inline数値検証、canvas/listbox、lang同期、responsive/focus CSSを実装 | [DialogUtil.ts](src/ui/dialogs/DialogUtil.ts)、[i18n.ts](src/i18n.ts)、[index.html](index.html)、[DialogAccessibility.test.ts](tests/DialogAccessibility.test.ts)                                                                         |
-
-### 部分対応
-
-| ID        | 実装済み                                                                                                                                                                             | 残っている範囲                                                                            |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| P1-4 / F1 | [Document.transaction](src/data/Document.ts)、atomic add/remove/update、購読API、最大100件のsnapshot Undo/Redo、dirty、保存基準、draftを実装                                         | 個別のCommandクラスと差分ベース履歴は未導入。現状はportable JSON snapshotを履歴単位に使用 |
-| P2-4      | Layerをdata層へ移動し、型registry、Documentの複数購読を追加                                                                                                                          | `main.ts` のController分割と、全型をserialize/deserializeまで統合するcodec registryは未完 |
-| P2-7      | testsを型検査対象にし、Camera/Input/Renderer/handler/dialog/history/schema/validatorのテストとcoverage/check scriptを追加                                                            | 実ブラウザのPlaywright E2E、WebGL screenshot比較、明示的coverage閾値は未導入              |
-| F2        | 保存前検証ダイアログ、Error/Warning、対象選択、孤立・重複・section・階・provenance確認を実装                                                                                         | 複数の不変条件エラーを一度に収集する仕組みと、対象への自動zoomは未実装                    |
-| F3        | [ObjectSnapEngine.ts](src/ui/ObjectSnapEngine.ts)で節点・端点・中点・同一平面内交点・グリッドのCSS pixelスナップ、Alt一時無効化、marker/status、結果API、X/Y/Z座標入力を実装         | 直交/軸拘束、候補切替、距離・角度の数値入力は未実装                                       |
-| F4        | レイヤー名・高さ編集、重複Z検証、キーボード選択、削除時の関連要素数確認を実装                                                                                                        | 複製、上下階コピー、visible/locked/isolate、stable IDは未実装                             |
-| F5        | YAMLの元ID、元要素型、material、section、材料・断面特性、警告をv1 JSON `importMetadata`へ永続化                                                                                      | Truss/Spring/Support等の専用モデル型、支点・質量・拘束の表示編集は未実装                  |
-| F6        | F/Home全体表示、Esc、Delete、操作失敗状態、Raycaster選択に加え、[SelectionFilter.ts](src/selection/SelectionFilter.ts)の型別filter API、選択ハンドラ、単一種別/allのtoolbar UIを実装 | 複数種別を組み合わせるfilter UI、要素ラベル、表示隔離、上面以外の標準方向ビューは未実装   |
-| P3        | レイヤーなし表示、透明面 `depthWrite`、Three.js vendor chunk分割など一部を改善                                                                                                       | 凹多角形triangulation、Line2、version単一ソース、bundle size budgetは将来対応             |
-
-### 将来拡張
-
-| テーマ         | 方針                                                                                                                       |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 解析要素モデル | `truss3D`、`twoNodeLink3D`、支点、質量、拘束をBeamへの表示変換から専用型へ移す。正当な零長ばねは専用Spring型でだけ許可する |
-| レイヤー運用   | stable ID、visible/locked/isolate、複製、上下階コピーを導入する                                                            |
-| 作図支援       | 軸拘束、距離・角度入力、snap候補切替、要素番号・section・床方向・ローカル軸labelを追加する                                 |
-| 統合テスト     | sample読込、New/Open保護、Undo/Redo、2D/3D選択、resize、テーマを実ブラウザE2Eで検証する                                    |
-| 描画品質       | 凹面のtriangulation、太線のscreen-space描画、透明面order、性能budgetを計測して改善する                                     |
+| ID        | 実装結果                                                                                                                       | 主な実装・テスト                                                                                                                                                                                                                                                                                                                                    |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1-1      | 2 点作図の 1 点目を preview に限定し、New / Open / Delete / 全 Layer mutation / view / Esc / tool 切替で破棄                   | [TwoClickAddHandler.ts](src/ui/handlers/TwoClickAddHandler.ts)、[LayerController.ts](src/controllers/LayerController.ts)、[HandlerTransactions.test.ts](tests/HandlerTransactions.test.ts)、[LayerManagement.test.ts](tests/LayerManagement.test.ts)                                                                                                |
+| P1-2      | 有限値、ID、参照、退化形状、構造自由度、stable layer ID を Document 境界で検証し、複数違反の収集にも対応                       | [ModelValidator.ts](src/data/ModelValidator.ts)、[Document.ts](src/data/Document.ts)、[Document.test.ts](tests/Document.test.ts)、[ModelInspector.test.ts](tests/ModelInspector.test.ts)                                                                                                                                                            |
+| P1-3      | 3D は実 geometry の Raycaster、2D は CSS pixel 基準の専用 hit test とし、平行・後方作業面を拒否                                | [CadView.ts](src/ui/CadView.ts)、[CadRenderer.ts](src/ui/CadRenderer.ts)、[CameraController.ts](src/ui/CameraController.ts)、[CadRenderer.test.ts](tests/CadRenderer.test.ts)、[CameraController.test.ts](tests/CameraController.test.ts)                                                                                                           |
+| P1-4 / F1 | 個別 Command、transaction、構造差分 Undo / Redo、dirty / saved revision、3 世代 IndexedDB draft を実装                         | [DocumentCommands.ts](src/commands/DocumentCommands.ts)、[DocumentHistory.ts](src/history/DocumentHistory.ts)、[SnapshotDelta.ts](src/history/SnapshotDelta.ts)、[DraftStore.ts](src/history/DraftStore.ts)、[DocumentCommands.test.ts](tests/DocumentCommands.test.ts)、[DraftStore.test.ts](tests/DraftStore.test.ts)                             |
+| P1-5      | dirty New / Open / beforeunload、事前 build + 単一 ImportCommand、atomic delete、rollback、旧 session draft 復旧を実装         | [AppController.ts](src/controllers/AppController.ts)、[FileController.ts](src/controllers/FileController.ts)、[DocumentImportPlan.ts](src/io/DocumentImportPlan.ts)、[AppController.test.ts](tests/AppController.test.ts)、[ImportPlan.test.ts](tests/ImportPlan.test.ts)、[app.spec.ts](e2e/app.spec.ts)                                           |
+| P1-6      | YAML の source ID / element tag 重複と optional 値の型不正を path 付きで拒否                                                   | [CalcYamlDeserializer.ts](src/io/CalcYamlDeserializer.ts)、[CalcYamlDeserializer.test.ts](tests/CalcYamlDeserializer.test.ts)                                                                                                                                                                                                                       |
+| P1-7      | Pointer Events の全 click を作図へ渡し、native `dblclick` を選択 tool に限定                                                   | [InputController.ts](src/ui/InputController.ts)、[SelectionHandler.ts](src/ui/handlers/SelectionHandler.ts)、[InputController.test.ts](tests/InputController.test.ts)                                                                                                                                                                               |
+| P1-8      | CI / Pages にformat、型検査、lint、unit、coverage、build、bundle budget、audit を、CI に Playwright を設定                     | [package.json](package.json)、[ci.yml](.github/workflows/ci.yml)、[deploy.yml](.github/workflows/deploy.yml)、[dependabot.yml](.github/dependabot.yml)                                                                                                                                                                                              |
+| P2-1      | camera / grid / elements / selection / preview の dirty flag、要素 batch、動的 preview buffer を実装                           | [CadView.ts](src/ui/CadView.ts)、[CadRenderer.ts](src/ui/CadRenderer.ts)                                                                                                                                                                                                                                                                            |
+| P2-2      | 可視範囲に揃う 1/2/5/10 grid、Box3 fit、ResizeObserver、DPR 上限、camera 基底 pan、標準 view を実装                            | [CadRenderer.ts](src/ui/CadRenderer.ts)、[CameraController.ts](src/ui/CameraController.ts)、[CameraController.test.ts](tests/CameraController.test.ts)                                                                                                                                                                                              |
+| P2-3      | pointer capture / cancel / lost、CSS pixel drag 判定、冪等 dispose を実装                                                      | [InputController.ts](src/ui/InputController.ts)、[CadView.ts](src/ui/CadView.ts)、[InputController.test.ts](tests/InputController.test.ts)                                                                                                                                                                                                          |
+| P2-4      | Layer を data 層へ移動し、型 metadata の単一 registry + 全型 codec、UI formatter、Controller 分割を実装                        | [typeRegistry.ts](src/data/typeRegistry.ts)、[DocumentDataCodecRegistry.ts](src/io/DocumentDataCodecRegistry.ts)、[LayerController.ts](src/controllers/LayerController.ts)、[controllers](src/controllers)、[StructuralDataIo.test.ts](tests/StructuralDataIo.test.ts)                                                                              |
+| P2-5      | `schemaVersion: 2`、legacy v0 / v1 migration、parse / validate / migrate / domain build、意味的 round-trip を実装              | [JsonSchema.ts](src/io/JsonSchema.ts)、[JsonDeserializer.ts](src/io/JsonDeserializer.ts)、[JsonSerializer.ts](src/io/JsonSerializer.ts)、[JsonRoundtrip.test.ts](tests/JsonRoundtrip.test.ts)、[StructuralDataIo.test.ts](tests/StructuralDataIo.test.ts)                                                                                           |
+| P2-6      | dialog ARIA、label 関連付け、focus 管理、Enter / Esc、inline 数値検証、canvas / listbox、lang 同期、responsive CSS を実装      | [DialogUtil.ts](src/ui/dialogs/DialogUtil.ts)、[i18n.ts](src/i18n.ts)、[index.html](index.html)、[DialogAccessibility.test.ts](tests/DialogAccessibility.test.ts)                                                                                                                                                                                   |
+| P2-7      | test 型検査、coverage 閾値、Playwright Chromium smoke、WebGL screenshot visual regression を実装                               | [vitest.config.ts](vitest.config.ts)、[playwright.config.ts](playwright.config.ts)、[app.spec.ts](e2e/app.spec.ts)、[webgl-full-model.png](e2e/app.spec.ts-snapshots/webgl-full-model.png)                                                                                                                                                          |
+| F2        | 保存前検証 panel、複数 Error / Warning、対象選択、自動 zoom、provenance 整合性確認を実装                                       | [ModelInspector.ts](src/data/ModelInspector.ts)、[ModelValidationDialog.ts](src/ui/dialogs/ModelValidationDialog.ts)、[ModelInspector.test.ts](tests/ModelInspector.test.ts)                                                                                                                                                                        |
+| F3        | 節点・端点・中点・交点・grid、水平 / 鉛直 / X/Y 軸 / 直交拘束、安定候補 ID と切替、glyph、Alt、座標・距離・角度入力を実装      | [ObjectSnapEngine.ts](src/ui/ObjectSnapEngine.ts)、[PlanInput.ts](src/math/PlanInput.ts)、[ObjectSnapEngine.test.ts](tests/ObjectSnapEngine.test.ts)、[CadViewObjectSnap.test.ts](tests/CadViewObjectSnap.test.ts)、[PlanInput.test.ts](tests/PlanInput.test.ts)                                                                                    |
+| F4        | Layer の stable ID、visible / locked / isolate、編集、複製、上下階コピー、削除影響確認を実装                                   | [Layer.ts](src/data/Layer.ts)、[LayerCopy.ts](src/data/LayerCopy.ts)、[LayerController.ts](src/controllers/LayerController.ts)、[LayerManagement.test.ts](tests/LayerManagement.test.ts)                                                                                                                                                            |
+| F5        | Truss / Spring / Support / Constraint / 6 自由度 Node mass と source hbrace の専用型、永続化、glyph、選択、編集を実装          | [Truss.ts](src/data/Truss.ts)、[Spring.ts](src/data/Spring.ts)、[Support.ts](src/data/Support.ts)、[Constraint.ts](src/data/Constraint.ts)、[StructuralDataIo.test.ts](tests/StructuralDataIo.test.ts)、[CalcYamlDeserializer.test.ts](tests/CalcYamlDeserializer.test.ts)                                                                          |
+| F6        | 複数種別 filter、label、表示 / 非表示 / 隔離、標準 view、選択数・1 点目・失敗理由の状態表示を実装                              | [SelectionFilter.ts](src/selection/SelectionFilter.ts)、[DisplayFilter.ts](src/display/DisplayFilter.ts)、[DisplayLabels.ts](src/display/DisplayLabels.ts)、[CadView.ts](src/ui/CadView.ts)、[HandlerTransactions.test.ts](tests/HandlerTransactions.test.ts)、[DisplayFilter.test.ts](tests/DisplayFilter.test.ts)、[app.spec.ts](e2e/app.spec.ts) |
+| P3        | 凹多角形 triangulation、`LineSegments2` 太線、透明面 order、version 単一ソース、Three.js chunk 分離、bundle size budget を実装 | [CadRenderer.ts](src/ui/CadRenderer.ts)、[version.ts](src/version.ts)、[vite.config.ts](vite.config.ts)、[check-bundle-size.mjs](scripts/check-bundle-size.mjs)、[CadRenderer.test.ts](tests/CadRenderer.test.ts)                                                                                                                                   |
 
 ## 検証結果
 
-以下は2026-07-14の最終統合後に実行した実測である。
+以下は 2026-07-14 の最終統合時点の検証基準と実測である。
 
-| 確認項目               | 結果 | 補足                                                                                                      |
-| ---------------------- | ---: | --------------------------------------------------------------------------------------------------------- |
-| `npm run check`        | 成功 | app/test型検査、ESLint、18ファイル・187テスト、Vite本番buildが成功                                        |
-| `npm run format:check` | 成功 | 対象ファイルはすべてPrettier準拠                                                                          |
-| `npm audit`            | 成功 | 既知の脆弱性0件                                                                                           |
-| ローカル画面smoke      | 成功 | 座標入力、検証、Undo/Redo、3D、filter、レイヤー編集、i18n/ARIA、snap/Altを確認。console error/warning 0件 |
+| 確認項目               | 結果 | 補足                                                                                                               |
+| ---------------------- | ---: | ------------------------------------------------------------------------------------------------------------------ |
+| `npm run check`        | 成功 | Prettier、app / test 型検査、ESLint、Vitest、coverage、Vite build、bundle budget                                   |
+| `npm test`             | 成功 | 31 ファイル・287 テスト                                                                                            |
+| `npm run test:e2e`     | 成功 | Chromium で sample 読込、dirty New / Open、Undo / Redo、2D / 3D 選択、状態同期、resize / theme、visual の 8 テスト |
+| coverage threshold     | 成功 | 閾値 statements / functions / lines 75%、branches 60%。実測 77.03% / 78.21% / 79.72% / 66.26%                      |
+| `npm run format:check` | 成功 | 対象ファイルはすべて Prettier 準拠                                                                                 |
+| `npm audit`            | 成功 | high 以上の既知脆弱性 0 件                                                                                         |
+| bundle budget          | 成功 | 3 chunks、JavaScript 合計 853,214 bytes。上限は 1 chunk 525 KiB / 合計 850 KiB                                     |
 
-buildはアプリchunk 97.39 kB / 139.24 kB、Three.js vendor chunk 490.74 kB（gzip 124.16 kB）へ分割され、500 kB超の警告を解消した。
+本番 build は app chunk 249.23 kB / 97.39 kB と Three.js chunk 506.59 kB に分離した。app version は `package.json` を単一ソースとし、Vite がランタイム表示と HTML title に注入する。
 
 ## レビュー詳細
 
-以下はレビュー時の問題、改善方針、必要テストを保存した記録である。現在の実装状況は上のマトリクスを正とし、行番号リンクはレビュー時点の位置を示す。
+以下はレビュー時の問題、改善方針、必要テストを保存した記録である。すべて上の完了マトリクスへ反映済みであり、行番号リンクはレビュー時点の位置を示す。
 
-### 現状の良い点
+### レビュー時点の良い点
 
 - [Document.ts](src/data/Document.ts#L54-L101) で追加・削除時のソート、再採番、Node削除前の参照確認を一元化している。
 - [JsonDeserializer.ts](src/io/JsonDeserializer.ts#L61-L143) は一時オブジェクトを構築してから `bulkLoad` するため、通常の入力エラーでは既存Documentを途中まで壊さない。
@@ -81,7 +63,7 @@ buildはアプリchunk 97.39 kB / 139.24 kB、Three.js vendor chunk 490.74 kB（
 - [CadView.ts](src/ui/CadView.ts#L241-L263) は `requestAnimationFrame` で描画要求を集約し、[CadRenderer.ts](src/ui/CadRenderer.ts#L52-L57) は再構築時にgeometry/materialを破棄している。
 - math/data/ioには有効な単体テストがあり、JSONの往復安定性とYAML変換の主要経路を検証している。
 
-## 優先度
+## 優先度（レビュー時の記録）
 
 - **P1**: データ破損、誤作図、作業消失、選択誤り、既知の高リスク依存に関係するため、次のリリース前に対応する。
 - **P2**: 大規模モデルの性能、保守性、アクセシビリティ、品質基盤として次期開発で対応する。
@@ -424,4 +406,4 @@ READMEに記載された材料、断面性能、元ID、支点、質量、拘束
 6. versioned JSONとcodec registryへ移行する。
 7. 保存前検証、オブジェクトスナップ、レイヤー管理、構造情報永続化を追加する。
 
-この順序を基準に、モデル不変条件、atomic操作、履歴、CI、Raycaster/Pointer Events、versioned JSON、検証とスナップを実装した。未完の範囲は冒頭の「部分対応」「将来拡張」を正とする。
+この順序を基準に、モデル不変条件、atomic 操作、Command / 構造差分履歴、CI、Raycaster / Pointer Events、schema v2 / codec registry、検証、作図支援、レイヤー、構造専用型、表示品質まで実装した。現在の実装根拠と検証結果は冒頭の完了マトリクスを正とする。

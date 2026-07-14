@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { Document } from '../data/Document';
 import { DocumentData } from '../data/DocumentData';
 import { Node } from '../data/Node';
@@ -11,16 +14,26 @@ import { BearWall } from '../data/BearWall';
 import { Point3D } from '../math/Point3D';
 import { CAD, type CadPalette } from './CadConfig';
 import type { CameraController, GridBounds } from './CameraController';
+import { DisplayFilter } from '../display/DisplayFilter';
+import { Truss } from '../data/Truss';
+import { Spring } from '../data/Spring';
+import { Support } from '../data/Support';
+import { Constraint } from '../data/Constraint';
 
 export interface RenderContext {
   palette: CadPalette;
   show3D: boolean;
+  /** 正面・側面など、平行投影でも全階を重ねて表示する標準ビュー。 */
+  showAllLayers?: boolean;
   cameraDistance: number;
   cameraCenter: Readonly<THREE.Vector3>;
   layerZ: number;
   showGrid: boolean;
   gridWidth: number;
   gridBounds: GridBounds;
+  /** 太線materialの初回raycastにも使う。未指定時はLineSegments2.onBeforeRenderが実viewportへ同期する。 */
+  viewportWidth?: number;
+  viewportHeight?: number;
 }
 
 export interface MappedIntersection {
@@ -40,6 +53,8 @@ export class CadRenderer {
   private readonly previewGroup = new THREE.Group();
   private objectData = new WeakMap<THREE.Object3D, ReadonlyArray<DocumentData>>();
   private selectionUpdaters: SelectionUpdater[] = [];
+  private readonly wideLineMaterials = new Set<LineMaterial>();
+  private readonly viewportSize = new THREE.Vector2(1, 1);
   private disposed = false;
 
   // previewは毎mousemoveでObjectを作り直さず、動的attributeとdrawRangeだけを更新する。
@@ -64,7 +79,10 @@ export class CadRenderer {
   private previewLineVertexCount = 0;
   private previewPointVertexCount = 0;
 
-  constructor(scene: THREE.Scene) {
+  constructor(
+    scene: THREE.Scene,
+    readonly displayFilter: DisplayFilter = new DisplayFilter(),
+  ) {
     this.gridGroup.name = 'cad-grid';
     this.elementGroup.name = 'cad-elements';
     this.previewGroup.name = 'cad-preview';
@@ -86,11 +104,14 @@ export class CadRenderer {
   }
 
   rebuildGrid(ctx: RenderContext): void {
+    this.updateViewportFromContext(ctx);
     this.clearGroup(this.gridGroup);
     if (ctx.showGrid) this.drawGrid(ctx);
   }
 
   rebuildElements(ctx: RenderContext): void {
+    this.updateViewportFromContext(ctx);
+    this.wideLineMaterials.clear();
     this.clearGroup(this.elementGroup);
     this.objectData = new WeakMap();
     this.selectionUpdaters = [];
@@ -99,7 +120,22 @@ export class CadRenderer {
 
   /** geometryを作り直さず、選択/レイヤー状態に応じたcolorとopacityだけ更新する。 */
   updateSelection(ctx: RenderContext): void {
+    this.updateViewportFromContext(ctx);
+    // selectedOnlyはselectの変化でbatch構成自体が変わるため、このモードだけ再構築する。
+    if (this.displayFilter.mode === 'selectedOnly') {
+      this.rebuildElements(ctx);
+      return;
+    }
     for (const update of this.selectionUpdaters) update(ctx);
+  }
+
+  /**
+   * screen-space太線のresolutionを即時更新する。実描画時にもLineSegments2がviewportを再同期するため、
+   * ResizeObserver経由のrenderと、render前のraycastの双方で正しい幅になる。
+   */
+  setViewportSize(width: number, height: number): void {
+    this.viewportSize.set(safeViewportDimension(width), safeViewportDimension(height));
+    for (const material of this.wideLineMaterials) material.resolution.copy(this.viewportSize);
   }
 
   clearPreview(): void {
@@ -168,7 +204,7 @@ export class CadRenderer {
     const intersections = raycaster.intersectObjects(this.elementGroup.children, true);
     const mapped: MappedIntersection[] = [];
     for (const intersection of intersections) {
-      const data = this.getMappedData(intersection.object, intersection.index);
+      const data = this.getMappedData(intersection.object, intersection.faceIndex ?? intersection.index);
       if (data) mapped.push({ intersection, data });
     }
     return mapped;
@@ -186,6 +222,9 @@ export class CadRenderer {
     if (object instanceof THREE.LineSegments) {
       return list[Math.floor(Math.max(0, primitiveIndex ?? 0) / 2)] ?? null;
     }
+    if (object instanceof LineSegments2) {
+      return list[Math.max(0, primitiveIndex ?? 0)] ?? null;
+    }
     return list[0];
   }
 
@@ -195,12 +234,47 @@ export class CadRenderer {
     screenY: number,
     camera: CameraController,
     rect: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>,
-    tolerancePx = CAD.HIT_TOLERANCE_PX,
+    tolerancePx: number = CAD.HIT_TOLERANCE_PX,
+    predicate: (data: DocumentData) => boolean = () => true,
+    showAllLayers: boolean = false,
   ): DocumentData | null {
     const doc = Document.instance;
     const layer = doc.shownLayer;
     const pointer = new THREE.Vector2(screenX, screenY);
-    const isVisible = (data: DocumentData): boolean => !layer || data.existsOn(layer);
+    const isVisible = (data: DocumentData): boolean =>
+      this.displayFilter.allows(data) &&
+      predicate(data) &&
+      doc.isDataVisible(data) &&
+      !doc.isDataLocked(data) &&
+      (showAllLayers || !layer || data.existsOn(layer));
+
+    let closestSupport: { data: Support; distance: number } | null = null;
+    for (const support of doc.chooseData(Support)) {
+      if (!support.node || !isVisible(support)) continue;
+      const projected = camera.worldToScreen(support.node.pos, rect);
+      if (!projected) continue;
+      const distance = projected.distanceTo(pointer);
+      if (distance <= tolerancePx * 1.5 && (!closestSupport || distance < closestSupport.distance)) {
+        closestSupport = { data: support, distance };
+      }
+    }
+    if (closestSupport) return closestSupport.data;
+
+    let closestConstraint: { data: Constraint; distance: number } | null = null;
+    for (const constraint of doc.chooseData(Constraint)) {
+      if (!constraint.slaveNode || !isVisible(constraint)) continue;
+      const slave = camera.worldToScreen(constraint.slaveNode.pos, rect);
+      if (!slave) continue;
+      for (const term of constraint.terms) {
+        const master = camera.worldToScreen(term.node.pos, rect);
+        if (!master) continue;
+        const distance = distanceToSegment(pointer, slave, master);
+        if (distance <= tolerancePx && (!closestConstraint || distance < closestConstraint.distance)) {
+          closestConstraint = { data: constraint, distance };
+        }
+      }
+    }
+    if (closestConstraint) return closestConstraint.data;
 
     let closestNode: { data: Node; distance: number } | null = null;
     for (const node of doc.nodeList) {
@@ -217,10 +291,17 @@ export class CadRenderer {
     let closestMember: { data: Member; distance: number } | null = null;
     for (const member of doc.memberList) {
       if (!member.ok || !isVisible(member)) continue;
-      const a = camera.worldToScreen(member.posI, rect);
-      const b = camera.worldToScreen(member.posJ, rect);
-      if (!a || !b) continue;
-      const distance = distanceToSegment(pointer, a, b);
+      const path =
+        member instanceof Spring
+          ? springGlyphPoints(member.posI, member.posJ, camera.cameraDistance)
+          : [member.posI, member.posJ];
+      const projected = path.map((point) => camera.worldToScreen(point, rect));
+      let distance = Number.POSITIVE_INFINITY;
+      for (let index = 0; index < projected.length - 1; index++) {
+        const a = projected[index];
+        const b = projected[index + 1];
+        if (a && b) distance = Math.min(distance, distanceToSegment(pointer, a, b));
+      }
       if (distance <= tolerancePx && (!closestMember || distance < closestMember.distance)) {
         closestMember = { data: member, distance };
       }
@@ -265,6 +346,7 @@ export class CadRenderer {
     this.elementGroup.parent?.remove(this.elementGroup);
     this.previewGroup.parent?.remove(this.previewGroup);
     this.selectionUpdaters = [];
+    this.wideLineMaterials.clear();
     this.objectData = new WeakMap();
   }
 
@@ -311,19 +393,58 @@ export class CadRenderer {
 
   private drawElements(ctx: RenderContext): void {
     const doc = Document.instance;
-    const showAll = ctx.show3D || !doc.shownLayer;
-    const nodes = doc.nodeList.filter((node) => showAll || node.existsOn(doc.shownLayer));
-    const members = doc.memberList.filter((member) => member.ok && (showAll || member.existsOn(doc.shownLayer)));
+    const showAll = ctx.show3D || ctx.showAllLayers === true || !doc.shownLayer;
+    const nodes = doc.nodeList.filter(
+      (node) =>
+        this.displayFilter.allows(node) && doc.isDataVisible(node) && (showAll || node.existsOn(doc.shownLayer)),
+    );
+    const members = doc.memberList.filter(
+      (member) =>
+        member.ok &&
+        this.displayFilter.allows(member) &&
+        doc.isDataVisible(member) &&
+        (showAll || member.existsOn(doc.shownLayer)),
+    );
+    const regularMembers = members.filter((member) => !(member instanceof Truss) && !(member instanceof Spring));
+    const trusses = members.filter((member): member is Truss => member instanceof Truss);
+    const springs = members.filter((member): member is Spring => member instanceof Spring);
+    const supports = doc
+      .chooseData(Support)
+      .filter(
+        (support) =>
+          support.node &&
+          this.displayFilter.allows(support) &&
+          doc.isDataVisible(support) &&
+          (showAll || support.existsOn(doc.shownLayer)),
+      );
+    const constraints = doc
+      .chooseData(Constraint)
+      .filter(
+        (constraint) =>
+          this.displayFilter.allows(constraint) &&
+          doc.isDataVisible(constraint) &&
+          (showAll || constraint.existsOn(doc.shownLayer)),
+      );
 
     this.drawNodeBatch(nodes, ctx);
-    this.drawMemberBatch(members, ctx);
+    this.drawMassBatch(
+      nodes.filter((node) => node.mass !== null),
+      ctx,
+    );
+    this.drawMemberBatch(regularMembers, ctx, 'member');
+    this.drawMemberBatch(trusses, ctx, 'truss');
+    this.drawTrussMarkers(trusses, ctx);
+    this.drawSprings(springs, ctx);
+    this.drawSupports(supports, ctx);
+    this.drawConstraints(constraints, ctx);
     if (!ctx.show3D)
       this.drawPillarBatch(
-        members.filter((m): m is Pillar => m instanceof Pillar),
+        regularMembers.filter((m): m is Pillar => m instanceof Pillar),
         ctx,
       );
 
     for (const plane of doc.planeList) {
+      if (!this.displayFilter.allows(plane) || !doc.isDataVisible(plane)) continue;
       if (!plane.ok || (!showAll && !plane.existsOn(doc.shownLayer))) continue;
       if (plane instanceof Floor && plane.direction === FloorDirection.DUMMY) continue;
       this.drawPlane(plane, ctx);
@@ -355,28 +476,36 @@ export class CadRenderer {
     update(ctx);
   }
 
-  private drawMemberBatch(members: Member[], ctx: RenderContext): void {
+  private drawMemberBatch(members: Member[], ctx: RenderContext, colorKey: 'member' | 'truss' = 'member'): void {
     if (members.length === 0) return;
     const positions: number[] = [];
     for (const member of members) {
       positions.push(member.posI.x, member.posI.y, member.posI.z, member.posJ.x, member.posJ.y, member.posJ.z);
     }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(members.length * 6), 3));
-    const material = new THREE.LineBasicMaterial({ vertexColors: true });
-    const lines = new THREE.LineSegments(geometry, material);
+    const geometry = new LineSegmentsGeometry();
+    geometry.setPositions(positions);
+    geometry.setColors(new Float32Array(members.length * 6));
+    const material = new LineMaterial({
+      vertexColors: true,
+      linewidth: CAD.MEMBER_LINEWIDTH,
+      worldUnits: false,
+      resolution: this.viewportSize.clone(),
+    });
+    this.wideLineMaterials.add(material);
+    const lines = new LineSegments2(geometry, material);
+    lines.renderOrder = 30;
     this.mapObject(lines, members);
     this.elementGroup.add(lines);
 
     const update: SelectionUpdater = (state) => {
-      const colors = geometry.getAttribute('color') as THREE.BufferAttribute;
+      const starts = geometry.getAttribute('instanceColorStart') as THREE.InterleavedBufferAttribute;
+      const ends = geometry.getAttribute('instanceColorEnd') as THREE.InterleavedBufferAttribute;
       members.forEach((member, index) => {
-        const tuple = this.colorTuple(member, state.palette.member, state);
-        colors.setXYZ(index * 2, ...tuple);
-        colors.setXYZ(index * 2 + 1, ...tuple);
+        const tuple = this.colorTuple(member, state.palette[colorKey], state);
+        starts.setXYZ(index, ...tuple);
+        ends.setXYZ(index, ...tuple);
       });
-      colors.needsUpdate = true;
+      starts.data.needsUpdate = true;
     };
     this.selectionUpdaters.push(update);
     update(ctx);
@@ -409,13 +538,136 @@ export class CadRenderer {
     update(ctx);
   }
 
+  private drawMassBatch(nodes: Node[], ctx: RenderContext): void {
+    if (nodes.length === 0) return;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(
+        nodes.flatMap((node) => [node.pos.x, node.pos.y, node.pos.z]),
+        3,
+      ),
+    );
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(nodes.length * 3), 3));
+    const material = new THREE.PointsMaterial({
+      size: CAD.NODE_SIZE + 8,
+      sizeAttenuation: false,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.45,
+    });
+    const points = new THREE.Points(geometry, material);
+    this.mapObject(points, nodes);
+    this.elementGroup.add(points);
+    const update: SelectionUpdater = (state) => {
+      const colors = geometry.getAttribute('color') as THREE.BufferAttribute;
+      nodes.forEach((node, index) => colors.setXYZ(index, ...this.colorTuple(node, state.palette.mass, state)));
+      colors.needsUpdate = true;
+    };
+    this.selectionUpdaters.push(update);
+    update(ctx);
+  }
+
+  private drawTrussMarkers(trusses: Truss[], ctx: RenderContext): void {
+    if (trusses.length === 0) return;
+    const positions: number[] = [];
+    for (const truss of trusses) {
+      const center = truss.posI.add(truss.posJ).div(2);
+      positions.push(center.x, center.y, center.z);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(trusses.length * 3), 3));
+    const material = new THREE.PointsMaterial({ size: 7, sizeAttenuation: false, vertexColors: true });
+    const points = new THREE.Points(geometry, material);
+    this.mapObject(points, trusses);
+    this.elementGroup.add(points);
+    const update: SelectionUpdater = (state) => {
+      const colors = geometry.getAttribute('color') as THREE.BufferAttribute;
+      trusses.forEach((truss, index) => colors.setXYZ(index, ...this.colorTuple(truss, state.palette.truss, state)));
+      colors.needsUpdate = true;
+    };
+    this.selectionUpdaters.push(update);
+    update(ctx);
+  }
+
+  private drawSprings(springs: Spring[], ctx: RenderContext): void {
+    for (const spring of springs) {
+      const points = springGlyphPoints(spring.posI, spring.posJ, ctx.cameraDistance);
+      const geometry = new THREE.BufferGeometry().setFromPoints(points.map(toVector));
+      const material = new THREE.LineBasicMaterial({ depthTest: true });
+      const line = new THREE.Line(geometry, material);
+      line.renderOrder = 31;
+      this.mapObject(line, [spring]);
+      this.elementGroup.add(line);
+      const update: SelectionUpdater = (state) => {
+        material.color.set(spring.select ? state.palette.select : state.palette.spring);
+      };
+      this.selectionUpdaters.push(update);
+      update(ctx);
+    }
+  }
+
+  private drawSupports(supports: Support[], ctx: RenderContext): void {
+    const size = Math.max(20, Math.min(ctx.cameraDistance * 0.025, 500));
+    for (const support of supports) {
+      if (!support.node) continue;
+      const p = support.node.pos;
+      const vertices = [
+        new Point3D(p.x, p.y, p.z),
+        new Point3D(p.x - size, p.y - size, p.z),
+        new Point3D(p.x, p.y, p.z),
+        new Point3D(p.x + size, p.y - size, p.z),
+        new Point3D(p.x - size, p.y - size, p.z),
+        new Point3D(p.x + size, p.y - size, p.z),
+        new Point3D(p.x - size, p.y, p.z),
+        new Point3D(p.x + size, p.y, p.z),
+        new Point3D(p.x, p.y - size, p.z),
+        new Point3D(p.x, p.y + size, p.z),
+      ];
+      const geometry = new THREE.BufferGeometry().setFromPoints(vertices.map(toVector));
+      const material = new THREE.LineBasicMaterial({ depthTest: true });
+      const glyph = new THREE.LineSegments(geometry, material);
+      glyph.renderOrder = 35;
+      this.mapObject(glyph, [support]);
+      this.elementGroup.add(glyph);
+      const update: SelectionUpdater = (state) => {
+        material.color.set(support.select ? state.palette.select : state.palette.support);
+      };
+      this.selectionUpdaters.push(update);
+      update(ctx);
+    }
+  }
+
+  private drawConstraints(constraints: Constraint[], ctx: RenderContext): void {
+    for (const constraint of constraints) {
+      if (!constraint.slaveNode || constraint.terms.length === 0) continue;
+      const points: THREE.Vector3[] = [];
+      for (const term of constraint.terms) {
+        points.push(toVector(constraint.slaveNode.pos), toVector(term.node.pos));
+      }
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const material = new THREE.LineDashedMaterial({ dashSize: 30, gapSize: 20, depthTest: true });
+      const lines = new THREE.LineSegments(geometry, material);
+      lines.computeLineDistances();
+      lines.renderOrder = 29;
+      this.mapObject(lines, [constraint]);
+      this.elementGroup.add(lines);
+      const update: SelectionUpdater = (state) => {
+        material.color.set(constraint.select ? state.palette.select : state.palette.constraint);
+      };
+      this.selectionUpdaters.push(update);
+      update(ctx);
+    }
+  }
+
   private drawPlane(plane: Plane, ctx: RenderContext): void {
     const nodes = plane.nodeList;
     if (nodes.length < 3) return;
     const vertices: number[] = [];
     for (const node of nodes) vertices.push(node.pos.x, node.pos.y, node.pos.z);
-    const indices: number[] = [];
-    for (let i = 1; i < nodes.length - 1; i++) indices.push(0, i, i + 1);
+    const indices = triangulatePolygon3D(nodes.map((node) => node.pos));
+    if (indices.length === 0) return;
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
@@ -425,16 +677,22 @@ export class CadRenderer {
       side: THREE.DoubleSide,
       transparent: true,
       depthWrite: false,
+      depthTest: true,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
     });
     const mesh = new THREE.Mesh(geometry, material);
+    mesh.renderOrder = 10;
     this.mapObject(mesh, [plane]);
     this.elementGroup.add(mesh);
 
     const edgeGeometry = new THREE.BufferGeometry().setFromPoints(
       nodes.map((node) => new THREE.Vector3(node.pos.x, node.pos.y, node.pos.z)),
     );
-    const edgeMaterial = new THREE.LineBasicMaterial({ transparent: true });
+    const edgeMaterial = new THREE.LineBasicMaterial({ transparent: true, depthWrite: false, depthTest: true });
     const edge = new THREE.LineLoop(edgeGeometry, edgeMaterial);
+    edge.renderOrder = 20;
     this.mapObject(edge, [plane]);
     this.elementGroup.add(edge);
 
@@ -446,8 +704,9 @@ export class CadRenderer {
         toVector(nodes[1].pos),
         toVector(nodes[3].pos),
       ]);
-      const braceMaterial = new THREE.LineBasicMaterial({ transparent: true });
+      const braceMaterial = new THREE.LineBasicMaterial({ transparent: true, depthWrite: false, depthTest: true });
       braces = new THREE.LineSegments(braceGeometry, braceMaterial);
+      braces.renderOrder = 21;
       this.mapObject(braces, [plane]);
       this.elementGroup.add(braces);
     }
@@ -556,6 +815,12 @@ export class CadRenderer {
       disposeObjectTree(child);
     }
   }
+
+  private updateViewportFromContext(ctx: RenderContext): void {
+    if (ctx.viewportWidth !== undefined && ctx.viewportHeight !== undefined) {
+      this.setViewportSize(ctx.viewportWidth, ctx.viewportHeight);
+    }
+  }
 }
 
 /** 1/2/5/10系列でグリッドLODを選ぶ。 */
@@ -581,8 +846,53 @@ export function alignedGridBounds(bounds: GridBounds, gridWidth: number): GridBo
   };
 }
 
+/**
+ * 任意方向の平面を局所直交座標へ投影し、Three.js(Earcut)で凹多角形も三角形分割する。
+ * 戻り値は元points配列を参照するindex列。
+ */
+export function triangulatePolygon3D(points: ReadonlyArray<Point3D>): number[] {
+  if (points.length < 3) return [];
+  const normal = newellNormal(points);
+  if (normal.length <= Number.EPSILON) return [];
+  normal.normalize();
+
+  const origin = points[0];
+  let tangent: Point3D | null = null;
+  for (let i = 1; i < points.length; i++) {
+    const edge = points[i].sub(origin);
+    const projected = edge.sub(normal.scale(Point3D.dotProduct(edge, normal)));
+    if (projected.length > Number.EPSILON) {
+      tangent = projected.getNormalized();
+      break;
+    }
+  }
+  if (!tangent) return [];
+  const bitangent = Point3D.crossProduct(normal, tangent).getNormalized();
+  const contour = points.map((point) => {
+    const local = point.sub(origin);
+    return new THREE.Vector2(Point3D.dotProduct(local, tangent), Point3D.dotProduct(local, bitangent));
+  });
+  return THREE.ShapeUtils.triangulateShape(contour, []).flat();
+}
+
 function dynamicAttribute(array: Float32Array): THREE.BufferAttribute {
   return new THREE.BufferAttribute(array, 3).setUsage(THREE.DynamicDrawUsage);
+}
+
+function newellNormal(points: ReadonlyArray<Point3D>): Point3D {
+  const normal = new Point3D();
+  for (let i = 0; i < points.length; i++) {
+    const current = points[i];
+    const next = points[(i + 1) % points.length];
+    normal.x += (current.y - next.y) * (current.z + next.z);
+    normal.y += (current.z - next.z) * (current.x + next.x);
+    normal.z += (current.x - next.x) * (current.y + next.y);
+  }
+  return normal;
+}
+
+function safeViewportDimension(value: number): number {
+  return Number.isFinite(value) ? Math.max(1, value) : 1;
 }
 
 function growCapacity(current: number, needed: number): number {
@@ -593,6 +903,32 @@ function growCapacity(current: number, needed: number): number {
 
 function toVector(point: Point3D): THREE.Vector3 {
   return new THREE.Vector3(point.x, point.y, point.z);
+}
+
+/** ばねを端部直線＋中央のzig-zagで表す。零長ばねにも画面上で識別できるglyphを与える。 */
+export function springGlyphPoints(from: Point3D, to: Point3D, cameraDistance: number): Point3D[] {
+  const delta = to.sub(from);
+  const actualLength = delta.length;
+  const fallbackLength = Math.max(20, Math.min(cameraDistance * 0.04, 600));
+  const axis = actualLength > Number.EPSILON ? delta.div(actualLength) : Point3D.XDirection;
+  const length = actualLength > Number.EPSILON ? actualLength : fallbackLength;
+  const end = actualLength > Number.EPSILON ? to : from.add(axis.scale(length));
+  const reference =
+    Math.abs(Point3D.dotProduct(axis, Point3D.ZDirection)) < 0.9 ? Point3D.ZDirection : Point3D.YDirection;
+  const normal = Point3D.crossProduct(axis, reference).getNormalized();
+  const amplitude = Math.max(5, Math.min(length * 0.12, fallbackLength * 0.25));
+  const startCoil = from.add(axis.scale(length * 0.2));
+  const endCoil = from.add(axis.scale(length * 0.8));
+  const points = [from.clone(), startCoil];
+  const turns = 6;
+  for (let index = 1; index < turns; index++) {
+    const fraction = index / turns;
+    const center = startCoil.add(axis.scale(length * 0.6 * fraction));
+    const offset = normal.scale((index % 2 === 0 ? -1 : 1) * amplitude);
+    points.push(center.add(offset));
+  }
+  points.push(endCoil, end.clone());
+  return points;
 }
 
 function distanceToSegment(point: THREE.Vector2, a: THREE.Vector2, b: THREE.Vector2): number {

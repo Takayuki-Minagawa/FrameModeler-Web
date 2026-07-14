@@ -1,11 +1,6 @@
-import { BearWall } from '../data/BearWall';
-import { Beam } from '../data/Beam';
 import type { DocumentData } from '../data/DocumentData';
-import { Floor } from '../data/Floor';
 import type { ImportMetadata } from '../data/ImportMetadata';
 import { Node } from '../data/Node';
-import { Pillar } from '../data/Pillar';
-import { Wall } from '../data/Wall';
 import { categoryOf } from '../data/typeRegistry';
 import { validateJsonImportMetadata, type JsonDataReference, type JsonImportMetadata } from './JsonSchema';
 
@@ -68,7 +63,7 @@ export function decodeImportMetadata(
   json.sourceElements.forEach((mapping, index) => {
     const data = resolveDataReference(mapping.data, byReference, `importMetadata.sourceElements[${index}].data`);
     if (data instanceof Node) {
-      throw new Error(`Invalid importMetadata.sourceElements[${index}].data: expected Member or Plane`);
+      throw new Error(`Invalid importMetadata.sourceElements[${index}].data: expected a non-Node model object`);
     }
     sourceElements.set(
       data,
@@ -113,7 +108,7 @@ export function decodeImportMetadata(
 
 export function dataReferenceOf(data: DocumentData): JsonDataReference {
   const category = categoryOf(data);
-  if (!category) throw new Error(`Cannot serialize metadata reference for unsupported type '${data.constructor.name}'`);
+  if (!category) throw new Error(`Cannot serialize metadata reference for unsupported kind '${data.kind}'`);
   if (!Number.isInteger(data.number) || data.number < 0) {
     throw new Error(`Cannot serialize metadata reference with invalid number '${data.number}'`);
   }
@@ -155,12 +150,16 @@ function validateSummaryCounts(
   layerCount: number,
 ): void {
   const actual = {
-    nodes: countExact(dataList, Node),
-    beams: countExact(dataList, Beam),
-    pillars: countExact(dataList, Pillar),
-    floors: countExact(dataList, Floor),
-    walls: countExact(dataList, Wall),
-    bearWalls: countExact(dataList, BearWall),
+    nodes: countKind(dataList, 'node'),
+    beams: countKind(dataList, 'beam'),
+    pillars: countKind(dataList, 'pillar'),
+    trusses: countKind(dataList, 'truss'),
+    springs: countKind(dataList, 'spring'),
+    floors: countKind(dataList, 'floor'),
+    walls: countKind(dataList, 'wall'),
+    bearWalls: countKind(dataList, 'bearWall'),
+    supports: countKind(dataList, 'support'),
+    constraints: countKind(dataList, 'constraint'),
     layers: layerCount,
   };
   for (const key of Object.keys(actual) as Array<keyof typeof actual>) {
@@ -172,6 +171,6 @@ function validateSummaryCounts(
   }
 }
 
-function countExact(dataList: ReadonlyArray<DocumentData>, ctor: Function): number {
-  return dataList.filter((data) => data.constructor === ctor).length;
+function countKind(dataList: ReadonlyArray<DocumentData>, kind: DocumentData['kind']): number {
+  return dataList.filter((data) => data.kind === kind).length;
 }

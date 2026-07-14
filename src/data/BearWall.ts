@@ -2,6 +2,7 @@ import { Plane } from './Plane';
 import { Node } from './Node';
 
 export class BearWall extends Plane {
+  readonly kind = 'bearWall' as const;
   constructor(nodes?: Node[]) {
     super(nodes);
     this.section = 'V1';

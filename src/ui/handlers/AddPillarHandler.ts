@@ -6,6 +6,7 @@ import { Pillar } from '../../data/Pillar';
 import type { Point3D } from '../../math/Point3D';
 import { t } from '../../i18n';
 import { planNodes } from './geometry';
+import { AddElementsCommand } from '../../commands/DocumentCommands';
 
 /** 柱追加ハンドラ: クリック位置の直上Nodeとの間に柱を生成 */
 export class AddPillarHandler implements ICadMouseHandler {
@@ -17,18 +18,23 @@ export class AddPillarHandler implements ICadMouseHandler {
 
   onClick(view: CadView, pos: Point3D, _event: MouseEvent): void {
     const doc = Document.instance;
+    view.setOperationStatus(null);
 
     const above = doc.getPosAbove(pos);
-    if (!above) return;
+    if (!above) {
+      view.setOperationStatus('noPointAbove');
+      return;
+    }
     const { nodes, additions } = planNodes([pos, above]);
     const [bottom, top] = nodes;
 
     if (doc.getMemberOf(top, bottom)) {
+      view.setOperationStatus('duplicateElement');
       alert(t('msg.memberExists'));
     } else {
       try {
         const pillar = new Pillar(bottom, top);
-        doc.addMany([...additions, pillar]);
+        doc.execute(new AddElementsCommand([...additions, pillar], '柱追加'));
         if (this.showDialog) this.showDialog(pillar);
       } catch (error) {
         alert((error as Error).message);
@@ -40,4 +46,8 @@ export class AddPillarHandler implements ICadMouseHandler {
   onDoubleClick(_view: CadView, _pos: Point3D, _event: MouseEvent): void {}
   onMouseMove(_view: CadView, _pos: Point3D): void {}
   draw(_view: CadView): void {}
+
+  onDeactivate(view: CadView): void {
+    view.setOperationStatus(null);
+  }
 }

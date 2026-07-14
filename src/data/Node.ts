@@ -1,9 +1,13 @@
 import { DocumentData } from './DocumentData';
 import { Point3D } from '../math/Point3D';
 import { compareNumbers } from '../math/compare';
+import type { NodeMass } from './StructuralDof';
 
 export class Node extends DocumentData {
+  readonly kind = 'node' as const;
   pos: Point3D = new Point3D();
+  /** YAML/JSON由来の6自由度質量。未設定Nodeはnull。 */
+  mass: NodeMass | null = null;
 
   constructor(pos?: Point3D) {
     super();

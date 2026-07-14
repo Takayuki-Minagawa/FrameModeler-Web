@@ -105,4 +105,94 @@ describe('CameraController work plane and fitting', () => {
     expect(controller.cameraDistance).toBe(distance);
     expect(controller.worldToScreen(new THREE.Vector3(0, 0, 6000), rect)).not.toBeNull();
   });
+
+  it('provides top/front/right standard orthographic views with predictable Z-up screen axes', () => {
+    const controller = new CameraController(
+      () => 1,
+      () => 1000,
+    );
+
+    controller.setStandardView('top');
+    expect(controller.standardView).toBe('top');
+    expect(viewOffset(controller)).toEqual([0, 0, 1]);
+    expect(controller.camera.up.toArray()).toEqual([0, 1, 0]);
+
+    controller.setStandardView('front');
+    expect(controller.show3D).toBe(false);
+    expect(controller.standardView).toBe('front');
+    expect(viewOffset(controller)).toEqual([0, -1, 0]);
+    expect(controller.camera.up.toArray()).toEqual([0, 0, 1]);
+    const frontCenter = controller.worldToScreen(new THREE.Vector3(0, 0, 0), rect)!;
+    const frontX = controller.worldToScreen(new THREE.Vector3(100, 0, 0), rect)!;
+    const frontZ = controller.worldToScreen(new THREE.Vector3(0, 0, 100), rect)!;
+    expect(frontX.x).toBeGreaterThan(frontCenter.x);
+    expect(frontZ.y).toBeLessThan(frontCenter.y);
+
+    controller.setStandardView('right');
+    expect(controller.standardView).toBe('right');
+    expect(viewOffset(controller)).toEqual([1, 0, 0]);
+    expect(controller.camera.up.toArray()).toEqual([0, 0, 1]);
+    const rightCenter = controller.worldToScreen(new THREE.Vector3(0, 0, 0), rect)!;
+    const rightY = controller.worldToScreen(new THREE.Vector3(0, 100, 0), rect)!;
+    const rightZ = controller.worldToScreen(new THREE.Vector3(0, 0, 100), rect)!;
+    expect(rightY.x).toBeGreaterThan(rightCenter.x);
+    expect(rightZ.y).toBeLessThan(rightCenter.y);
+  });
+
+  it('uses a true (+X,+Y,+Z) isometric direction and leaves it only after manual rotation', () => {
+    const controller = new CameraController(
+      () => 1,
+      () => 1000,
+    );
+    controller.setStandardView('isometric');
+
+    expect(controller.show3D).toBe(true);
+    expect(controller.standardView).toBe('isometric');
+    const offset = viewOffset(controller);
+    expect(offset[0]).toBeCloseTo(1 / Math.sqrt(3));
+    expect(offset[1]).toBeCloseTo(1 / Math.sqrt(3));
+    expect(offset[2]).toBeCloseTo(1 / Math.sqrt(3));
+    expect(controller.camera.up.toArray()).toEqual([0, 0, 1]);
+
+    controller.fitToBounds(new THREE.Box3(new THREE.Vector3(-1000, -500, 0), new THREE.Vector3(3000, 1500, 2000)));
+    expect(controller.cameraCenter.toArray()).toEqual([1000, 500, 1000]);
+    expect(controller.standardView).toBe('isometric');
+    const fittedOffset = viewOffset(controller);
+    expect(fittedOffset[0]).toBeCloseTo(1 / Math.sqrt(3));
+    expect(fittedOffset[1]).toBeCloseTo(1 / Math.sqrt(3));
+    expect(fittedOffset[2]).toBeCloseTo(1 / Math.sqrt(3));
+
+    controller.rotate(1, 0);
+    expect(controller.standardView).toBeNull();
+    expect(controller.camera.up.toArray()).toEqual([0, 0, 1]);
+  });
+
+  it('fits front-view X/Z extents without changing its orientation', () => {
+    const controller = new CameraController(
+      () => 2,
+      () => 1000,
+    );
+    controller.setStandardView('front');
+    controller.fitToBounds(new THREE.Box3(new THREE.Vector3(1000, -50, 200), new THREE.Vector3(3000, 50, 4200)));
+
+    expect(controller.cameraCenter.toArray()).toEqual([2000, 0, 2200]);
+    expect(controller.cameraDistance).toBeCloseTo(2300);
+    expect(controller.standardView).toBe('front');
+    expect(viewOffset(controller)).toEqual([0, -1, 0]);
+
+    controller.set2DWorkPlaneElevation(9000);
+    expect(controller.cameraCenter.z).toBe(2200);
+  });
 });
+
+function viewOffset(controller: CameraController): [number, number, number] {
+  const offset = controller.camera.position.clone().sub(controller.cameraCenter).normalize();
+  return [cleanZero(offset.x), cleanZero(offset.y), cleanZero(offset.z)];
+}
+
+function cleanZero(value: number): number {
+  if (Math.abs(value) < 1e-12) return 0;
+  if (Math.abs(value - 1) < 1e-12) return 1;
+  if (Math.abs(value + 1) < 1e-12) return -1;
+  return value;
+}

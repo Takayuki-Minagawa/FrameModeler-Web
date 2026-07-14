@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FrameModeler Web v1.0.0</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>FrameModeler Web v%APP_VERSION%</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="stylesheet" href="/src/styles/main.css" />
   </head>
   <body>
@@ -74,6 +74,10 @@
           <label data-i18n-after="grid"><input type="checkbox" id="chk-grid" checked /> グリッド</label>
           <label data-i18n-after="snap"><input type="checkbox" id="chk-snap" checked /> スナップ</label>
           <label data-i18n-after="3d"><input type="checkbox" id="chk-3d" /> 3D表示</label>
+          <button id="btn-view-top" type="button" data-i18n="view.top">上面</button>
+          <button id="btn-view-front" type="button" data-i18n="view.front">正面</button>
+          <button id="btn-view-right" type="button" data-i18n="view.right">側面</button>
+          <button id="btn-view-isometric" type="button" data-i18n="view.isometric">アイソメ</button>
         </div>
         <div
           class="toolbar-group"
@@ -87,6 +91,16 @@
           <label data-i18n-label="snapWidth"
             >スナップ幅: <input type="number" id="input-snap-width" value="10" min="1" step="5"
           /></label>
+          <label data-i18n-label="snap.constraint"
+            >拘束:
+            <select id="select-snap-constraint">
+              <option value="all" data-i18n="snap.constraint.all">軸・直交</option>
+              <option value="axis" data-i18n="snap.constraint.axis">X/Y軸</option>
+              <option value="orthogonal" data-i18n="snap.constraint.orthogonal">直交</option>
+              <option value="none" data-i18n="snap.constraint.none">なし</option>
+            </select>
+          </label>
+          <button id="btn-cycle-snap" type="button" data-i18n="snap.cycle">候補切替</button>
         </div>
         <div
           class="toolbar-group coordinate-entry"
@@ -127,23 +141,108 @@
           <button id="btn-coordinate-commit" data-i18n="coordinate.commit" data-i18n-title="title.coordinateCommit">
             入力
           </button>
+          <label data-i18n-label="coordinate.distance"
+            >距離 <input type="number" id="input-distance" value="1000" min="0" step="any"
+          /></label>
+          <label data-i18n-label="coordinate.angle"
+            >角度 <input type="number" id="input-angle" value="0" step="any"
+          /></label>
+          <button id="btn-polar-commit" type="button" data-i18n="coordinate.polarCommit">距離・角度</button>
         </div>
         <div class="toolbar-group" role="group" data-i18n-aria-label="aria.editActions" aria-label="編集操作">
-          <label data-i18n-label="selection.filter"
-            >選択対象:
-            <select id="select-selection-filter">
-              <option value="all" data-i18n="selection.all">すべて</option>
-              <option value="node" data-i18n="node">節点</option>
-              <option value="beam" data-i18n="beam">梁</option>
-              <option value="pillar" data-i18n="pillar">柱</option>
-              <option value="floor" data-i18n="floor">床</option>
-              <option value="wall" data-i18n="wall">壁</option>
-              <option value="bearWall" data-i18n="bearwall">耐力壁</option>
-            </select>
-          </label>
+          <details class="toolbar-menu" id="selection-filter-menu">
+            <summary data-i18n="selection.filter">選択対象</summary>
+            <fieldset class="toolbar-popover" aria-label="選択対象">
+              <label
+                ><input type="checkbox" data-selection-kind="node" checked /><span data-i18n="node">節点</span></label
+              >
+              <label
+                ><input type="checkbox" data-selection-kind="beam" checked /><span data-i18n="beam">梁</span></label
+              >
+              <label
+                ><input type="checkbox" data-selection-kind="pillar" checked /><span data-i18n="pillar">柱</span></label
+              >
+              <label
+                ><input type="checkbox" data-selection-kind="truss" checked /><span data-i18n="truss"
+                  >トラス</span
+                ></label
+              >
+              <label
+                ><input type="checkbox" data-selection-kind="spring" checked /><span data-i18n="spring"
+                  >ばね</span
+                ></label
+              >
+              <label
+                ><input type="checkbox" data-selection-kind="support" checked /><span data-i18n="support"
+                  >支点</span
+                ></label
+              >
+              <label
+                ><input type="checkbox" data-selection-kind="constraint" checked /><span data-i18n="constraint"
+                  >拘束</span
+                ></label
+              >
+              <label
+                ><input type="checkbox" data-selection-kind="floor" checked /><span data-i18n="floor">床</span></label
+              >
+              <label
+                ><input type="checkbox" data-selection-kind="wall" checked /><span data-i18n="wall">壁</span></label
+              >
+              <label
+                ><input type="checkbox" data-selection-kind="bearWall" checked /><span data-i18n="bearwall"
+                  >耐力壁</span
+                ></label
+              >
+            </fieldset>
+          </details>
           <button id="btn-undo" disabled data-i18n="undo" data-i18n-title="title.undo">元に戻す</button>
           <button id="btn-redo" disabled data-i18n="redo" data-i18n-title="title.redo">やり直す</button>
           <button id="btn-delete" data-i18n="delete" data-i18n-title="title.delete">削除</button>
+        </div>
+        <div class="toolbar-group" role="group" data-i18n-aria-label="aria.displayActions" aria-label="表示要素">
+          <details class="toolbar-menu" id="display-label-menu">
+            <summary data-i18n="display.labels">ラベル</summary>
+            <fieldset class="toolbar-popover" aria-label="表示ラベル">
+              <label
+                ><input type="checkbox" data-label-option="nodeNumber" /><span data-i18n="display.nodeNumber"
+                  >節点番号</span
+                ></label
+              >
+              <label
+                ><input type="checkbox" data-label-option="memberNumber" /><span data-i18n="display.memberNumber"
+                  >部材番号</span
+                ></label
+              >
+              <label
+                ><input type="checkbox" data-label-option="planeNumber" /><span data-i18n="display.planeNumber"
+                  >面番号</span
+                ></label
+              >
+              <label><input type="checkbox" data-label-option="section" /><span data-i18n="section">断面</span></label>
+              <label
+                ><input type="checkbox" data-label-option="floorDirection" /><span data-i18n="display.floorDirection"
+                  >床方向</span
+                ></label
+              >
+              <label
+                ><input type="checkbox" data-label-option="weight" /><span data-i18n="display.weight">荷重</span></label
+              >
+              <label
+                ><input type="checkbox" data-label-option="storyHeight" /><span data-i18n="display.storyHeight"
+                  >階高</span
+                ></label
+              >
+              <label
+                ><input type="checkbox" data-label-option="localAxes" /><span data-i18n="display.localAxes"
+                  >ローカル軸</span
+                ></label
+              >
+            </fieldset>
+          </details>
+          <button id="btn-display-selected" type="button" data-i18n="display.selectedOnly">選択のみ</button>
+          <button id="btn-hide-selected" type="button" data-i18n="display.hideSelected">選択非表示</button>
+          <button id="btn-isolate-selected" type="button" data-i18n="display.isolateSelected">選択隔離</button>
+          <button id="btn-show-all" type="button" data-i18n="display.showAll">全表示</button>
         </div>
         <div class="toolbar-separator" role="separator" aria-orientation="vertical"></div>
         <div class="toolbar-group" role="group" data-i18n-aria-label="aria.appSettings" aria-label="ヘルプと表示設定">
@@ -193,6 +292,10 @@
             >
               -
             </button>
+            <button id="btn-duplicate-layer" type="button" title="レイヤー複製" aria-label="レイヤー複製">⧉</button>
+            <button id="btn-copy-layer-up" type="button" title="上階へコピー" aria-label="上階へコピー">↑</button>
+            <button id="btn-copy-layer-down" type="button" title="下階へコピー" aria-label="下階へコピー">↓</button>
+            <button id="btn-show-all-layers" type="button" title="全レイヤー表示" aria-label="全レイヤー表示">◉</button>
           </div>
           <ul id="layer-list" role="listbox" data-i18n-aria-label="aria.layers" aria-label="レイヤー一覧"></ul>
         </aside>

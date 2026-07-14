@@ -288,7 +288,12 @@ export function readFiniteNumber(input: HTMLInputElement): number | null {
     return value;
   }
 
-  const message = t('validation.finiteNumber');
+  setFieldError(input, t('validation.finiteNumber'));
+  return null;
+}
+
+/** 入力欄へinlineエラーとブラウザ標準のvalidation状態を設定する。 */
+export function setFieldError(input: HTMLInputElement, message: string): void {
   input.setCustomValidity(message);
   input.setAttribute('aria-invalid', 'true');
 
@@ -308,10 +313,10 @@ export function readFiniteNumber(input: HTMLInputElement): number | null {
 
   input.focus();
   input.reportValidity();
-  return null;
 }
 
-function clearFieldError(input: HTMLInputElement): void {
+/** 入力欄のinlineエラーとvalidation状態を解除する。 */
+export function clearFieldError(input: HTMLInputElement): void {
   input.setCustomValidity('');
   input.removeAttribute('aria-invalid');
   input.removeAttribute('aria-errormessage');

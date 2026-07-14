@@ -5,9 +5,24 @@ import { Floor } from '../data/Floor';
 import { Node } from '../data/Node';
 import { Pillar } from '../data/Pillar';
 import { Wall } from '../data/Wall';
+import { Truss } from '../data/Truss';
+import { Spring } from '../data/Spring';
+import { Support } from '../data/Support';
+import { Constraint } from '../data/Constraint';
 
 /** UI表現に依存しない、選択可能な要素種別。 */
-export const SELECTION_KINDS = ['node', 'beam', 'pillar', 'floor', 'wall', 'bearWall'] as const;
+export const SELECTION_KINDS = [
+  'node',
+  'beam',
+  'pillar',
+  'truss',
+  'spring',
+  'support',
+  'constraint',
+  'floor',
+  'wall',
+  'bearWall',
+] as const;
 
 export type SelectionKind = (typeof SELECTION_KINDS)[number];
 export type SelectionTarget = 'all' | SelectionKind;
@@ -23,6 +38,10 @@ export interface SelectionSettings {
   readonly node: boolean;
   readonly beam: boolean;
   readonly pillar: boolean;
+  readonly truss: boolean;
+  readonly spring: boolean;
+  readonly support: boolean;
+  readonly constraint: boolean;
   readonly floor: boolean;
   readonly wall: boolean;
   readonly bearWall: boolean;
@@ -33,6 +52,10 @@ export const DEFAULT_SELECTION_SETTINGS: Readonly<SelectionSettings> = Object.fr
   node: true,
   beam: true,
   pillar: true,
+  truss: true,
+  spring: true,
+  support: true,
+  constraint: true,
   floor: true,
   wall: true,
   bearWall: true,
@@ -97,6 +120,10 @@ export function selectionKindOf(data: DocumentData): SelectionKind | null {
   if (data instanceof Node) return 'node';
   if (data instanceof Beam) return 'beam';
   if (data instanceof Pillar) return 'pillar';
+  if (data instanceof Truss) return 'truss';
+  if (data instanceof Spring) return 'spring';
+  if (data instanceof Support) return 'support';
+  if (data instanceof Constraint) return 'constraint';
   if (data instanceof Floor) return 'floor';
   if (data instanceof Wall) return 'wall';
   if (data instanceof BearWall) return 'bearWall';
@@ -111,6 +138,10 @@ function mergeSettings(
     node: base.node,
     beam: base.beam,
     pillar: base.pillar,
+    truss: base.truss,
+    spring: base.spring,
+    support: base.support,
+    constraint: base.constraint,
     floor: base.floor,
     wall: base.wall,
     bearWall: base.bearWall,

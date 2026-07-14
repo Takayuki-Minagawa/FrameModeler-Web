@@ -4,68 +4,43 @@ import { DocumentData } from './data/DocumentData';
 import { Node } from './data/Node';
 import { inspectModel, type ModelIssue } from './data/ModelInspector';
 import { Point3D } from './math/Point3D';
-import { SelectionFilter, type SelectionKind } from './selection/SelectionFilter';
+import type { SelectionKind } from './selection/SelectionFilter';
 import { Member } from './data/Member';
 import { Plane } from './data/Plane';
-import { CadView } from './ui/CadView';
-import { deserializeCalcYaml } from './io/CalcYamlDeserializer';
-import { deserializeJson } from './io/JsonDeserializer';
-import { downloadJson } from './io/JsonSerializer';
-import { exportDocumentSnapshot, importDocumentSnapshot } from './io/DocumentSnapshotCodec';
-import { DocumentHistory, type DocumentSnapshot } from './history/DocumentHistory';
-import { clearDraft, loadDraft, saveDraft } from './history/DraftStore';
-import type { ICadMouseHandler } from './ui/handlers/ICadMouseHandler';
-import { SelectionHandler } from './ui/handlers/SelectionHandler';
-import { MoveNodeHandler } from './ui/handlers/MoveNodeHandler';
-import { AddNodeHandler } from './ui/handlers/AddNodeHandler';
-import { AddBeamHandler } from './ui/handlers/AddBeamHandler';
-import { AddPillarHandler } from './ui/handlers/AddPillarHandler';
-import { AddFloorHandler } from './ui/handlers/AddFloorHandler';
-import { AddWallHandler } from './ui/handlers/AddWallHandler';
-import { AddBearWallHandler } from './ui/handlers/AddBearWallHandler';
+import { CadView, type CadOperationStatus } from './ui/CadView';
+import type { DocumentSnapshot } from './history/DocumentHistory';
+import { clearDraft } from './history/DraftStore';
 import { showNodeDialog } from './ui/dialogs/NodeDialog';
 import { showMemberDialog } from './ui/dialogs/MemberDialog';
 import { showPlaneDialog } from './ui/dialogs/PlaneDialog';
-import { showLayerDialog } from './ui/dialogs/LayerDialog';
+import { showSupportDialog } from './ui/dialogs/SupportDialog';
+import { showConstraintDialog } from './ui/dialogs/ConstraintDialog';
 import { showModelValidationDialog } from './ui/dialogs/ModelValidationDialog';
 import { showHelpDialog } from './ui/dialogs/HelpDialog';
 import { showImportInfoDialog } from './ui/dialogs/ImportInfoDialog';
 import { showCalcYamlImportModeDialog } from './ui/dialogs/CalcYamlImportModeDialog';
-import { t, initI18n, toggleLocale, getLocale, setOnLocaleChanged } from './i18n';
+import { t, initI18n, toggleLocale, getLocale, subscribeLocaleChanged, type MessageKey } from './i18n';
 import { APP_VERSION } from './version';
-import type { ObjectSnapKind } from './ui/ObjectSnapEngine';
+import { getObjectSnapCandidateKind, type ObjectSnapCandidateKind } from './ui/ObjectSnapEngine';
+import { Floor } from './data/Floor';
+import { Wall } from './data/Wall';
+import { DeleteSelectionCommand, UpdatePropertiesCommand } from './commands/DocumentCommands';
+import { ToolController } from './controllers/ToolController';
+import { SettingsStore } from './controllers/SettingsStore';
+import { LayerController } from './controllers/LayerController';
+import { copyLayerContents } from './data/LayerCopy';
+import { pointFromDistanceAndAngle } from './math/PlanInput';
+import type { DisplayLabelOption } from './display/DisplayLabels';
+import { FileController } from './controllers/FileController';
+import { AppController, sameSnapshot } from './controllers/AppController';
+import { Support } from './data/Support';
+import { Constraint } from './data/Constraint';
+import { cloneNodeMass } from './data/StructuralDof';
+import { Truss } from './data/Truss';
+import { Spring } from './data/Spring';
 
 // ========== テーマ管理 ==========
-
-const THEME_KEY = 'framemodeler-theme';
-
-function initTheme(): void {
-  const saved = localStorage.getItem(THEME_KEY);
-  if (saved === 'dark') {
-    document.documentElement.dataset.theme = 'dark';
-  }
-  updateThemeButton();
-}
-
-function toggleTheme(): void {
-  const isDark = document.documentElement.dataset.theme === 'dark';
-  if (isDark) {
-    delete document.documentElement.dataset.theme;
-    localStorage.removeItem(THEME_KEY);
-  } else {
-    document.documentElement.dataset.theme = 'dark';
-    localStorage.setItem(THEME_KEY, 'dark');
-  }
-  updateThemeButton();
-}
-
-function updateThemeButton(): void {
-  const btn = document.getElementById('btn-theme');
-  if (btn) {
-    const isDark = document.documentElement.dataset.theme === 'dark';
-    btn.textContent = isDark ? '\u2600' : '\u263E';
-  }
-}
+const settingsStore = new SettingsStore();
 
 // ========== DOM ヘルパ ==========
 
@@ -79,11 +54,12 @@ function byId<T extends HTMLElement>(id: string): T {
 // ========== アプリケーション初期化 ==========
 
 const doc = Document.instance;
+const fileController = new FileController(doc);
 const canvas = byId<HTMLCanvasElement>('cad-canvas');
 
 // テーマは CadView 生成より先に適用する（保存済みダークテーマの初期背景色を
 // CadView コンストラクタの setClearColor に反映させるため）
-initTheme();
+settingsStore.initializeTheme();
 
 const cadView = new CadView(canvas);
 
@@ -96,17 +72,73 @@ updateLangButton();
 async function showDataDialog(data: DocumentData): Promise<void> {
   try {
     await performTrackedChange('プロパティ編集', async () => {
-      let changed = false;
       if (data instanceof Node) {
-        changed = await showNodeDialog(data);
+        const changes = await showNodeDialog(data);
+        if (changes) {
+          doc.execute(
+            new UpdatePropertiesCommand('節点プロパティ編集', data, (node) => {
+              node.pos = changes.pos.clone();
+              node.mass = cloneNodeMass(changes.mass);
+            }),
+          );
+        }
       } else if (data instanceof Member) {
-        changed = await showMemberDialog(data);
+        const changes = await showMemberDialog(data);
+        if (changes) {
+          doc.execute(
+            new UpdatePropertiesCommand('部材プロパティ編集', data, (member) => {
+              member.section = changes.section;
+              if (member instanceof Truss && changes.kind === 'truss') {
+                member.material = changes.material;
+                member.area = changes.area;
+                member.areaUnit = changes.areaUnit;
+                member.elasticModulus = changes.elasticModulus;
+                member.stressUnit = changes.stressUnit;
+              } else if (member instanceof Spring && changes.kind === 'spring') {
+                member.components = changes.components.map((component) => ({ ...component }));
+                member.orientX = changes.orientX?.clone() ?? null;
+                member.orientY = changes.orientY?.clone() ?? null;
+                member.shearDistance = changes.shearDistance ? [...changes.shearDistance] : null;
+                member.note = changes.note;
+              }
+            }),
+          );
+        }
       } else if (data instanceof Plane) {
-        changed = await showPlaneDialog(data);
+        const changes = await showPlaneDialog(data);
+        if (changes) {
+          doc.execute(
+            new UpdatePropertiesCommand('面プロパティ編集', data, (plane) => {
+              plane.section = changes.section;
+              if (plane instanceof Floor) {
+                if (changes.weight !== undefined) plane.weight = changes.weight;
+                if (changes.direction !== undefined) plane.direction = changes.direction;
+              } else if (plane instanceof Wall && changes.weight !== undefined) {
+                plane.weight = changes.weight;
+              }
+            }),
+          );
+        }
+      } else if (data instanceof Support) {
+        const changes = await showSupportDialog(data);
+        if (changes) {
+          doc.execute(
+            new UpdatePropertiesCommand('支点プロパティ編集', data, (support) => {
+              support.fixedDofs = [...changes.fixedDofs];
+            }),
+          );
+        }
+      } else if (data instanceof Constraint) {
+        const changes = await showConstraintDialog(data);
+        if (changes) {
+          doc.execute(
+            new UpdatePropertiesCommand('拘束プロパティ編集', data, (constraint) => {
+              constraint.slaveDof = changes.slaveDof;
+              constraint.terms = changes.terms.map((term) => ({ ...term }));
+            }),
+          );
+        }
       }
-      // 各ダイアログは対象へ値を反映するため、確定時にDocument境界を通して
-      // validate・再ソート・再採番・変更通知を一度だけ実行する。
-      if (changed) doc.update(() => undefined);
     });
   } catch (error) {
     alert(
@@ -121,173 +153,46 @@ async function showDataDialog(data: DocumentData): Promise<void> {
 
 // ========== ハンドラ管理 ==========
 
-/** ツールIDごとのハンドラ生成関数 */
-const selectionFilter = new SelectionFilter();
-const handlerFactories: Record<string, () => ICadMouseHandler> = {
-  'btn-select': () => new SelectionHandler(selectionFilter),
-  'btn-move': () => new MoveNodeHandler(selectionFilter),
-  'btn-add-node': () => new AddNodeHandler(),
-  'btn-add-beam': () => new AddBeamHandler(),
-  'btn-add-pillar': () => new AddPillarHandler(),
-  'btn-add-floor': () => new AddFloorHandler(),
-  'btn-add-wall': () => new AddWallHandler(),
-  'btn-add-bearwall': () => new AddBearWallHandler(),
-};
-
-function createHandler(id: string): ICadMouseHandler {
-  const factory = handlerFactories[id] ?? handlerFactories['btn-select'];
-  const handler = factory();
-  // ダイアログ表示コールバックは統一APIで注入（対応ハンドラのみ）
-  handler.setDialogCallback?.(showDataDialog);
-  return handler;
-}
-
-let activeToolId = 'btn-select';
-
-function setActiveTool(id: string): void {
-  // 現ハンドラに切替を通知（途中状態のキャンセル等）
-  cadView.handler?.onDeactivate?.(cadView);
-
-  activeToolId = id;
-  cadView.handler = createHandler(id);
-
-  // ボタンのアクティブ状態を更新
-  document.querySelectorAll('.tool-btn').forEach((btn) => {
-    const active = btn.id === id;
-    btn.classList.toggle('active', active);
-    btn.setAttribute('aria-pressed', String(active));
-  });
-}
-
-/** 現在の途中操作を破棄し、同じツールを初期状態で作り直す。 */
-function cancelActiveOperation(): void {
-  cadView.handler?.onDeactivate?.(cadView);
-  cadView.handler = createHandler(activeToolId);
-}
-
-// 初期ハンドラ設定
-setActiveTool('btn-select');
+const toolController = new ToolController(cadView, (data) => void showDataDialog(data));
+const selectionFilter = toolController.selectionFilter;
+const cancelActiveOperation = (): void => toolController.cancelCurrentOperation();
+toolController.connectToolbar();
 
 // ========== 変更履歴 / draft復旧 ==========
 
-let suppressHistory = false;
-let historyFlushScheduled = false;
-let pendingHistoryLabel = 'CAD編集';
-let draftTimer: number | null = null;
-
-const history = new DocumentHistory(() => exportDocumentSnapshot(doc), restoreDocumentSnapshot);
-let historyBaseline = history.capture();
-
-function restoreDocumentSnapshot(snapshot: DocumentSnapshot): void {
-  suppressHistory = true;
-  try {
-    cancelActiveOperation();
-    importDocumentSnapshot(snapshot, doc);
-  } finally {
-    suppressHistory = false;
-  }
-  historyBaseline = history.capture();
-  refreshDocumentUi(false);
-}
-
-async function performTrackedChange<T>(label: string, action: () => T | Promise<T>): Promise<T> {
-  const before = history.capture();
-  suppressHistory = true;
-  try {
-    const result = await action();
-    history.record(label, before);
-    return result;
-  } catch (error) {
-    restoreDocumentSnapshot(before);
-    throw error;
-  } finally {
-    suppressHistory = false;
-    historyBaseline = history.capture();
-    scheduleDraftUpdate();
-  }
-}
+const appController = new AppController({
+  document: doc,
+  cancelOperation: cancelActiveOperation,
+  refreshDocument: refreshDocumentUi,
+});
+const history = appController.history;
+const performTrackedChange = appController.performTrackedChange;
+const restoreDocumentSnapshot = (snapshot: DocumentSnapshot): void => appController.restoreSnapshot(snapshot);
 
 /** Document.add 等の同期通知を同一microtask内で1履歴へまとめる。 */
-function scheduleHistoryRecord(label: string = historyLabelForActiveTool()): void {
-  if (suppressHistory) {
-    historyBaseline = history.capture();
-    return;
-  }
-  pendingHistoryLabel = label;
-  if (historyFlushScheduled) return;
-  historyFlushScheduled = true;
-  queueMicrotask(() => {
-    historyFlushScheduled = false;
-    history.record(pendingHistoryLabel, historyBaseline);
-    historyBaseline = history.capture();
-    scheduleDraftUpdate();
-  });
-}
-
-function historyLabelForActiveTool(): string {
-  const labels: Record<string, string> = {
-    'btn-move': '節点移動',
-    'btn-add-node': '節点追加',
-    'btn-add-beam': '梁追加',
-    'btn-add-pillar': '柱追加',
-    'btn-add-floor': '床追加',
-    'btn-add-wall': '壁追加',
-    'btn-add-bearwall': '耐力壁追加',
-  };
-  return labels[activeToolId] ?? 'CAD編集';
+function scheduleHistoryRecord(label: string = toolController.historyLabel()): void {
+  appController.scheduleHistoryRecord(label);
 }
 
 function refreshDocumentUi(fit: boolean): void {
-  updateLayerList();
+  cadView.setOperationStatus(null);
+  layerController.render();
+  cadView.renderSelection();
   updateStatusInfo();
   updateImportInfoButton();
   if (fit) cadView.fitToScene();
   cadView.render();
 }
 
-function scheduleDraftUpdate(): void {
-  if (draftTimer !== null) window.clearTimeout(draftTimer);
-  draftTimer = window.setTimeout(() => {
-    draftTimer = null;
-    if (history.isDirty) {
-      void saveDraft(history.capture());
-    } else {
-      void clearDraft();
-    }
-  }, 750);
-}
-
 // ========== ツールバーボタン接続 ==========
-
-// ツール切替ボタン
-const toolBtnIds = [
-  'btn-select',
-  'btn-move',
-  'btn-add-node',
-  'btn-add-beam',
-  'btn-add-pillar',
-  'btn-add-floor',
-  'btn-add-wall',
-  'btn-add-bearwall',
-];
-for (const id of toolBtnIds) {
-  document.getElementById(id)?.addEventListener('click', () => setActiveTool(id));
-}
 
 // 新規ボタン
 document.getElementById('btn-new')?.addEventListener('click', () => {
   cancelActiveOperation();
   if (history.isDirty && !confirm(t('msg.confirmNew'))) return;
 
-  suppressHistory = true;
-  try {
-    doc.init();
-    doc.filename = '';
-  } finally {
-    suppressHistory = false;
-  }
-  history.reset(true);
-  historyBaseline = history.capture();
+  appController.withoutHistory(() => fileController.reset());
+  appController.resetHistory(true);
   void clearDraft();
   refreshDocumentUi(false);
 });
@@ -312,21 +217,13 @@ fileInput.addEventListener('change', () => {
 
   const reader = new FileReader();
   reader.onload = async () => {
-    suppressHistory = true;
     try {
       const content = reader.result as string;
-      if (isYamlFile(file.name, content)) {
-        const mode = await showCalcYamlImportModeDialog();
-        if (!mode) return;
-        await deserializeCalcYaml(content, { mode });
-      } else if (isJsonFile(file.name, content)) {
-        deserializeJson(content);
-      } else {
-        throw new Error(t('msg.unsupportedFileType'));
-      }
-      doc.filename = file.name;
-      history.reset(true);
-      historyBaseline = history.capture();
+      const opened = await appController.withoutHistoryAsync(() =>
+        fileController.openText(file.name, content, showCalcYamlImportModeDialog),
+      );
+      if (!opened) return;
+      appController.resetHistory(true);
       void clearDraft();
       refreshDocumentUi(true);
       if (doc.importMetadata) {
@@ -342,8 +239,6 @@ fileInput.addEventListener('change', () => {
         restoreDocumentSnapshot(beforeOpen);
       }
       alert(t('msg.fileError') + (e as Error).message);
-    } finally {
-      suppressHistory = false;
     }
   };
   reader.onerror = () => {
@@ -355,14 +250,6 @@ fileInput.addEventListener('change', () => {
   fileInput.value = '';
 });
 
-function isJsonFile(name: string, content: string): boolean {
-  return /\.json$/i.test(name) || /^[\s\r\n]*[{\[]/.test(content);
-}
-
-function isYamlFile(name: string, content: string): boolean {
-  return /\.ya?ml$/i.test(name) || /^[\s\r\n]*schema_version\s*:/i.test(content);
-}
-
 // 保存ボタン
 document.getElementById('btn-save')?.addEventListener('click', () => {
   // 移動previewなどDocument未確定の一時状態は保存しない。
@@ -372,12 +259,8 @@ document.getElementById('btn-save')?.addEventListener('click', () => {
     void showModelValidationDialog(issues, selectValidationTargets);
     return;
   }
-  const filename = doc.hasFileName ? toJsonFilename(doc.filename) : 'model.json';
-  downloadJson(filename);
-  doc.filename = filename;
-  history.markSaved();
-  historyBaseline = history.capture();
-  void clearDraft();
+  fileController.save();
+  appController.markSaved();
 });
 
 document.getElementById('btn-validate')?.addEventListener('click', () => {
@@ -389,6 +272,7 @@ function selectValidationTargets(issue: ModelIssue): void {
   const targets = new Set(issue.targets);
   for (const data of doc.allDataList) data.select = targets.has(data);
   cadView.renderSelection();
+  cadView.fitToData(issue.targets);
 }
 
 const importInfoButton = byId<HTMLButtonElement>('btn-import-info');
@@ -402,22 +286,8 @@ function updateImportInfoButton(): void {
   importInfoButton.disabled = !doc.importMetadata;
 }
 
-/** 任意の拡張子を .json に置き換える（拡張子なしならそのまま付与） */
-function toJsonFilename(name: string): string {
-  const slash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
-  const dot = name.lastIndexOf('.');
-  const base = dot > slash ? name.slice(0, dot) : name;
-  return `${base || 'model'}.json`;
-}
-
 function localized(ja: string, en: string): string {
   return getLocale() === 'ja' ? ja : en;
-}
-
-function sameSnapshot(a: DocumentSnapshot, b: DocumentSnapshot): boolean {
-  return (
-    a.json === b.json && a.filename === b.filename && JSON.stringify(a.shownLayer) === JSON.stringify(b.shownLayer)
-  );
 }
 
 function parsePositiveNumber(raw: string, fallback: number, minimum: number): number {
@@ -438,7 +308,12 @@ document.getElementById('btn-delete')?.addEventListener('click', () => {
       doc.allDataList
         .filter(
           (data) =>
-            !selectedSet.has(data) && (data instanceof Member || data instanceof Plane) && data.isReferring(node),
+            !selectedSet.has(data) &&
+            (data instanceof Member ||
+              data instanceof Plane ||
+              data instanceof Support ||
+              data instanceof Constraint) &&
+            data.isReferring(node),
         )
         .map((data) =>
           localized(
@@ -459,7 +334,7 @@ document.getElementById('btn-delete')?.addEventListener('click', () => {
   )
     return;
 
-  void performTrackedChange('選択要素削除', () => doc.removeMany(selected))
+  void performTrackedChange('選択要素削除', () => doc.execute(new DeleteSelectionCommand(selected)))
     .then(() => refreshDocumentUi(false))
     .catch((error) => {
       alert(localized('削除できませんでした:\n', 'Delete failed:\n') + (error as Error).message);
@@ -473,7 +348,7 @@ document.getElementById('btn-help')?.addEventListener('click', () => {
 
 // テーマ切替ボタン
 document.getElementById('btn-theme')?.addEventListener('click', () => {
-  toggleTheme();
+  settingsStore.toggleTheme();
   cadView.refreshTheme();
 });
 
@@ -491,8 +366,8 @@ function updateLangButton(): void {
 }
 
 // 言語変更時のコールバック
-setOnLocaleChanged(() => {
-  updateLayerList();
+subscribeLocaleChanged(() => {
+  layerController.render();
   updateStatusInfo();
 });
 
@@ -507,7 +382,11 @@ const inputCoordinateX = byId<HTMLInputElement>('input-coordinate-x');
 const inputCoordinateY = byId<HTMLInputElement>('input-coordinate-y');
 const inputCoordinateZ = byId<HTMLInputElement>('input-coordinate-z');
 const coordinateCommitButton = byId<HTMLButtonElement>('btn-coordinate-commit');
-const selectionFilterSelect = byId<HTMLSelectElement>('select-selection-filter');
+const inputDistance = byId<HTMLInputElement>('input-distance');
+const inputAngle = byId<HTMLInputElement>('input-angle');
+const polarCommitButton = byId<HTMLButtonElement>('btn-polar-commit');
+const snapConstraintSelect = byId<HTMLSelectElement>('select-snap-constraint');
+const snapCycleButton = byId<HTMLButtonElement>('btn-cycle-snap');
 
 chkGrid.addEventListener('change', () => {
   cadView.showGrid = chkGrid.checked;
@@ -556,155 +435,109 @@ for (const input of [inputCoordinateX, inputCoordinateY, inputCoordinateZ]) {
   });
 }
 
-selectionFilterSelect.addEventListener('change', () => {
-  const value = selectionFilterSelect.value;
-  if (value === 'all') selectionFilter.reset();
-  else selectionFilter.enableOnly(value as SelectionKind);
+function commitDistanceAndAngle(): void {
+  const anchor = cadView.constraintAnchor;
+  if (!anchor) {
+    alert(localized('先に1点目を指定してください。', 'Specify the first point before distance/angle input.'));
+    return;
+  }
+  try {
+    const result = pointFromDistanceAndAngle({
+      anchor,
+      distance: inputDistance.valueAsNumber,
+      angleDegrees: inputAngle.valueAsNumber,
+      workPlaneZ: doc.shownLayer?.posZ ?? anchor.z,
+    });
+    inputCoordinateX.value = String(result.position.x);
+    inputCoordinateY.value = String(result.position.y);
+    inputCoordinateZ.value = String(result.position.z);
+    inputAngle.value = String(result.angleDegrees);
+    cadView.handler?.onClick(cadView, result.position, new MouseEvent('click'));
+  } catch (error) {
+    inputDistance.setCustomValidity((error as Error).message);
+    inputDistance.reportValidity();
+  }
+}
+
+polarCommitButton.addEventListener('click', commitDistanceAndAngle);
+for (const input of [inputDistance, inputAngle]) {
+  input.addEventListener('input', () => input.setCustomValidity(''));
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commitDistanceAndAngle();
+    }
+  });
+}
+
+snapConstraintSelect.addEventListener('change', () => {
+  cadView.snapConstraintMode = snapConstraintSelect.value as 'all' | 'axis' | 'orthogonal' | 'none';
+});
+snapCycleButton.addEventListener('click', () => cadView.cycleSnapCandidate());
+
+const selectionKindInputs = [...document.querySelectorAll<HTMLInputElement>('[data-selection-kind]')];
+for (const input of selectionKindInputs) input.addEventListener('change', updateSelectionFilter);
+
+function updateSelectionFilter(): void {
+  const enabled = selectionKindInputs
+    .filter((input) => input.checked)
+    .map((input) => input.dataset.selectionKind as SelectionKind);
+  if (enabled.length === selectionKindInputs.length) selectionFilter.reset();
+  else selectionFilter.enableOnly(...enabled);
   for (const data of doc.allDataList) {
     if (data.select && !selectionFilter.allows(data)) data.select = false;
   }
   cadView.renderSelection();
+}
+
+for (const input of document.querySelectorAll<HTMLInputElement>('[data-label-option]')) {
+  input.addEventListener('change', () => {
+    cadView.setLabelEnabled(input.dataset.labelOption as DisplayLabelOption, input.checked);
+  });
+}
+
+byId<HTMLButtonElement>('btn-display-selected').addEventListener('click', () => {
+  cadView.displayFilter.showSelectedOnly(true);
+  cadView.renderElements();
 });
+byId<HTMLButtonElement>('btn-hide-selected').addEventListener('click', () => {
+  cadView.displayFilter.hideSelected(doc.allDataList);
+  cadView.renderElements();
+});
+byId<HTMLButtonElement>('btn-isolate-selected').addEventListener('click', () => {
+  cadView.displayFilter.isolateSelected(doc.allDataList);
+  cadView.renderElements();
+});
+byId<HTMLButtonElement>('btn-show-all').addEventListener('click', () => {
+  cadView.displayFilter.showAll();
+  cadView.renderElements();
+});
+
+function setStandardView(view: 'top' | 'front' | 'right' | 'isometric'): void {
+  cancelActiveOperation();
+  if (view === 'front' || view === 'right') toolController.activate('btn-select');
+  cadView.setStandardView(view);
+  chk3D.checked = cadView.show3D;
+}
+
+byId<HTMLButtonElement>('btn-view-top').addEventListener('click', () => setStandardView('top'));
+byId<HTMLButtonElement>('btn-view-front').addEventListener('click', () => setStandardView('front'));
+byId<HTMLButtonElement>('btn-view-right').addEventListener('click', () => setStandardView('right'));
+byId<HTMLButtonElement>('btn-view-isometric').addEventListener('click', () => setStandardView('isometric'));
 
 // ========== レイヤーパネル ==========
 
 const layerList = byId<HTMLUListElement>('layer-list');
-
-// クリックは要素委譲で1つのリスナにまとめる（V-14）
-layerList.addEventListener('click', (e) => {
-  const li = (e.target as HTMLElement).closest('li');
-  if (!li?.dataset.index) return;
-  selectLayerByIndex(parseInt(li.dataset.index));
+const layerController = new LayerController({
+  document: doc,
+  cadView,
+  list: layerList,
+  coordinateZ: inputCoordinateZ,
+  trackChange: performTrackedChange,
+  cancelOperation: cancelActiveOperation,
+  copyContents: (source, target) => copyLayerContents(source, target, doc),
 });
-
-layerList.addEventListener('dblclick', (e) => {
-  const li = (e.target as HTMLElement).closest('li');
-  if (!li?.dataset.index) return;
-  void editLayerByIndex(parseInt(li.dataset.index));
-});
-
-layerList.addEventListener('keydown', (e) => {
-  const li = (e.target as HTMLElement).closest('li');
-  if (!li?.dataset.index) return;
-  const current = parseInt(li.dataset.index);
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    e.preventDefault();
-    const next = Math.max(0, Math.min(doc.layers.length - 1, current + (e.key === 'ArrowDown' ? 1 : -1)));
-    selectLayerByIndex(next);
-    layerList.querySelector<HTMLElement>(`li[data-index="${next}"]`)?.focus();
-  } else if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault();
-    selectLayerByIndex(current);
-  }
-});
-
-function selectLayerByIndex(index: number): void {
-  const layer = doc.layers[index];
-  if (!layer) return;
-  cancelActiveOperation();
-  doc.shownLayer = layer;
-  inputCoordinateZ.value = String(layer.posZ);
-  updateLayerSelectionState();
-  cadView.render();
-}
-
-function updateLayerSelectionState(): void {
-  for (const item of layerList.querySelectorAll<HTMLLIElement>('li[data-index]')) {
-    const index = Number(item.dataset.index);
-    const active = doc.layers[index] === doc.shownLayer;
-    item.classList.toggle('active', active);
-    item.setAttribute('aria-selected', String(active));
-    item.tabIndex = active || (!doc.shownLayer && index === 0) ? 0 : -1;
-  }
-}
-
-async function editLayerByIndex(index: number): Promise<void> {
-  const layer = doc.layers[index];
-  if (!layer) return;
-  cancelActiveOperation();
-  const edited = await showLayerDialog(layer);
-  if (!edited) return;
-  try {
-    await performTrackedChange('レイヤー編集', () => {
-      doc.updateLayer(layer, { name: edited.name, posZ: edited.posZ });
-      doc.shownLayer = layer;
-    });
-    updateLayerList();
-    cadView.render();
-  } catch (error) {
-    alert(
-      localized(
-        `レイヤーを変更できませんでした: ${(error as Error).message}`,
-        `The layer could not be updated: ${(error as Error).message}`,
-      ),
-    );
-  }
-}
-
-function updateLayerList(): void {
-  layerList.innerHTML = '';
-  if (doc.shownLayer) inputCoordinateZ.value = String(doc.shownLayer.posZ);
-  doc.layers.forEach((layer, i) => {
-    const li = document.createElement('li');
-    li.textContent = layer.toString();
-    li.dataset.index = String(i);
-    const active = layer === doc.shownLayer;
-    li.classList.toggle('active', active);
-    li.setAttribute('role', 'option');
-    li.setAttribute('aria-selected', String(active));
-    li.tabIndex = active || (!doc.shownLayer && i === 0) ? 0 : -1;
-    layerList.appendChild(li);
-  });
-}
-
-// レイヤー追加
-document.getElementById('btn-add-layer')?.addEventListener('click', async () => {
-  cancelActiveOperation();
-  const layer = await showLayerDialog();
-  if (layer) {
-    await performTrackedChange('レイヤー追加', () => {
-      if (!doc.addLayer(layer)) {
-        alert(t('msg.duplicateLayer'));
-      } else {
-        doc.shownLayer = layer;
-      }
-    });
-    updateLayerList();
-    cadView.render();
-  }
-});
-
-// レイヤー削除
-document.getElementById('btn-remove-layer')?.addEventListener('click', () => {
-  cancelActiveOperation();
-  const layer = doc.shownLayer;
-  if (!layer) return;
-  const count = doc.allDataList.filter((data) => data.existsOn(layer)).length;
-  if (
-    !confirm(
-      localized(
-        `レイヤー「${layer.name}」を削除しますか？（関連要素: ${count}）`,
-        `Delete layer "${layer.name}"? (${count} related elements)`,
-      ),
-    )
-  )
-    return;
-
-  void performTrackedChange('レイヤー削除', () => doc.removeLayer(layer)).then(() => {
-    updateLayerList();
-    cadView.render();
-  });
-});
-
-// レイヤー変更通知
-doc.onLayerChanged = () => {
-  const items = [...layerList.querySelectorAll<HTMLLIElement>('li[data-index]')];
-  const structureChanged =
-    items.length !== doc.layers.length ||
-    items.some((item, index) => item.textContent !== doc.layers[index]?.toString());
-  if (structureChanged) updateLayerList();
-  else updateLayerSelectionState();
-};
+layerController.connect();
 
 // ========== ステータスバー ==========
 
@@ -712,7 +545,16 @@ const statusVersion = byId('status-version');
 const statusCoord = byId('status-coord');
 const statusInfo = byId('status-info');
 let workPlaneStatus = '';
-let snapKind: ObjectSnapKind = 'none';
+let snapKind: ObjectSnapCandidateKind = 'none';
+let operationStatus: CadOperationStatus | null = null;
+let selectedCount = 0;
+
+const operationStatusMessageKeys: Record<CadOperationStatus, MessageKey> = {
+  firstPointSelected: 'operation.firstPointSelected',
+  noPointAbove: 'operation.noPointAbove',
+  coincidentPoints: 'operation.coincidentPoints',
+  duplicateElement: 'operation.duplicateElement',
+};
 
 statusVersion.textContent = `Ver.${APP_VERSION}`;
 
@@ -724,13 +566,46 @@ function updateStatusInfo(): void {
   const nodes = doc.nodeList.length;
   const members = doc.memberList.length;
   const planes = doc.planeList.length;
-  const snapLabels: Record<Exclude<ObjectSnapKind, 'none'>, string> = getLocale() === 'ja'
-    ? { node: '節点', endpoint: '端点', midpoint: '中点', intersection: '交点', grid: 'グリッド' }
-    : { node: 'Node', endpoint: 'Endpoint', midpoint: 'Midpoint', intersection: 'Intersection', grid: 'Grid' };
+  const snapLabels: Record<Exclude<ObjectSnapCandidateKind, 'none'>, string> = getLocale() === 'ja'
+    ? {
+        node: '節点',
+        endpoint: '端点',
+        midpoint: '中点',
+        intersection: '交点',
+        grid: 'グリッド',
+        horizontal: '画面水平',
+        vertical: '画面鉛直',
+        'axis-x': 'X軸',
+        'axis-y': 'Y軸',
+        orthogonal: '直交',
+      }
+    : {
+        node: 'Node',
+        endpoint: 'Endpoint',
+        midpoint: 'Midpoint',
+        intersection: 'Intersection',
+        grid: 'Grid',
+        horizontal: 'Horizontal',
+        vertical: 'Vertical',
+        'axis-x': 'X axis',
+        'axis-y': 'Y axis',
+        orthogonal: 'Orthogonal',
+      };
   const snapStatus = snapKind === 'none' ? '' : `Snap: ${snapLabels[snapKind]}`;
-  const details = [workPlaneStatus, snapStatus].filter(Boolean).join(' / ');
-  statusInfo.textContent = `N:${nodes} M:${members} P:${planes}${details ? ` — ${details}` : ''}`;
+  const operationText = operationStatus ? t(operationStatusMessageKeys[operationStatus]) : '';
+  const details = [operationText, workPlaneStatus, snapStatus].filter(Boolean).join(' / ');
+  statusInfo.textContent = `N:${nodes} M:${members} P:${planes} S:${selectedCount}${details ? ` — ${details}` : ''}`;
 }
+
+cadView.onSelectionChanged = (selected) => {
+  selectedCount = selected.length;
+  updateStatusInfo();
+};
+
+cadView.onOperationStatusChanged = (status) => {
+  operationStatus = status;
+  updateStatusInfo();
+};
 
 cadView.onWorkPlaneUnavailable = (message) => {
   workPlaneStatus = message ?? '';
@@ -738,36 +613,31 @@ cadView.onWorkPlaneUnavailable = (message) => {
 };
 
 cadView.onSnapChanged = (result) => {
-  snapKind = result.kind;
+  snapKind = getObjectSnapCandidateKind(result);
   updateStatusInfo();
 };
 
-doc.onChanged = () => {
+doc.subscribe(() => {
+  cadView.displayFilter.prune(doc.allDataList);
   updateStatusInfo();
   updateImportInfoButton();
   scheduleHistoryRecord();
-};
+});
 
 const undoButton = document.getElementById('btn-undo') as HTMLButtonElement | null;
 const redoButton = document.getElementById('btn-redo') as HTMLButtonElement | null;
 
 undoButton?.addEventListener('click', () => {
   cancelActiveOperation();
-  if (history.undo()) {
-    historyBaseline = history.capture();
-    scheduleDraftUpdate();
-  }
+  appController.undo();
 });
 
 redoButton?.addEventListener('click', () => {
   cancelActiveOperation();
-  if (history.redo()) {
-    historyBaseline = history.capture();
-    scheduleDraftUpdate();
-  }
+  appController.redo();
 });
 
-history.subscribe((state) => {
+appController.subscribeHistory((state) => {
   document.title = `FrameModeler Web v${APP_VERSION}${state.isDirty ? ' *' : ''}`;
   statusVersion.textContent = `Ver.${APP_VERSION}${state.isDirty ? ' *' : ''}`;
   if (undoButton) {
@@ -807,6 +677,9 @@ document.addEventListener('keydown', (e) => {
   } else if (!editingText && (e.key === 'Home' || e.key.toLowerCase() === 'f')) {
     e.preventDefault();
     cadView.fitToScene();
+  } else if (!editingText && e.key === 'Tab' && document.activeElement === canvas) {
+    e.preventDefault();
+    cadView.cycleSnapCandidate(e.shiftKey ? -1 : 1);
   }
 });
 
@@ -818,19 +691,10 @@ window.addEventListener('beforeunload', (e) => {
 
 async function offerDraftRestore(): Promise<void> {
   try {
-    const draft = await loadDraft();
-    if (!draft) return;
-    const when = new Date(draft.savedAt).toLocaleString(getLocale() === 'ja' ? 'ja-JP' : 'en-US');
-    if (confirm(localized(`${when} の未保存データを復旧しますか？`, `Restore unsaved data from ${when}?`))) {
-      restoreDocumentSnapshot(draft);
-      history.reset(false);
-      historyBaseline = history.capture();
-      refreshDocumentUi(true);
-      await clearDraft(draft.draftKey);
-      scheduleDraftUpdate();
-    } else {
-      await clearDraft(draft.draftKey);
-    }
+    await appController.offerDraftRestore((savedAt) => {
+      const when = new Date(savedAt).toLocaleString(getLocale() === 'ja' ? 'ja-JP' : 'en-US');
+      return confirm(localized(`${when} の未保存データを復旧しますか？`, `Restore unsaved data from ${when}?`));
+    });
   } catch (error) {
     await clearDraft();
     alert(
@@ -844,7 +708,8 @@ async function offerDraftRestore(): Promise<void> {
 
 // ========== 初期描画 ==========
 
-updateLayerList();
+layerController.render();
+cadView.renderSelection();
 updateStatusInfo();
 updateImportInfoButton();
 cadView.render();

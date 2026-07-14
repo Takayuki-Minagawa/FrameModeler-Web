@@ -3,6 +3,7 @@ import { Node } from './Node';
 import { compareNumbers } from '../math/compare';
 
 export class Pillar extends Member {
+  readonly kind = 'pillar' as const;
   constructor(nodeI?: Node, nodeJ?: Node) {
     super(nodeI, nodeJ);
     this.section = 'C1';

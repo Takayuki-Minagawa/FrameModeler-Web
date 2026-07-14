@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Document } from '../src/data/Document';
 import { deserializeJson } from '../src/io/JsonDeserializer';
 import { serializeJson } from '../src/io/JsonSerializer';
+import { Node } from '../src/data/Node';
+import { Point3D } from '../src/math/Point3D';
 
 const doc = Document.instance;
 
@@ -88,7 +90,7 @@ describe('JsonDeserializer validation (I-2/I-3/I-4)', () => {
     expect(floor.direction).toBe('X');
   });
 
-  it('reads legacy v0 without schemaVersion and writes normalized v1 without selection state', () => {
+  it('reads legacy v0 without schemaVersion and writes normalized v2 without selection state', () => {
     deserializeJson(
       json({
         nodes: [{ number: 0, pos: { x: 0, y: 0, z: 0 }, select: true }],
@@ -96,14 +98,66 @@ describe('JsonDeserializer validation (I-2/I-3/I-4)', () => {
     );
 
     const output = JSON.parse(serializeJson());
-    expect(output.schemaVersion).toBe(1);
+    expect(output.schemaVersion).toBe(2);
     expect(output.nodes[0].select).toBeUndefined();
     expect(doc.nodeList[0].select).toBe(false);
     expect(doc.importMetadata).toBeNull();
   });
 
   it('rejects unsupported JSON schema versions', () => {
-    expect(() => deserializeJson(json({ schemaVersion: 2, nodes: [] }))).toThrow(/Unsupported JSON schemaVersion: 2/);
+    expect(() => deserializeJson(json({ schemaVersion: 3, nodes: [] }))).toThrow(/Unsupported JSON schemaVersion: 3/);
+  });
+
+  it('rejects an incomplete schema v2 document instead of silently dropping a collection', () => {
+    doc.bulkLoad([new Node(new Point3D(9, 8, 7))], []);
+    const before = serializeJson();
+    const invalid = JSON.parse(before);
+    delete invalid.springs;
+
+    expect(() => deserializeJson(json(invalid))).toThrow(/springs.*required array/);
+    expect(serializeJson()).toBe(before);
+  });
+
+  it('requires stable layer identity and visibility flags in schema v2', () => {
+    const invalid = {
+      schemaVersion: 2,
+      nodes: [],
+      beams: [],
+      pillars: [],
+      trusses: [],
+      springs: [],
+      floors: [],
+      walls: [],
+      bearWalls: [],
+      supports: [],
+      constraints: [],
+      layers: [{ name: '1F', posZ: 0, visible: true, locked: false }],
+    };
+
+    expect(() => deserializeJson(json(invalid))).toThrow(/schema v2 requires non-empty id/);
+  });
+
+  it('rejects an invalid floor direction in v2 while retaining the legacy migration fallback', () => {
+    const model = {
+      schemaVersion: 2,
+      nodes: [
+        { number: 0, pos: { x: 0, y: 0, z: 0 } },
+        { number: 1, pos: { x: 1, y: 0, z: 0 } },
+        { number: 2, pos: { x: 1, y: 1, z: 0 } },
+      ],
+      beams: [],
+      pillars: [],
+      trusses: [],
+      springs: [],
+      floors: [{ number: 0, nodes: [0, 1, 2], weight: 0, direction: 'BOGUS' }],
+      walls: [],
+      bearWalls: [],
+      supports: [],
+      constraints: [],
+      layers: [],
+    };
+
+    expect(() => deserializeJson(json(model))).toThrow(/valid direction/);
   });
 
   it('rejects non-finite coordinates produced by JSON exponent overflow', () => {

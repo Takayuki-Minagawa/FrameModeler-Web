@@ -134,7 +134,7 @@ describe('JSON round trip', () => {
       deserializeJson(readSample(sample));
       const before = semanticSnapshot();
       const output = serializeJson();
-      expect(JSON.parse(output).schemaVersion).toBe(1);
+      expect(JSON.parse(output).schemaVersion).toBe(2);
 
       doc.init();
       deserializeJson(output);

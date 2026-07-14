@@ -155,6 +155,44 @@ body {
   width: 58px;
 }
 
+.toolbar-menu {
+  position: relative;
+  font-size: 12px;
+}
+
+.toolbar-menu > summary {
+  padding: 4px 8px;
+  border: 1px solid var(--btn-border);
+  border-radius: 3px;
+  background: var(--btn-bg);
+  color: var(--text-primary);
+  cursor: pointer;
+  list-style: none;
+}
+
+.toolbar-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.toolbar-popover {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 4px);
+  left: 0;
+  display: grid;
+  min-width: 150px;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 25%);
+}
+
+.toolbar-popover label {
+  min-height: 24px;
+}
+
 /* ========== Main Content ========== */
 #main-content {
   display: flex;
@@ -164,7 +202,7 @@ body {
 
 /* ========== Layer Panel ========== */
 #layer-panel {
-  width: 160px;
+  width: 220px;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
   display: flex;
@@ -174,7 +212,8 @@ body {
 #layer-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 3px;
   padding: 4px 8px;
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
@@ -205,6 +244,48 @@ body {
   cursor: pointer;
   border-bottom: 1px solid var(--border-light);
   font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.layer-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layer-item-controls {
+  display: inline-flex;
+  gap: 2px;
+}
+
+#layer-list .layer-action {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 2px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--text-primary);
+  background: transparent;
+  cursor: pointer;
+}
+
+#layer-list .layer-action:hover,
+#layer-list .layer-action:focus-visible {
+  border-color: var(--btn-border);
+  background: var(--btn-hover);
+}
+
+#layer-list li.layer-hidden .layer-label {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+#layer-list li.layer-locked .layer-label::before {
+  content: '🔒 ';
 }
 
 #layer-list li:hover {
@@ -237,6 +318,63 @@ body {
 
 #cad-canvas:focus-visible {
   outline-offset: -4px;
+}
+
+.cad-label-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.cad-label {
+  position: absolute;
+  translate: -50% -50%;
+  padding: 1px 3px;
+  border-radius: 2px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+  font:
+    11px/1.2 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  white-space: nowrap;
+}
+
+.cad-label-localAxis {
+  color: #fff;
+  background: #666;
+}
+
+.cad-label-localAxis[data-axis='x'] {
+  background: #c62828;
+}
+
+.cad-label-localAxis[data-axis='y'] {
+  background: #2e7d32;
+}
+
+.cad-label-localAxis[data-axis='z'] {
+  background: #1565c0;
+}
+
+.cad-snap-glyph {
+  position: absolute;
+  z-index: 4;
+  translate: -50% -50%;
+  min-width: 16px;
+  min-height: 16px;
+  color: #ff9800;
+  font:
+    700 17px/16px ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  text-align: center;
+  text-shadow: 0 0 3px var(--bg-canvas);
+  pointer-events: none;
 }
 
 /* ========== Status Bar ========== */
@@ -310,6 +448,38 @@ body {
   color: var(--text-primary);
   border: 1px solid var(--btn-border);
   border-radius: 2px;
+}
+
+.modal-dialog .structural-fieldset {
+  min-width: 0;
+  margin: 12px 0;
+  padding: 8px 10px 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+}
+
+.modal-dialog .structural-fieldset > legend {
+  padding: 0 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.modal-dialog .structural-checkbox-row {
+  justify-content: flex-start;
+}
+
+.modal-dialog .structural-checkbox-row input[type='checkbox'] {
+  flex: 0 0 auto;
+}
+
+.modal-dialog .structural-checkbox-row label {
+  min-width: 0;
+}
+
+.modal-dialog .form-row input:disabled,
+.modal-dialog .form-row select:disabled {
+  opacity: 0.55;
 }
 
 .modal-dialog .field-error {

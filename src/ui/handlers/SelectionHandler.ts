@@ -5,6 +5,8 @@ import { DocumentData } from '../../data/DocumentData';
 import { Node } from '../../data/Node';
 import { Member } from '../../data/Member';
 import { Plane } from '../../data/Plane';
+import { Support } from '../../data/Support';
+import { Constraint } from '../../data/Constraint';
 import { Point3D } from '../../math/Point3D';
 import { CAD } from '../CadConfig';
 import { SelectionFilter, type SelectionSettings } from '../../selection/SelectionFilter';
@@ -12,6 +14,7 @@ import { SelectionFilter, type SelectionSettings } from '../../selection/Selecti
 /** 選択ハンドラ: クリック選択、矩形選択、ダブルクリックでダイアログ表示 */
 export class SelectionHandler implements ICadMouseHandler {
   readonly acceptsDoubleClick = true;
+  readonly supportsElevationPicking: boolean = true;
   private dragStartWorld: Point3D | null = null;
   protected showDialog: ((data: DocumentData) => void) | null = null;
 
@@ -30,8 +33,8 @@ export class SelectionHandler implements ICadMouseHandler {
     const doc = Document.instance;
     const shift = event.shiftKey;
     const ctrl = event.ctrlKey;
-    const candidate = view.hitTest(pos);
-    const hit = candidate && this.selectionFilter.allows(candidate) ? candidate : null;
+    const candidate = view.hitTest(pos, (data) => this.allowsSelection(data));
+    const hit = candidate && this.allowsSelection(candidate) ? candidate : null;
 
     // Shift/Ctrlなしで空クリック or 非選択要素クリック → 全解除
     if (!shift && !ctrl && (!hit || !hit.select)) {
@@ -53,8 +56,9 @@ export class SelectionHandler implements ICadMouseHandler {
   }
 
   onDoubleClick(view: CadView, pos: Point3D, _event: MouseEvent): void {
-    const hit = view.hitTest(pos);
-    if (hit && this.selectionFilter.allows(hit) && this.showDialog) {
+    const candidate = view.hitTest(pos, (data) => this.allowsSelection(data));
+    const hit = candidate && this.allowsSelection(candidate) ? candidate : null;
+    if (hit && this.showDialog) {
       this.showDialog(hit);
     }
   }
@@ -110,7 +114,8 @@ export class SelectionHandler implements ICadMouseHandler {
     const layer = doc.shownLayer;
 
     for (const data of doc.allDataList) {
-      if (!this.selectionFilter.allows(data)) continue;
+      if (!this.allowsSelection(data)) continue;
+      if (!doc.isDataVisible(data) || doc.isDataLocked(data)) continue;
       if (layer && !isOnLayer(data, layer)) continue;
       if (isInsideRect(data, minX, maxX, minY, maxY)) {
         if (ctrl) {
@@ -131,13 +136,14 @@ export class SelectionHandler implements ICadMouseHandler {
     view.clearPreview();
     view.renderPreview();
   }
+
+  protected allowsSelection(data: DocumentData): boolean {
+    return this.selectionFilter.allows(data);
+  }
 }
 
-function isOnLayer(data: DocumentData, layer: import('../Layer').Layer): boolean {
-  if (data instanceof Node) return data.existsOn(layer);
-  if (data instanceof Member) return data.existsOn(layer);
-  if (data instanceof Plane) return data.existsOn(layer);
-  return false;
+function isOnLayer(data: DocumentData, layer: import('../../data/Layer').Layer): boolean {
+  return data.existsOn(layer);
 }
 
 function posInRect(pos: Point3D, minX: number, maxX: number, minY: number, maxY: number): boolean {
@@ -154,6 +160,15 @@ function isInsideRect(data: DocumentData, minX: number, maxX: number, minY: numb
   }
   if (data instanceof Plane) {
     return data.nodeList.every((n) => posInRect(n.pos, minX, maxX, minY, maxY));
+  }
+  if (data instanceof Support) {
+    return data.node !== null && posInRect(data.node.pos, minX, maxX, minY, maxY);
+  }
+  if (data instanceof Constraint) {
+    const nodes = [data.slaveNode, ...data.terms.map((term) => term.node)].filter(
+      (node): node is Node => node !== null,
+    );
+    return nodes.length > 0 && nodes.every((node) => posInRect(node.pos, minX, maxX, minY, maxY));
   }
   return false;
 }

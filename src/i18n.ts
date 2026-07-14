@@ -4,7 +4,8 @@ const STORAGE_KEY = 'framemodeler-locale';
 
 const savedLocale = localStorage.getItem(STORAGE_KEY);
 let currentLocale: Locale = savedLocale === 'en' ? 'en' : 'ja';
-let onLocaleChanged: (() => void) | null = null;
+let legacyLocaleChanged: (() => void) | null = null;
+const localeChangeListeners = new Set<(locale: Locale) => void>();
 
 const messages = {
   // Toolbar - File
@@ -23,10 +24,15 @@ const messages = {
   floor: { ja: '床', en: 'Floor' },
   wall: { ja: '壁', en: 'Wall' },
   bearwall: { ja: '耐力壁', en: 'BearWall' },
+  truss: { ja: 'トラス', en: 'Truss' },
+  spring: { ja: 'ばね', en: 'Spring' },
+  support: { ja: '支点', en: 'Support' },
+  constraint: { ja: '拘束', en: 'Constraint' },
   undo: { ja: '元に戻す', en: 'Undo' },
   redo: { ja: 'やり直す', en: 'Redo' },
   delete: { ja: '削除', en: 'Delete' },
   'coordinate.commit': { ja: '入力', en: 'Apply' },
+  'coordinate.polarCommit': { ja: '距離・角度', en: 'Distance/Angle' },
 
   // Toolbar - Titles
   'title.new': { ja: '新規作成', en: 'New' },
@@ -58,6 +64,39 @@ const messages = {
   snapWidth: { ja: 'スナップ幅:', en: 'Snap:' },
   'selection.filter': { ja: '選択対象:', en: 'Select:' },
   'selection.all': { ja: 'すべて', en: 'All' },
+  'view.top': { ja: '上面', en: 'Top' },
+  'view.front': { ja: '正面', en: 'Front' },
+  'view.right': { ja: '側面', en: 'Right' },
+  'view.isometric': { ja: 'アイソメ', en: 'Isometric' },
+  'snap.constraint': { ja: '拘束:', en: 'Constraint:' },
+  'snap.constraint.all': { ja: '軸・直交', en: 'Axis + orthogonal' },
+  'snap.constraint.axis': { ja: 'X/Y軸', en: 'X/Y axes' },
+  'snap.constraint.orthogonal': { ja: '直交', en: 'Orthogonal' },
+  'snap.constraint.none': { ja: 'なし', en: 'None' },
+  'snap.cycle': { ja: '候補切替', en: 'Cycle snap' },
+  'coordinate.distance': { ja: '距離', en: 'Distance' },
+  'coordinate.angle': { ja: '角度', en: 'Angle' },
+  'display.labels': { ja: 'ラベル', en: 'Labels' },
+  'display.nodeNumber': { ja: '節点番号', en: 'Node number' },
+  'display.memberNumber': { ja: '部材番号', en: 'Member number' },
+  'display.planeNumber': { ja: '面番号', en: 'Plane number' },
+  'display.floorDirection': { ja: '床方向', en: 'Floor direction' },
+  'display.weight': { ja: '荷重', en: 'Weight' },
+  'display.storyHeight': { ja: '階高', en: 'Story height' },
+  'display.localAxes': { ja: 'ローカル軸', en: 'Local axes' },
+  'display.selectedOnly': { ja: '選択のみ', en: 'Selected only' },
+  'display.hideSelected': { ja: '選択非表示', en: 'Hide selected' },
+  'display.isolateSelected': { ja: '選択隔離', en: 'Isolate selected' },
+  'display.showAll': { ja: '全表示', en: 'Show all' },
+
+  // CAD operation status
+  'operation.firstPointSelected': { ja: '1点目選択済み', en: 'First point selected' },
+  'operation.noPointAbove': {
+    ja: '直上の節点または部材が見つかりません',
+    en: 'No node or member was found directly above',
+  },
+  'operation.coincidentPoints': { ja: '異なる2点を指定してください', en: 'Specify two different points' },
+  'operation.duplicateElement': { ja: '同じ位置の要素が既に存在します', en: 'An element already exists here' },
 
   // Layer panel
   layer: { ja: 'レイヤー', en: 'Layer' },
@@ -72,6 +111,7 @@ const messages = {
   'aria.gridSettings': { ja: 'グリッドとスナップの設定', en: 'Grid and snap settings' },
   'aria.coordinateEntry': { ja: '座標数値入力', en: 'Numeric coordinate entry' },
   'aria.editActions': { ja: '編集操作', en: 'Edit actions' },
+  'aria.displayActions': { ja: '表示要素', en: 'Element display' },
   'aria.appSettings': { ja: 'ヘルプと表示設定', en: 'Help and display settings' },
   'aria.layers': { ja: 'レイヤー一覧', en: 'Layer list' },
   'aria.cadCanvas': { ja: '構造フレーム作図領域', en: 'Structural frame drawing area' },
@@ -86,6 +126,10 @@ const messages = {
   'dialog.nodeProps': { ja: '節点プロパティ', en: 'Node Properties' },
   'dialog.beamProps': { ja: '梁プロパティ', en: 'Beam Properties' },
   'dialog.pillarProps': { ja: '柱プロパティ', en: 'Pillar Properties' },
+  'dialog.trussProps': { ja: 'トラスプロパティ', en: 'Truss Properties' },
+  'dialog.springProps': { ja: 'ばねプロパティ', en: 'Spring Properties' },
+  'dialog.supportProps': { ja: '支点プロパティ', en: 'Support Properties' },
+  'dialog.constraintProps': { ja: '拘束プロパティ', en: 'Constraint Properties' },
   'dialog.floorProps': { ja: '床プロパティ', en: 'Floor Properties' },
   'dialog.wallProps': { ja: '壁プロパティ', en: 'Wall Properties' },
   'dialog.bearwallProps': { ja: '耐力壁プロパティ', en: 'BearWall Properties' },
@@ -100,6 +144,36 @@ const messages = {
   direction: { ja: '方向', en: 'Direction' },
   name: { ja: '名前', en: 'Name' },
   zPosition: { ja: 'Z位置', en: 'Z Position' },
+  'structural.nodeMass': { ja: '節点質量・回転慣性（6自由度）', en: 'Nodal mass and rotational inertia (6 DOF)' },
+  'structural.enableMass': { ja: '質量を設定', en: 'Define nodal mass' },
+  'structural.translation': { ja: '並進', en: 'translation' },
+  'structural.rotation': { ja: '回転', en: 'rotation' },
+  'structural.translationalMassUnit': { ja: '並進質量の単位', en: 'Translational mass unit' },
+  'structural.rotationalInertiaUnit': { ja: '回転慣性の単位', en: 'Rotational inertia unit' },
+  'structural.trussProperties': { ja: '軸剛性情報', en: 'Axial stiffness data' },
+  'structural.material': { ja: '材料', en: 'Material' },
+  'structural.area': { ja: '断面積', en: 'Area' },
+  'structural.areaUnit': { ja: '断面積の単位', en: 'Area unit' },
+  'structural.elasticModulus': { ja: 'ヤング係数（任意）', en: 'Elastic modulus (optional)' },
+  'structural.stressUnit': { ja: '応力の単位', en: 'Stress unit' },
+  'structural.springComponents': { ja: 'ばね剛性（6自由度）', en: 'Spring stiffness (6 DOF)' },
+  'structural.enableDof': { ja: '有効', en: 'Enabled' },
+  'structural.stiffness': { ja: '剛性', en: 'Stiffness' },
+  'structural.unit': { ja: '単位', en: 'Unit' },
+  'structural.springOrientation': { ja: 'ローカル軸（任意）', en: 'Local orientation (optional)' },
+  'structural.enableOrientX': { ja: 'X方向ベクトルを設定', en: 'Define X orientation vector' },
+  'structural.enableOrientY': { ja: 'Y方向ベクトルを設定', en: 'Define Y orientation vector' },
+  'structural.shearDistance': { ja: 'せん断位置（任意、0〜1）', en: 'Shear distances (optional, 0 to 1)' },
+  'structural.enableShearDistance': { ja: 'せん断位置を設定', en: 'Define shear distances' },
+  'structural.note': { ja: '注記', en: 'Note' },
+  'structural.fixedDofs': { ja: '固定自由度（6自由度）', en: 'Restrained DOFs (6 DOF)' },
+  'structural.constraintKind': { ja: '拘束種別', en: 'Constraint kind' },
+  'structural.slaveNode': { ja: '従属節点', en: 'Slave node' },
+  'structural.slaveDof': { ja: '従属自由度', en: 'Slave DOF' },
+  'structural.masterTerms': { ja: '主節点項', en: 'Master terms' },
+  'structural.masterNode': { ja: '主節点', en: 'Master node' },
+  'structural.masterDof': { ja: '主自由度', en: 'Master DOF' },
+  'structural.coefficient': { ja: '係数', en: 'Coefficient' },
 
   // Messages
   'msg.confirmNew': { ja: '現在のデータを破棄して新規作成しますか？', en: 'Discard current data and create new?' },
@@ -115,6 +189,33 @@ const messages = {
   'msg.wallExists': { ja: '既に同一の壁が存在します', en: 'The same wall already exists' },
   'msg.bearwallExists': { ja: '既に同一の耐力壁が存在します', en: 'The same bearing wall already exists' },
   'validation.finiteNumber': { ja: '有限の数値を入力してください', en: 'Enter a finite number.' },
+  'validation.requiredText': { ja: '空でない値を入力してください', en: 'Enter a non-empty value.' },
+  'validation.positiveNumber': { ja: '0より大きい数値を入力してください', en: 'Enter a number greater than zero.' },
+  'validation.nonNegativeNumber': { ja: '0以上の数値を入力してください', en: 'Enter a non-negative number.' },
+  'validation.zeroToOne': { ja: '0以上1以下の数値を入力してください', en: 'Enter a number from 0 to 1.' },
+  'validation.massDofCount': { ja: '質量は6自由度すべてを入力してください', en: 'Enter all six nodal mass DOFs.' },
+  'validation.springDofRequired': {
+    ja: 'ばね剛性を1自由度以上設定してください',
+    en: 'Enable at least one spring DOF.',
+  },
+  'validation.supportDofRequired': {
+    ja: '固定自由度を1つ以上選択してください',
+    en: 'Select at least one restrained DOF.',
+  },
+  'validation.vectorNonZero': { ja: '方向ベクトルをゼロにできません', en: 'The orientation vector must be non-zero.' },
+  'validation.vectorsNotParallel': {
+    ja: 'X・Y方向ベクトルを平行にできません',
+    en: 'X and Y orientation vectors must not be parallel.',
+  },
+  'validation.coefficientNonZero': { ja: '係数を0にできません', en: 'The coefficient must not be zero.' },
+  'validation.duplicateConstraintTerm': {
+    ja: '同じ主節点・自由度の項が重複しています',
+    en: 'Duplicate master node and DOF term.',
+  },
+  'validation.selfConstraint': {
+    ja: '従属自由度を同じ節点・自由度へ拘束できません',
+    en: 'A slave DOF cannot reference itself.',
+  },
   'validation.noIssues': { ja: 'エラーや警告はありません。', en: 'No errors or warnings were found.' },
   'validation.errors': { ja: 'エラー', en: 'Errors' },
   'validation.warnings': { ja: '警告', en: 'Warnings' },
@@ -214,7 +315,8 @@ export function setLocale(locale: Locale): void {
   currentLocale = locale;
   localStorage.setItem(STORAGE_KEY, locale);
   updateDom();
-  if (onLocaleChanged) onLocaleChanged();
+  legacyLocaleChanged?.();
+  for (const listener of [...localeChangeListeners]) listener(locale);
 }
 
 export function toggleLocale(): void {
@@ -222,7 +324,13 @@ export function toggleLocale(): void {
 }
 
 export function setOnLocaleChanged(callback: () => void): void {
-  onLocaleChanged = callback;
+  legacyLocaleChanged = callback;
+}
+
+/** Controllerや表示部品が独立してlocale変更を購読できる。 */
+export function subscribeLocaleChanged(listener: (locale: Locale) => void): () => void {
+  localeChangeListeners.add(listener);
+  return () => localeChangeListeners.delete(listener);
 }
 
 /**

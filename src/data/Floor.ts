@@ -14,6 +14,7 @@ export function parseFloorDirection(s: string): FloorDirection {
 }
 
 export class Floor extends Plane {
+  readonly kind = 'floor' as const;
   weight: number = 0;
   direction: FloorDirection = FloorDirection.X;
 

@@ -2,6 +2,7 @@ import { Member } from './Member';
 import { Node } from './Node';
 
 export class Beam extends Member {
+  readonly kind = 'beam' as const;
   constructor(nodeI?: Node, nodeJ?: Node) {
     super(nodeI, nodeJ);
     this.section = 'G1';

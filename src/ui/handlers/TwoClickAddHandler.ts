@@ -1,7 +1,7 @@
 import type { ICadMouseHandler } from './ICadMouseHandler';
 import type { CadView } from '../CadView';
 import type { DocumentData } from '../../data/DocumentData';
-import type { Point3D } from '../../math/Point3D';
+import { Point3D } from '../../math/Point3D';
 
 /**
  * 2点クリックで要素を追加するハンドラの抽象基底（テンプレートメソッド）。
@@ -23,19 +23,20 @@ export abstract class TwoClickAddHandler<A> implements ICadMouseHandler {
   }
 
   /** 1クリック目: アンカーを取得（取得できなければ null を返し、1点目を保持しない） */
-  protected abstract acquireAnchor(pos: Point3D): A | null;
+  protected abstract acquireAnchor(view: CadView, pos: Point3D): A | null;
 
   /** 2クリック目: 要素を生成・確定する（重複チェックや showDialog 呼び出しを含む） */
-  protected abstract commit(anchor: A, pos: Point3D): void;
+  protected abstract commit(view: CadView, anchor: A, pos: Point3D): void;
 
   /** 1点目保持中のプレビュー描画 */
   protected abstract drawPreview(view: CadView, anchor: A, pos: Point3D): void;
 
   onClick(view: CadView, pos: Point3D, _event: MouseEvent): void {
     if (this.anchor === null) {
-      const a = this.acquireAnchor(pos);
+      const a = this.acquireAnchor(view, pos);
       if (a !== null) {
         this.anchor = a;
+        view.setOperationStatus('firstPointSelected');
       }
       view.renderPreview();
       return;
@@ -43,9 +44,10 @@ export abstract class TwoClickAddHandler<A> implements ICadMouseHandler {
 
     const anchor = this.anchor;
     this.anchor = null;
+    view.setOperationStatus(null);
     view.clearPreview();
     try {
-      this.commit(anchor, pos);
+      this.commit(view, anchor, pos);
     } catch (error) {
       alert((error as Error).message);
     } finally {
@@ -66,9 +68,14 @@ export abstract class TwoClickAddHandler<A> implements ICadMouseHandler {
 
   draw(_view: CadView): void {}
 
+  getConstraintAnchor(): Point3D | null {
+    return this.anchor instanceof Point3D ? this.anchor.clone() : null;
+  }
+
   /** 別ツールへ切替時: 途中の1点目を破棄しプレビューを消す */
   onDeactivate(view: CadView): void {
     this.anchor = null;
+    view.setOperationStatus(null);
     view.clearPreview();
     view.renderPreview();
   }
