@@ -176,13 +176,23 @@ test('viewport resizeとテーマ永続化を反映する', async ({ page }) => 
 });
 
 test('WebGLモデル描画をvisual baselineと比較する', async ({ page }) => {
+  const canvas = page.locator('#cad-canvas');
+  await page.locator('#cad-view-container').evaluate((container: HTMLElement) => {
+    container.style.flex = '0 0 1060px';
+    container.style.width = '1060px';
+    container.style.height = '596px';
+  });
+  await expect
+    .poll(() => canvasMetrics(canvas), { message: 'visual canvas uses the deterministic baseline size' })
+    .toMatchObject({ cssWidth: 1060, cssHeight: 596, matchesContainer: true, hasBackingBuffer: true });
+
   await loadSample(page, FULL_SAMPLE, 'N:88 M:69 P:18');
   await page.locator('#chk-grid').uncheck();
   await page.locator('#btn-view-isometric').click();
   await page.keyboard.press('Home');
   await settleRendering(page);
 
-  await expect(page.locator('#cad-canvas')).toHaveScreenshot('webgl-full-model.png', {
+  await expect(canvas).toHaveScreenshot('webgl-full-model.png', {
     animations: 'disabled',
     maxDiffPixelRatio: 0.035,
     threshold: 0.25,
@@ -254,6 +264,7 @@ async function selectVisibleElement(canvas: Locator): Promise<void> {
 
 async function canvasMetrics(canvas: Locator): Promise<{
   cssWidth: number;
+  cssHeight: number;
   matchesContainer: boolean;
   hasBackingBuffer: boolean;
 }> {
@@ -263,6 +274,7 @@ async function canvasMetrics(canvas: Locator): Promise<{
     const dpr = window.devicePixelRatio || 1;
     return {
       cssWidth: Math.round(rect.width),
+      cssHeight: Math.round(rect.height),
       matchesContainer:
         !!parentRect && Math.abs(rect.width - parentRect.width) <= 1 && Math.abs(rect.height - parentRect.height) <= 1,
       hasBackingBuffer:
