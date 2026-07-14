@@ -22,11 +22,22 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci
-      - run: npm run build
+      - name: Type-check application
+        run: npm run typecheck
+      - name: Type-check tests
+        run: npm run typecheck:test
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Audit high-severity dependencies
+        run: npm audit --audit-level=high
 
       - uses: actions/upload-pages-artifact@v3
         with:

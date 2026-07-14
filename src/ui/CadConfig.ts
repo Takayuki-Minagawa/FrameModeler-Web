@@ -11,14 +11,18 @@ export const CAD = {
   PREVIEW_POINT_SIZE: 8,
   /** 部材線の太さ */
   MEMBER_LINEWIDTH: 2,
-  /** ヒットテスト範囲 = cameraDistance に対する比率 */
-  HIT_RANGE_RATIO: 0.008,
+  /** Node/線材のヒットテスト許容幅（CSS px） */
+  HIT_TOLERANCE_PX: 8,
+  /** オブジェクトスナップの許容幅（CSS px） */
+  OBJECT_SNAP_TOLERANCE_PX: 10,
   /** 柱円の半径 = cameraDistance に対する比率 */
   PILLAR_RADIUS_RATIO: 0.005,
   /** ダブルクリック判定の時間しきい値(ms) */
   DBLCLICK_MS: 400,
   /** ダブルクリック判定の距離しきい値(px) */
   DBLCLICK_PX: 10,
+  /** クリックとドラッグを区別する移動量（CSS px） */
+  DRAG_THRESHOLD_PX: 4,
   /** 3D回転の感度 */
   ROTATE_SENSITIVITY: 0.01,
   /** パン量の分母（大きいほど鈍い） */
@@ -32,6 +36,10 @@ export const CAD = {
   GRID_RANGE_RATIO: 2,
   /** グリッド線の最大本数（片方向あたり）。ズームアウト時の過剰生成を抑制 */
   MAX_GRID_LINES: 400,
+  /** 高DPI端末でGPU負荷が過大にならないようにするpixel ratio上限 */
+  MAX_PIXEL_RATIO: 2,
+  /** fit時にモデル外周へ確保する余白率 */
+  FIT_PADDING: 1.15,
 } as const;
 
 /** Canvas 描画に使う色（テーマ別） */
@@ -82,8 +90,7 @@ const DARK_PALETTE: CadPalette = {
 
 /** 現在のテーマがダークかどうか（main.ts の data-theme 属性に追従） */
 export function isDarkTheme(): boolean {
-  return typeof document !== 'undefined'
-    && document.documentElement.dataset.theme === 'dark';
+  return typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
 }
 
 /** 現在のテーマに対応するパレットを返す */

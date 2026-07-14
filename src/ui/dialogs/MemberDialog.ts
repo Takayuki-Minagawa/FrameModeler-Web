@@ -1,10 +1,7 @@
 import { Member } from '../../data/Member';
 import { Document } from '../../data/Document';
 import { t } from '../../i18n';
-import {
-  createModalOverlay, createDialogBox, addFormRow, addNodeRow, addButtonRow,
-  wireDialog,
-} from './DialogUtil';
+import { createModalOverlay, createDialogBox, addFormRow, addNodeRow, addButtonRow, wireDialog } from './DialogUtil';
 
 /** Member（梁/柱）編集ダイアログ */
 export async function showMemberDialog(member: Member): Promise<boolean> {

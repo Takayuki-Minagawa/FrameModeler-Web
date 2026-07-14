@@ -7,7 +7,7 @@ import type { Point3D } from '../../math/Point3D';
 export class AddNodeHandler implements ICadMouseHandler {
   onClick(view: CadView, pos: Point3D, _event: MouseEvent): void {
     Document.instance.getOrCreateNode(pos);
-    view.render();
+    view.renderElements();
   }
 
   onDoubleClick(_view: CadView, _pos: Point3D, _event: MouseEvent): void {}

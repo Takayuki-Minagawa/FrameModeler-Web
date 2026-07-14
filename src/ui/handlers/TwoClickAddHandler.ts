@@ -37,12 +37,21 @@ export abstract class TwoClickAddHandler<A> implements ICadMouseHandler {
       if (a !== null) {
         this.anchor = a;
       }
-    } else {
-      this.commit(this.anchor, pos);
-      this.anchor = null;
-      view.clearPreview();
+      view.renderPreview();
+      return;
     }
-    view.render();
+
+    const anchor = this.anchor;
+    this.anchor = null;
+    view.clearPreview();
+    try {
+      this.commit(anchor, pos);
+    } catch (error) {
+      alert((error as Error).message);
+    } finally {
+      view.renderElements();
+      view.renderPreview();
+    }
   }
 
   onDoubleClick(_view: CadView, _pos: Point3D, _event: MouseEvent): void {}
@@ -52,7 +61,7 @@ export abstract class TwoClickAddHandler<A> implements ICadMouseHandler {
     if (this.anchor !== null) {
       this.drawPreview(view, this.anchor, pos);
     }
-    view.render();
+    view.renderPreview();
   }
 
   draw(_view: CadView): void {}
@@ -61,6 +70,6 @@ export abstract class TwoClickAddHandler<A> implements ICadMouseHandler {
   onDeactivate(view: CadView): void {
     this.anchor = null;
     view.clearPreview();
-    view.render();
+    view.renderPreview();
   }
 }

@@ -5,7 +5,13 @@ import { Wall } from '../../data/Wall';
 import { BearWall } from '../../data/BearWall';
 import { t } from '../../i18n';
 import {
-  createModalOverlay, createDialogBox, addFormRow, addNodeRow, addSelectRow, addButtonRow,
+  createModalOverlay,
+  createDialogBox,
+  addFormRow,
+  addNodeRow,
+  addSelectRow,
+  addButtonRow,
+  readFiniteNumber,
   wireDialog,
 } from './DialogUtil';
 
@@ -61,6 +67,9 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
 
   let changed = false;
   const confirmed = await wireDialog(overlay, okBtn, cancelBtn, () => {
+    const nextWeight = inputWeight ? readFiniteNumber(inputWeight) : null;
+    if (inputWeight && nextWeight === null) return false;
+
     const nextSection = inputSection.value;
     if (plane.section !== nextSection) {
       plane.section = nextSection;
@@ -68,8 +77,7 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
     }
 
     if (plane instanceof Floor) {
-      if (inputWeight) {
-        const nextWeight = parseFloat(inputWeight.value) || 0;
+      if (nextWeight !== null) {
         if (plane.weight !== nextWeight) {
           plane.weight = nextWeight;
           changed = true;
@@ -84,8 +92,7 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
       }
     }
 
-    if (plane instanceof Wall && inputWeight) {
-      const nextWeight = parseFloat(inputWeight.value) || 0;
+    if (plane instanceof Wall && nextWeight !== null) {
       if (plane.weight !== nextWeight) {
         plane.weight = nextWeight;
         changed = true;

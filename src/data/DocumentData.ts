@@ -1,4 +1,4 @@
-import type { Layer } from '../ui/Layer';
+import type { Layer } from './Layer';
 
 /** 削除可否の判定結果 */
 export interface RemovableResult {

@@ -1,7 +1,11 @@
 import { Layer } from '../Layer';
 import { t } from '../../i18n';
 import {
-  createModalOverlay, createDialogBox, addFormRow, addButtonRow,
+  createModalOverlay,
+  createDialogBox,
+  addFormRow,
+  addButtonRow,
+  readFiniteNumber,
   wireDialog,
 } from './DialogUtil';
 
@@ -19,8 +23,8 @@ export async function showLayerDialog(layer?: Layer): Promise<Layer | null> {
   let result: Layer | null = null;
 
   await wireDialog(overlay, okBtn, cancelBtn, () => {
-    const posZ = parseFloat(inputPosZ.value);
-    if (isNaN(posZ)) return false;
+    const posZ = readFiniteNumber(inputPosZ);
+    if (posZ === null) return false;
     result = new Layer(posZ, inputName.value || t('msg.defaultLayerName'));
     return true;
   });

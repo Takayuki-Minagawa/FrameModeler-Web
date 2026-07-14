@@ -53,6 +53,7 @@ export function showHelpDialog(): void {
   const btnRow = document.createElement('div');
   btnRow.className = 'button-row';
   const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
   closeBtn.textContent = t('close');
   closeBtn.className = 'primary';
   btnRow.appendChild(closeBtn);

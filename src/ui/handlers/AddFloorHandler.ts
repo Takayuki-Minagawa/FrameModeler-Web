@@ -4,7 +4,7 @@ import { Floor, FloorDirection } from '../../data/Floor';
 import { Point3D } from '../../math/Point3D';
 import { t } from '../../i18n';
 import { TwoClickAddHandler } from './TwoClickAddHandler';
-import { createRectPoints } from './geometry';
+import { createRectPoints, planNodes } from './geometry';
 
 /** 床追加ハンドラ: 2クリック矩形で床を生成 */
 export class AddFloorHandler extends TwoClickAddHandler<Point3D> {
@@ -16,13 +16,13 @@ export class AddFloorHandler extends TwoClickAddHandler<Point3D> {
     const doc = Document.instance;
     if (!pos.equals(anchor)) {
       const points = createRectPoints(pos, anchor);
-      const nodes = points.map((p) => doc.getOrCreateNode(p));
+      const { nodes, additions } = planNodes(points);
 
       if (doc.getPlaneOf(nodes)) {
         alert(t('msg.floorExists'));
       } else {
         const floor = new Floor(nodes);
-        doc.add(floor);
+        doc.addMany([...additions, floor]);
         if (this.showDialog) this.showDialog(floor);
       }
     }
@@ -32,11 +32,13 @@ export class AddFloorHandler extends TwoClickAddHandler<Point3D> {
     view.addPreviewPolygon(createRectPoints(pos, anchor), view.previewColor);
   }
 
+  /** 外部から明示的に呼ばれる場合も、直接mutationをDocument.updateで確定する。 */
   onDoubleClick(view: CadView, pos: Point3D, _event: MouseEvent): void {
     const hit = view.hitTest(pos);
-    if (hit instanceof Floor) {
+    if (!(hit instanceof Floor)) return;
+    Document.instance.update(() => {
       hit.direction = hit.direction === FloorDirection.X ? FloorDirection.Y : FloorDirection.X;
-      view.render();
-    }
+    });
+    view.renderSelection();
   }
 }

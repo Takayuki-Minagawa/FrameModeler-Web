@@ -18,19 +18,30 @@ export class Point3D {
   /** インデクサ: 0=x, 1=y, 2=z */
   get(i: number): number {
     switch (i) {
-      case 0: return this.x;
-      case 1: return this.y;
-      case 2: return this.z;
-      default: throw new RangeError('Index out of range');
+      case 0:
+        return this.x;
+      case 1:
+        return this.y;
+      case 2:
+        return this.z;
+      default:
+        throw new RangeError('Index out of range');
     }
   }
 
   set(i: number, value: number): void {
     switch (i) {
-      case 0: this.x = value; break;
-      case 1: this.y = value; break;
-      case 2: this.z = value; break;
-      default: throw new RangeError('Index out of range');
+      case 0:
+        this.x = value;
+        break;
+      case 1:
+        this.y = value;
+        break;
+      case 2:
+        this.z = value;
+        break;
+      default:
+        throw new RangeError('Index out of range');
     }
   }
 
@@ -111,11 +122,7 @@ export class Point3D {
   }
 
   static crossProduct(a: Point3D, b: Point3D): Point3D {
-    return new Point3D(
-      a.y * b.z - a.z * b.y,
-      a.z * b.x - a.x * b.z,
-      a.x * b.y - a.y * b.x
-    );
+    return new Point3D(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
   }
 
   /** 点群の重心（平均座標）。空配列なら原点（D-9）。 */

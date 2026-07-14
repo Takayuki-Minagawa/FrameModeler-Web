@@ -3,7 +3,11 @@ import { Document } from '../../data/Document';
 import { Point3D } from '../../math/Point3D';
 import { t } from '../../i18n';
 import {
-  createModalOverlay, createDialogBox, addFormRow, addButtonRow,
+  createModalOverlay,
+  createDialogBox,
+  addFormRow,
+  addButtonRow,
+  readFiniteNumber,
   wireDialog,
 } from './DialogUtil';
 
@@ -25,10 +29,10 @@ export async function showNodeDialog(node: Node): Promise<boolean> {
 
   let changed = false;
   const confirmed = await wireDialog(overlay, okBtn, cancelBtn, () => {
-    const x = parseFloat(inputX.value);
-    const y = parseFloat(inputY.value);
-    const z = parseFloat(inputZ.value);
-    if (isNaN(x) || isNaN(y) || isNaN(z)) return false;
+    const x = readFiniteNumber(inputX);
+    const y = readFiniteNumber(inputY);
+    const z = readFiniteNumber(inputZ);
+    if (x === null || y === null || z === null) return false;
     changed = node.pos.x !== x || node.pos.y !== y || node.pos.z !== z;
     if (changed) {
       node.pos = new Point3D(x, y, z);

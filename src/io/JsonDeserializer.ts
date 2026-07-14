@@ -1,297 +1,105 @@
-import { DocumentData } from '../data/DocumentData';
-import { Node } from '../data/Node';
-import { Beam } from '../data/Beam';
-import { Pillar } from '../data/Pillar';
-import { Floor, parseFloorDirection } from '../data/Floor';
-import { Wall } from '../data/Wall';
 import { BearWall } from '../data/BearWall';
+import { Beam } from '../data/Beam';
 import { Document } from '../data/Document';
-import { Layer } from '../ui/Layer';
+import type { DocumentData } from '../data/DocumentData';
+import { Floor } from '../data/Floor';
+import { Node } from '../data/Node';
+import { Pillar } from '../data/Pillar';
+import { Wall } from '../data/Wall';
 import { Point3D } from '../math/Point3D';
+import { Layer } from '../data/Layer';
+import { parseJsonDocument, type JsonMember, type JsonPlane } from './JsonSchema';
+import { decodeImportMetadata } from './ImportMetadataCodec';
 
-/** Plane 種別ごとの最小節点数 */
-const MIN_PLANE_NODES = { floor: 3, wall: 2, bearWall: 2 } as const;
+export type { JsonDocument, JsonMember } from './JsonSchema';
 
-interface JsonNode {
-  number: number;
-  pos: { x: number; y: number; z: number };
-  select: boolean;
-}
-
-export interface JsonMember {
-  number: number;
-  nodeI: number;
-  nodeJ: number;
-  select: boolean;
-  section?: string;
-}
-
-interface JsonPlane {
-  number: number;
-  nodes: number[];
-  select: boolean;
-  section?: string;
-}
-
-interface JsonFloor extends JsonPlane {
-  weight: number;
-  direction: string;
-}
-
-interface JsonWall extends JsonPlane {
-  weight: number;
-}
-
-interface JsonLayer {
-  name: string;
-  posZ: number;
-}
-
-export interface JsonDocument {
-  nodes: JsonNode[];
-  beams: JsonMember[];
-  pillars: JsonMember[];
-  floors: JsonFloor[];
-  walls: JsonWall[];
-  bearWalls: JsonPlane[];
-  layers: JsonLayer[];
-}
-
-/** JSON文字列からDocumentにデータを読み込む */
+/** JSON文字列をparse → schema検証 → migration → domain buildしてatomicに読み込む。 */
 export function deserializeJson(jsonString: string): void {
-  let parsedUnknown: unknown;
-  try {
-    parsedUnknown = JSON.parse(jsonString);
-  } catch (e) {
-    throw new Error('Invalid JSON document: ' + (e as Error).message);
-  }
-  if (!isRecord(parsedUnknown)) {
-    throw new Error('Invalid JSON document: expected object');
-  }
+  importDocumentJson(jsonString);
+}
 
-  const parsed = parsedUnknown as Partial<JsonDocument>;
-  const json = normalizeDocument(parsed);
-  const doc = Document.instance;
+/** History/draftも利用できる共通import API。 */
+export function importDocumentJson(jsonString: string): void {
+  const json = parseJsonDocument(jsonString);
 
-  // まずNodeを読み込む（他要素がNodeを参照するため）。番号→Nodeのマップで O(1) 解決。
-  const tempNodes: Node[] = [];
+  const nodes: Node[] = [];
   const nodeByNumber = new Map<number, Node>();
-  json.nodes.forEach((raw, i) => {
-    const jn = validateNode(raw, i);
-    if (nodeByNumber.has(jn.number)) {
-      throw new Error(`Duplicate node number: ${jn.number}`);
-    }
-    const node = new Node(new Point3D(jn.pos.x, jn.pos.y, jn.pos.z));
-    node.number = jn.number;
-    node.select = jn.select;
-    nodeByNumber.set(jn.number, node);
-    tempNodes.push(node);
+  json.nodes.forEach((raw) => {
+    const node = new Node(new Point3D(raw.pos.x, raw.pos.y, raw.pos.z));
+    node.number = raw.number;
+    nodeByNumber.set(raw.number, node);
+    nodes.push(node);
   });
 
-  const allData: DocumentData[] = [...tempNodes];
-
-  // Beam
-  json.beams.forEach((raw, i) => {
-    allData.push(createMember('Beam', validateMember(raw, 'beam', i), nodeByNumber));
+  const allData: DocumentData[] = [...nodes];
+  json.beams.forEach((raw, index) => {
+    allData.push(createMember('Beam', raw, nodeByNumber, `beams[${index}]`));
   });
-
-  // Pillar
-  json.pillars.forEach((raw, i) => {
-    allData.push(createMember('Pillar', validateMember(raw, 'pillar', i), nodeByNumber));
+  json.pillars.forEach((raw, index) => {
+    allData.push(createMember('Pillar', raw, nodeByNumber, `pillars[${index}]`));
   });
-
-  // Floor
-  json.floors.forEach((raw, i) => {
-    const jf = validateFloor(raw, i);
-    const floor = new Floor(resolveNodes(jf.nodes, nodeByNumber, MIN_PLANE_NODES.floor, `floor[${i}]`));
-    floor.number = jf.number;
-    floor.select = jf.select;
-    floor.weight = jf.weight;
-    floor.direction = parseFloorDirection(jf.direction);
-    floor.section = jf.section || floor.section;
+  json.floors.forEach((raw, index) => {
+    const floor = new Floor(resolveNodes(raw, nodeByNumber, `floors[${index}]`));
+    floor.number = raw.number;
+    floor.weight = raw.weight;
+    floor.direction = raw.direction;
+    if (raw.section !== undefined) floor.section = raw.section;
     allData.push(floor);
   });
-
-  // Wall
-  json.walls.forEach((raw, i) => {
-    const jw = validatePlane(raw, 'wall', i);
-    const wall = new Wall(resolveNodes(jw.nodes, nodeByNumber, MIN_PLANE_NODES.wall, `wall[${i}]`));
-    wall.number = jw.number;
-    wall.select = jw.select;
-    wall.weight = typeof jw.weight === 'number' ? jw.weight : 0;
-    wall.section = jw.section || wall.section;
+  json.walls.forEach((raw, index) => {
+    const wall = new Wall(resolveNodes(raw, nodeByNumber, `walls[${index}]`));
+    wall.number = raw.number;
+    wall.weight = raw.weight;
+    if (raw.section !== undefined) wall.section = raw.section;
+    allData.push(wall);
+  });
+  json.bearWalls.forEach((raw, index) => {
+    const wall = new BearWall(resolveNodes(raw, nodeByNumber, `bearWalls[${index}]`));
+    wall.number = raw.number;
+    if (raw.section !== undefined) wall.section = raw.section;
     allData.push(wall);
   });
 
-  // BearWall
-  json.bearWalls.forEach((raw, i) => {
-    const jbw = validatePlane(raw, 'bearWall', i);
-    const bearWall = new BearWall(resolveNodes(jbw.nodes, nodeByNumber, MIN_PLANE_NODES.bearWall, `bearWall[${i}]`));
-    bearWall.number = jbw.number;
-    bearWall.select = jbw.select;
-    bearWall.section = jbw.section || bearWall.section;
-    allData.push(bearWall);
-  });
-
-  // Layers
-  const tempLayers: Layer[] = json.layers.map((raw, i) => {
-    const jl = validateLayer(raw, i);
-    return new Layer(jl.posZ, jl.name);
-  });
-
-  doc.bulkLoad(allData, tempLayers);
-}
-
-function normalizeDocument(json: Partial<JsonDocument>): JsonDocument {
-  return {
-    nodes: ensureRequiredArray(json.nodes, 'nodes'),
-    beams: ensureArray(json.beams, 'beams'),
-    pillars: ensureArray(json.pillars, 'pillars'),
-    floors: ensureArray(json.floors, 'floors'),
-    walls: ensureArray(json.walls, 'walls'),
-    bearWalls: ensureArray(json.bearWalls, 'bearWalls'),
-    layers: ensureArray(json.layers, 'layers'),
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function ensureRequiredArray<T>(value: T[] | undefined, fieldName: string): T[] {
-  if (value === undefined) {
-    throw new Error(`Invalid JSON field '${fieldName}': required array`);
+  const layers = json.layers.map((raw) => new Layer(raw.posZ, raw.name));
+  // metadata参照・summary整合性もDocument置換前に解決する。
+  const decodedMetadata = json.importMetadata
+    ? decodeImportMetadata(json.importMetadata, allData, layers.length)
+    : undefined;
+  const document = Document.instance;
+  document.bulkLoad(allData, layers);
+  if (decodedMetadata) {
+    decodedMetadata.synchronizeAppNumbers();
+    document.setImportMetadata(decodedMetadata.metadata);
   }
-  if (!Array.isArray(value)) {
-    throw new Error(`Invalid JSON field '${fieldName}': expected array`);
-  }
-  return value;
 }
 
-function ensureArray<T>(value: T[] | undefined, fieldName: string): T[] {
-  if (value === undefined) return [];
-  if (!Array.isArray(value)) {
-    throw new Error(`Invalid JSON field '${fieldName}': expected array`);
-  }
-  return value;
-}
-
-function resolveNodes(nodeNums: number[], byNumber: Map<number, Node>, min: number, label: string): Node[] {
-  if (nodeNums.length < min) {
-    throw new Error(`${label} requires at least ${min} nodes, got ${nodeNums.length}`);
-  }
-  return nodeNums.map((num) => {
-    const n = byNumber.get(num);
-    if (!n) throw new Error(`${label} node not found: ${num}`);
-    return n;
+function resolveNodes(raw: JsonPlane, byNumber: ReadonlyMap<number, Node>, path: string): Node[] {
+  return raw.nodes.map((number, index) => {
+    const node = byNumber.get(number);
+    if (!node) throw new Error(`${path}.nodes[${index}] node not found: ${number}`);
+    return node;
   });
 }
 
-type MemberType = 'Beam' | 'Pillar';
-
-function createMember(typeName: MemberType, jm: JsonMember, byNumber: Map<number, Node>): DocumentData {
-  const n1 = byNumber.get(jm.nodeI);
-  const n2 = byNumber.get(jm.nodeJ);
-
-  if (!n1 || !n2) {
-    throw new Error(`Member node not found: NodeI=${jm.nodeI}, NodeJ=${jm.nodeJ}`);
+function createMember(
+  type: 'Beam' | 'Pillar',
+  raw: JsonMember,
+  byNumber: ReadonlyMap<number, Node>,
+  path: string,
+): Beam | Pillar {
+  const rawNodeI = byNumber.get(raw.nodeI);
+  const rawNodeJ = byNumber.get(raw.nodeJ);
+  if (!rawNodeI || !rawNodeJ) {
+    throw new Error(`${path} node not found: ${!rawNodeI ? raw.nodeI : raw.nodeJ}`);
   }
 
-  // 原点に近い方をNodeIにする
-  let nodeI: Node, nodeJ: Node;
-  let isReverse = false;
-  if (n1.compareTo(n2) < 0) {
-    nodeI = n1;
-    nodeJ = n2;
-  } else {
-    nodeI = n2;
-    nodeJ = n1;
-    isReverse = true;
-  }
-
-  // section 既定値はクラス側のコンストラクタが持つため、未指定時はそれを尊重する
-  const member: Beam | Pillar = typeName === 'Beam'
-    ? new Beam(nodeI, nodeJ)
-    : new Pillar(nodeI, nodeJ);
-  if (jm.section) member.section = jm.section;
-
-  member.number = jm.number;
-  member.select = jm.select;
-  member.isNodeReverse = isReverse;
+  // 原点に近い方をNodeIにする既存契約を維持する。
+  const reverse = rawNodeI.compareTo(rawNodeJ) >= 0;
+  const nodeI = reverse ? rawNodeJ : rawNodeI;
+  const nodeJ = reverse ? rawNodeI : rawNodeJ;
+  const member = type === 'Beam' ? new Beam(nodeI, nodeJ) : new Pillar(nodeI, nodeJ);
+  member.number = raw.number;
+  member.isNodeReverse = reverse;
+  if (raw.section !== undefined) member.section = raw.section;
   return member;
-}
-
-// ========== 要素レベルのバリデーション（I-2） ==========
-
-function asRecord(v: unknown, label: string): Record<string, unknown> {
-  if (!isRecord(v)) throw new Error(`Invalid ${label}: expected object`);
-  return v;
-}
-
-function asNumber(v: unknown, label: string): number {
-  if (typeof v !== 'number' || Number.isNaN(v)) throw new Error(`Invalid ${label}: expected number`);
-  return v;
-}
-
-function asNumberArray(v: unknown, label: string): number[] {
-  if (!Array.isArray(v)) throw new Error(`Invalid ${label}: expected number array`);
-  return v.map((x, i) => asNumber(x, `${label}[${i}]`));
-}
-
-function optString(v: unknown): string | undefined {
-  return typeof v === 'string' ? v : undefined;
-}
-
-function validateNode(raw: unknown, i: number): JsonNode {
-  const r = asRecord(raw, `node[${i}]`);
-  const pos = asRecord(r.pos, `node[${i}].pos`);
-  return {
-    number: asNumber(r.number, `node[${i}].number`),
-    pos: {
-      x: asNumber(pos.x, `node[${i}].pos.x`),
-      y: asNumber(pos.y, `node[${i}].pos.y`),
-      z: asNumber(pos.z, `node[${i}].pos.z`),
-    },
-    select: r.select === true,
-  };
-}
-
-function validateMember(raw: unknown, kind: string, i: number): JsonMember {
-  const r = asRecord(raw, `${kind}[${i}]`);
-  return {
-    number: asNumber(r.number, `${kind}[${i}].number`),
-    nodeI: asNumber(r.nodeI, `${kind}[${i}].nodeI`),
-    nodeJ: asNumber(r.nodeJ, `${kind}[${i}].nodeJ`),
-    select: r.select === true,
-    section: optString(r.section),
-  };
-}
-
-function validatePlane(raw: unknown, kind: string, i: number): JsonWall {
-  const r = asRecord(raw, `${kind}[${i}]`);
-  return {
-    number: asNumber(r.number, `${kind}[${i}].number`),
-    nodes: asNumberArray(r.nodes, `${kind}[${i}].nodes`),
-    select: r.select === true,
-    section: optString(r.section),
-    weight: typeof r.weight === 'number' ? r.weight : 0,
-  };
-}
-
-function validateFloor(raw: unknown, i: number): JsonFloor {
-  const plane = validatePlane(raw, 'floor', i);
-  const r = raw as Record<string, unknown>;
-  return {
-    ...plane,
-    weight: typeof r.weight === 'number' ? r.weight : 0,
-    direction: optString(r.direction) ?? 'X',
-  };
-}
-
-function validateLayer(raw: unknown, i: number): JsonLayer {
-  const r = asRecord(raw, `layer[${i}]`);
-  return {
-    name: optString(r.name) ?? '',
-    posZ: asNumber(r.posZ, `layer[${i}].posZ`),
-  };
 }

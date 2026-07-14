@@ -7,13 +7,21 @@ import { BearWall } from '../data/BearWall';
 import { Member } from '../data/Member';
 import { Plane } from '../data/Plane';
 import { Document } from '../data/Document';
-import type { JsonDocument, JsonMember } from './JsonDeserializer';
+import { ModelValidator } from '../data/ModelValidator';
+import { JSON_SCHEMA_VERSION, type JsonDocument, type JsonMember } from './JsonSchema';
+import { encodeImportMetadata } from './ImportMetadataCodec';
 
 /** DocumentをJSON文字列にシリアライズ */
 export function serializeJson(): string {
-  const doc = Document.instance;
+  return JSON.stringify(exportDocumentJson(), null, 2);
+}
+
+/** History/draftも利用できる、plain v1 JSON objectへの共通export API。 */
+export function exportDocumentJson(doc: Document = Document.instance): JsonDocument {
+  ModelValidator.validateModel(doc.allDataList, doc.layers);
 
   const json: JsonDocument = {
+    schemaVersion: JSON_SCHEMA_VERSION,
     nodes: [],
     beams: [],
     pillars: [],
@@ -30,7 +38,6 @@ export function serializeJson(): string {
       json.nodes.push({
         number: node.number,
         pos: { x: node.pos.x, y: node.pos.y, z: node.pos.z },
-        select: node.select,
       });
     } else if (data.constructor === Beam) {
       json.beams.push(memberToJson(data as Beam));
@@ -41,7 +48,6 @@ export function serializeJson(): string {
       json.floors.push({
         number: floor.number,
         nodes: getPlaneNodeNumbers(floor),
-        select: floor.select,
         weight: floor.weight,
         direction: floor.direction,
         section: floor.section || undefined,
@@ -51,7 +57,6 @@ export function serializeJson(): string {
       json.bearWalls.push({
         number: bw.number,
         nodes: getPlaneNodeNumbers(bw),
-        select: bw.select,
         section: bw.section || undefined,
       });
     } else if (data.constructor === Wall) {
@@ -59,7 +64,6 @@ export function serializeJson(): string {
       json.walls.push({
         number: wall.number,
         nodes: getPlaneNodeNumbers(wall),
-        select: wall.select,
         weight: wall.weight,
         section: wall.section || undefined,
       });
@@ -73,21 +77,27 @@ export function serializeJson(): string {
     });
   }
 
-  return JSON.stringify(json, null, 2);
+  if (doc.importMetadata) {
+    json.importMetadata = encodeImportMetadata(doc.importMetadata, doc.allDataList, doc.layers.length);
+  }
+
+  return json;
 }
 
 function memberToJson(member: Member): JsonMember {
+  const rawI = member.nodeI!;
+  const rawJ = member.nodeJ!;
+  const [nodeI, nodeJ] = rawI.compareTo(rawJ) < 0 ? [rawI, rawJ] : [rawJ, rawI];
   return {
     number: member.number,
-    nodeI: member.nodeI!.number,
-    nodeJ: member.nodeJ!.number,
-    select: member.select,
+    nodeI: nodeI.number,
+    nodeJ: nodeJ.number,
     section: member.section || undefined,
   };
 }
 
 function getPlaneNodeNumbers(plane: Plane): number[] {
-  return plane.nodeList.map(n => n.number);
+  return plane.nodeList.map((n) => n.number);
 }
 
 /** JSON文字列をファイルとしてダウンロード */

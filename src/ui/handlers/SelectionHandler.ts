@@ -6,12 +6,21 @@ import { Node } from '../../data/Node';
 import { Member } from '../../data/Member';
 import { Plane } from '../../data/Plane';
 import { Point3D } from '../../math/Point3D';
-import { MIN_RECT_SIZE } from './constants';
+import { CAD } from '../CadConfig';
+import { SelectionFilter, type SelectionSettings } from '../../selection/SelectionFilter';
 
 /** 選択ハンドラ: クリック選択、矩形選択、ダブルクリックでダイアログ表示 */
 export class SelectionHandler implements ICadMouseHandler {
+  readonly acceptsDoubleClick = true;
   private dragStartWorld: Point3D | null = null;
   protected showDialog: ((data: DocumentData) => void) | null = null;
+
+  constructor(readonly selectionFilter: SelectionFilter = new SelectionFilter()) {}
+
+  /** UIから同じハンドラを保持したままフィルタを更新するための設定API。 */
+  setSelectionSettings(settings: Partial<SelectionSettings>): Readonly<SelectionSettings> {
+    return this.selectionFilter.setSettings(settings);
+  }
 
   setDialogCallback(cb: (data: DocumentData) => void): void {
     this.showDialog = cb;
@@ -21,7 +30,8 @@ export class SelectionHandler implements ICadMouseHandler {
     const doc = Document.instance;
     const shift = event.shiftKey;
     const ctrl = event.ctrlKey;
-    const hit = view.hitTest(pos);
+    const candidate = view.hitTest(pos);
+    const hit = candidate && this.selectionFilter.allows(candidate) ? candidate : null;
 
     // Shift/Ctrlなしで空クリック or 非選択要素クリック → 全解除
     if (!shift && !ctrl && (!hit || !hit.select)) {
@@ -39,12 +49,12 @@ export class SelectionHandler implements ICadMouseHandler {
     // 空クリック → 矩形選択開始
     this.dragStartWorld = hit ? null : pos.clone();
 
-    view.render();
+    view.renderSelection();
   }
 
   onDoubleClick(view: CadView, pos: Point3D, _event: MouseEvent): void {
     const hit = view.hitTest(pos);
-    if (hit && this.showDialog) {
+    if (hit && this.selectionFilter.allows(hit) && this.showDialog) {
       this.showDialog(hit);
     }
   }
@@ -60,20 +70,23 @@ export class SelectionHandler implements ICadMouseHandler {
       const maxX = Math.max(p.x, q.x);
       const minY = Math.min(p.y, q.y);
       const maxY = Math.max(p.y, q.y);
-      view.addPreviewPolygon([
-        new Point3D(minX, minY, z),
-        new Point3D(maxX, minY, z),
-        new Point3D(maxX, maxY, z),
-        new Point3D(minX, maxY, z),
-      ], view.selectionRectColor);
-      view.render();
+      view.addPreviewPolygon(
+        [
+          new Point3D(minX, minY, z),
+          new Point3D(maxX, minY, z),
+          new Point3D(maxX, maxY, z),
+          new Point3D(minX, maxY, z),
+        ],
+        view.selectionRectColor,
+      );
+      view.renderPreview();
     }
   }
 
   draw(_view: CadView): void {}
 
   /** 左ボタンリリース時の矩形選択確定（CadViewから呼ばれる） */
-  onEndDrag(view: CadView, pos: Point3D, event: MouseEvent): void {
+  onEndDrag(view: CadView, pos: Point3D, event: MouseEvent, dragDistancePx = 0): void {
     if (!this.dragStartWorld) return;
 
     const p = this.dragStartWorld;
@@ -85,10 +98,10 @@ export class SelectionHandler implements ICadMouseHandler {
     const minY = Math.min(p.y, q.y);
     const maxY = Math.max(p.y, q.y);
 
-    // 矩形が小さすぎれば無視
-    if (maxX - minX < MIN_RECT_SIZE && maxY - minY < MIN_RECT_SIZE) {
+    // zoomに依存しないCSS pixelしきい値でclick/dragを区別する。
+    if (dragDistancePx < CAD.DRAG_THRESHOLD_PX) {
       view.clearPreview();
-      view.render();
+      view.renderPreview();
       return;
     }
 
@@ -97,6 +110,7 @@ export class SelectionHandler implements ICadMouseHandler {
     const layer = doc.shownLayer;
 
     for (const data of doc.allDataList) {
+      if (!this.selectionFilter.allows(data)) continue;
       if (layer && !isOnLayer(data, layer)) continue;
       if (isInsideRect(data, minX, maxX, minY, maxY)) {
         if (ctrl) {
@@ -108,7 +122,14 @@ export class SelectionHandler implements ICadMouseHandler {
     }
 
     view.clearPreview();
-    view.render();
+    view.renderSelection();
+    view.renderPreview();
+  }
+
+  onDeactivate(view: CadView): void {
+    this.dragStartWorld = null;
+    view.clearPreview();
+    view.renderPreview();
   }
 }
 
@@ -129,11 +150,10 @@ function isInsideRect(data: DocumentData, minX: number, maxX: number, minY: numb
   }
   if (data instanceof Member) {
     if (!data.ok) return false;
-    return posInRect(data.posI, minX, maxX, minY, maxY) &&
-           posInRect(data.posJ, minX, maxX, minY, maxY);
+    return posInRect(data.posI, minX, maxX, minY, maxY) && posInRect(data.posJ, minX, maxX, minY, maxY);
   }
   if (data instanceof Plane) {
-    return data.nodeList.every(n => posInRect(n.pos, minX, maxX, minY, maxY));
+    return data.nodeList.every((n) => posInRect(n.pos, minX, maxX, minY, maxY));
   }
   return false;
 }

@@ -1,119 +1,200 @@
 import * as THREE from 'three';
 import { CAD } from './CadConfig';
 
-/**
- * InputController がイベント処理を委譲する先（CadView が実装する）。
- * 各メソッドは CadView の元イベントハンドラ本体に対応する。
- */
 export interface InputHost {
-  /** 左クリック（handler.onClick 相当）。pos 計算は CadView 側。 */
   handleClick(e: MouseEvent): void;
-  /** 左ダブルクリック（handler.onDoubleClick 相当）。 */
   handleDoubleClick(e: MouseEvent): void;
-  /** マウス移動（ワールド座標更新・ハンドラ通知）。 */
   handleMouseMove(e: MouseEvent): void;
-  /** 左ドラッグ終了（矩形選択確定など）。 */
-  handleEndDrag(e: MouseEvent): void;
-  /** ハンドラが設定されているか（左クリック分岐に使用）。 */
+  /** dragDistancePxはpointerdownからの最大CSS pixel距離。 */
+  handleEndDrag(e: MouseEvent, dragDistancePx: number): void;
   readonly hasHandler: boolean;
-  /** カメラのパン（dx,dy / px）＋カメラのみ再描画。 */
+  /** 選択系ツールなど、ダブルクリックgestureを必要とする場合のみtrue。 */
+  readonly acceptsDoubleClick: boolean;
   panCamera(dx: number, dy: number): void;
-  /** カメラの3D回転（dx,dy / px）＋カメラのみ再描画。 */
   rotateCamera(dx: number, dy: number): void;
-  /** ホイールズーム＋再描画。 */
   zoomCamera(deltaY: number): void;
-  /** リサイズ。 */
   resize(): void;
-  /** 3D表示中か（回転/パン分岐に使用）。 */
   readonly show3D: boolean;
 }
 
-/**
- * DOMイベント専任クラス（V-5）。
- * canvas の mousedown/mousemove/mouseup/wheel/contextmenu と window resize を登録し、
- * ドラッグ状態・ダブルクリック検出を所有して host へ委譲する。
- * 判定しきい値・ボタン番号・分岐は CadView から無変更で移設。
- */
+/** Pointer Events、pointer capture、要素resizeのライフサイクルを管理する。 */
 export class InputController {
-  private canvas: HTMLCanvasElement;
-  private host: InputHost;
-
-  // ドラッグ状態
-  private isDragging = false;
+  private activePointerId: number | null = null;
   private dragButton = -1;
-  private dragStart = new THREE.Vector2();
-  private dragPrev = new THREE.Vector2();
+  private readonly dragStart = new THREE.Vector2();
+  private readonly dragPrev = new THREE.Vector2();
+  private maxDragDistance = 0;
 
-  // ダブルクリック検出
-  private lastClickTime = 0;
-  private lastClickPos = new THREE.Vector2();
+  // クリック自体は常にhostへ渡し、この状態はnative dblclickの妥当性確認だけに使う。
+  private gestureGeneration = 0;
+  private lastPrimaryDownTime = 0;
+  private readonly lastPrimaryDownPos = new THREE.Vector2();
+  private lastPrimaryDownGeneration = -1;
+  private pendingDoubleClick = false;
 
-  constructor(canvas: HTMLCanvasElement, host: InputHost) {
-    this.canvas = canvas;
-    this.host = host;
+  private resizeObserver: ResizeObserver | null = null;
+  private disposed = false;
+  private readonly previousTouchAction: string;
 
-    this.canvas.addEventListener('mousedown', this.onCanvasMouseDown.bind(this));
-    this.canvas.addEventListener('mousemove', this.onCanvasMouseMove.bind(this));
-    this.canvas.addEventListener('mouseup', this.onCanvasMouseUp.bind(this));
-    this.canvas.addEventListener('wheel', this.onCanvasWheel.bind(this));
-    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    window.addEventListener('resize', () => this.host.resize());
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    private readonly host: InputHost,
+  ) {
+    this.previousTouchAction = canvas.style.touchAction;
+    canvas.style.touchAction = 'none';
+
+    canvas.addEventListener('pointerdown', this.onPointerDown);
+    canvas.addEventListener('pointermove', this.onPointerMove);
+    canvas.addEventListener('pointerup', this.onPointerUp);
+    canvas.addEventListener('pointercancel', this.onPointerCancel);
+    canvas.addEventListener('lostpointercapture', this.onLostPointerCapture);
+    canvas.addEventListener('dblclick', this.onDoubleClick);
+    canvas.addEventListener('wheel', this.onWheel, { passive: false });
+    canvas.addEventListener('contextmenu', this.onContextMenu);
+
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(() => this.host.resize());
+      this.resizeObserver.observe(canvas.parentElement ?? canvas);
+    } else if (typeof window !== 'undefined') {
+      window.addEventListener('resize', this.onWindowResize);
+    }
   }
 
-  private onCanvasMouseDown(e: MouseEvent): void {
-    this.isDragging = true;
+  /** ツール/コンテキスト切替をまたぐdblclickを成立させない。 */
+  resetGestureState(): void {
+    this.gestureGeneration++;
+    this.lastPrimaryDownTime = 0;
+    this.lastPrimaryDownGeneration = -1;
+    this.pendingDoubleClick = false;
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+
+    this.canvas.removeEventListener('pointerdown', this.onPointerDown);
+    this.canvas.removeEventListener('pointermove', this.onPointerMove);
+    this.canvas.removeEventListener('pointerup', this.onPointerUp);
+    this.canvas.removeEventListener('pointercancel', this.onPointerCancel);
+    this.canvas.removeEventListener('lostpointercapture', this.onLostPointerCapture);
+    this.canvas.removeEventListener('dblclick', this.onDoubleClick);
+    this.canvas.removeEventListener('wheel', this.onWheel);
+    this.canvas.removeEventListener('contextmenu', this.onContextMenu);
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    if (typeof window !== 'undefined') window.removeEventListener('resize', this.onWindowResize);
+    this.canvas.style.touchAction = this.previousTouchAction;
+    this.clearPointerState();
+  }
+
+  private readonly onPointerDown = (e: PointerEvent): void => {
+    if (this.disposed || this.activePointerId !== null) return;
+    this.activePointerId = e.pointerId;
     this.dragButton = e.button;
     this.dragStart.set(e.clientX, e.clientY);
-    this.dragPrev.set(e.clientX, e.clientY);
+    this.dragPrev.copy(this.dragStart);
+    this.maxDragDistance = 0;
+    try {
+      this.canvas.setPointerCapture(e.pointerId);
+    } catch {
+      // 古いブラウザやsynthetic eventでも入力処理自体は継続する。
+    }
 
     if (e.button === 0 && this.host.hasHandler) {
-      // ダブルクリック検出
       const now = Date.now();
-      const dx = e.clientX - this.lastClickPos.x;
-      const dy = e.clientY - this.lastClickPos.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const distance = this.lastPrimaryDownPos.distanceTo(new THREE.Vector2(e.clientX, e.clientY));
+      const sameContext = this.lastPrimaryDownGeneration === this.gestureGeneration;
+      this.pendingDoubleClick =
+        this.host.acceptsDoubleClick &&
+        sameContext &&
+        now - this.lastPrimaryDownTime < CAD.DBLCLICK_MS &&
+        distance < CAD.DBLCLICK_PX;
 
-      if (now - this.lastClickTime < CAD.DBLCLICK_MS && dist < CAD.DBLCLICK_PX) {
-        this.host.handleDoubleClick(e);
-        this.lastClickTime = 0;
-      } else {
-        this.host.handleClick(e);
-        this.lastClickTime = now;
-        this.lastClickPos.set(e.clientX, e.clientY);
-      }
+      // 2点作図ではこの2回目も必ずcommit候補になる。
+      this.host.handleClick(e);
+      this.lastPrimaryDownTime = now;
+      this.lastPrimaryDownPos.set(e.clientX, e.clientY);
+      this.lastPrimaryDownGeneration = this.gestureGeneration;
+    } else {
+      this.pendingDoubleClick = false;
     }
-  }
+    e.preventDefault();
+  };
 
-  private onCanvasMouseMove(e: MouseEvent): void {
+  private readonly onPointerMove = (e: PointerEvent): void => {
+    if (this.disposed) return;
     this.host.handleMouseMove(e);
+    if (e.pointerId !== this.activePointerId) return;
 
-    if (this.isDragging) {
-      const dx = e.clientX - this.dragPrev.x;
-      const dy = e.clientY - this.dragPrev.y;
+    const dx = e.clientX - this.dragPrev.x;
+    const dy = e.clientY - this.dragPrev.y;
+    this.maxDragDistance = Math.max(
+      this.maxDragDistance,
+      Math.hypot(e.clientX - this.dragStart.x, e.clientY - this.dragStart.y),
+    );
 
-      if (this.dragButton === 2 || this.dragButton === 1) {
-        if (this.host.show3D && this.dragButton === 2) {
-          this.host.rotateCamera(dx, dy);
-        } else {
-          this.host.panCamera(dx, dy);
-        }
+    if (this.dragButton === 2 || this.dragButton === 1) {
+      if (this.host.show3D && this.dragButton === 2) {
+        this.host.rotateCamera(dx, dy);
+      } else {
+        this.host.panCamera(dx, dy);
       }
-
-      this.dragPrev.set(e.clientX, e.clientY);
     }
-  }
+    this.dragPrev.set(e.clientX, e.clientY);
+  };
 
-  private onCanvasMouseUp(e: MouseEvent): void {
-    if (this.isDragging && this.dragButton === 0) {
-      // 左ドラッグ終了 → SelectionHandler用
-      this.host.handleEndDrag(e);
+  private readonly onPointerUp = (e: PointerEvent): void => {
+    if (e.pointerId !== this.activePointerId) return;
+    this.finishPointer(e, false);
+  };
+
+  private readonly onPointerCancel = (e: PointerEvent): void => {
+    if (e.pointerId !== this.activePointerId) return;
+    this.finishPointer(e, true);
+  };
+
+  private readonly onLostPointerCapture = (e: PointerEvent): void => {
+    if (e.pointerId !== this.activePointerId) return;
+    // captureが外部要因で失われた場合は矩形選択を確定せずキャンセルする。
+    this.finishPointer(e, true, false);
+  };
+
+  private readonly onDoubleClick = (e: MouseEvent): void => {
+    if (e.button !== 0 || !this.pendingDoubleClick || !this.host.hasHandler || !this.host.acceptsDoubleClick) {
+      return;
     }
-    this.isDragging = false;
-    this.dragButton = -1;
-  }
+    this.pendingDoubleClick = false;
+    this.host.handleDoubleClick(e);
+    e.preventDefault();
+  };
 
-  private onCanvasWheel(e: WheelEvent): void {
+  private readonly onWheel = (e: WheelEvent): void => {
     e.preventDefault();
     this.host.zoomCamera(e.deltaY);
+  };
+
+  private readonly onContextMenu = (e: MouseEvent): void => e.preventDefault();
+  private readonly onWindowResize = (): void => this.host.resize();
+
+  private finishPointer(e: PointerEvent, cancelled: boolean, releaseCapture = true): void {
+    const pointerId = this.activePointerId;
+    const button = this.dragButton;
+    const distance = cancelled ? 0 : this.maxDragDistance;
+    this.clearPointerState();
+
+    if (button === 0 && this.host.hasHandler) this.host.handleEndDrag(e, distance);
+    if (releaseCapture && pointerId !== null) {
+      try {
+        if (this.canvas.hasPointerCapture(pointerId)) this.canvas.releasePointerCapture(pointerId);
+      } catch {
+        // capture未設定でも終了状態は既に解放済み。
+      }
+    }
+  }
+
+  private clearPointerState(): void {
+    this.activePointerId = null;
+    this.dragButton = -1;
+    this.maxDragDistance = 0;
   }
 }

@@ -20,10 +20,6 @@ export class Node extends DocumentData {
   }
 
   compareTo(other: Node): number {
-    return compareNumbers(
-      [this.pos.z, other.pos.z],
-      [this.pos.y, other.pos.y],
-      [this.pos.x, other.pos.x],
-    );
+    return compareNumbers([this.pos.z, other.pos.z], [this.pos.y, other.pos.y], [this.pos.x, other.pos.x]);
   }
 }

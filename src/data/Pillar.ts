@@ -15,10 +15,6 @@ export class Pillar extends Member {
   compareTo(other: Pillar): number {
     const z1 = Math.min(this.nodeI!.pos.z, this.nodeJ!.pos.z);
     const z2 = Math.min(other.nodeI!.pos.z, other.nodeJ!.pos.z);
-    return compareNumbers(
-      [z1, z2],
-      [this.nodeI!.pos.y, other.nodeI!.pos.y],
-      [this.nodeI!.pos.x, other.nodeI!.pos.x],
-    );
+    return compareNumbers([z1, z2], [this.nodeI!.pos.y, other.nodeI!.pos.y], [this.nodeI!.pos.x, other.nodeI!.pos.x]);
   }
 }

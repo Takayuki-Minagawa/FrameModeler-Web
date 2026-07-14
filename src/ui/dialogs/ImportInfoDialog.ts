@@ -1,11 +1,6 @@
 import type { ImportMetadata, ImportPropertyTable, ImportSummary, ImportWarning } from '../../data/ImportMetadata';
 import { t } from '../../i18n';
-import {
-  addCloseButtonRow,
-  createDialogBox,
-  createModalOverlay,
-  showModal,
-} from './DialogUtil';
+import { addCloseButtonRow, createDialogBox, createModalOverlay, showModal } from './DialogUtil';
 
 export async function showImportInfoDialog(metadata: ImportMetadata): Promise<boolean> {
   const overlay = createModalOverlay();
@@ -31,11 +26,24 @@ function addSummary(container: HTMLElement, summary: ImportSummary): void {
   addSectionTitle(container, t('import.summary'));
   const rows = [
     [t('import.modelName'), summary.modelName || '-'],
-    [t('import.mode'), summary.importMode ? t(summary.importMode === 'generated' ? 'importMode.generated' : 'importMode.source') : summary.format],
+    [
+      t('import.mode'),
+      summary.importMode
+        ? t(summary.importMode === 'generated' ? 'importMode.generated' : 'importMode.source')
+        : summary.format,
+    ],
     [t('import.sourceJson'), summary.sourceJson || '-'],
     [t('import.analysisProfile'), summary.analysisProfile || '-'],
-    [t('import.units'), Object.entries(summary.units).map(([k, v]) => `${k}=${v}`).join(', ')],
-    [t('import.counts'), `N:${summary.nodes} B:${summary.beams} C:${summary.pillars} F:${summary.floors} W:${summary.walls} BW:${summary.bearWalls} L:${summary.layers}`],
+    [
+      t('import.units'),
+      Object.entries(summary.units)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', '),
+    ],
+    [
+      t('import.counts'),
+      `N:${summary.nodes} B:${summary.beams} C:${summary.pillars} F:${summary.floors} W:${summary.walls} BW:${summary.bearWalls} L:${summary.layers}`,
+    ],
   ];
   container.appendChild(makeTable([t('import.item'), t('import.value')], rows));
 }
@@ -49,22 +57,18 @@ function addIdMap(container: HTMLElement, summary: ImportSummary): void {
     String(row.appNumber),
     row.detail ?? '',
   ]);
-  container.appendChild(makeTable([
-    t('import.kind'),
-    t('import.type'),
-    t('import.sourceId'),
-    t('import.appNumber'),
-    t('import.detail'),
-  ], rows));
+  container.appendChild(
+    makeTable(
+      [t('import.kind'), t('import.type'), t('import.sourceId'), t('import.appNumber'), t('import.detail')],
+      rows,
+    ),
+  );
 }
 
 function addPropertyTable(container: HTMLElement, title: string, table: ImportPropertyTable): void {
   addSectionTitle(container, title);
   const keys = collectPropertyKeys(table);
-  const rows = Object.entries(table).map(([name, props]) => [
-    name,
-    ...keys.map((key) => formatValue(props[key])),
-  ]);
+  const rows = Object.entries(table).map(([name, props]) => [name, ...keys.map((key) => formatValue(props[key]))]);
   container.appendChild(makeTable([t('name'), ...keys], rows));
 }
 
@@ -76,11 +80,7 @@ function addWarnings(container: HTMLElement, warnings: ImportWarning[]): void {
     container.appendChild(p);
     return;
   }
-  const rows = warnings.map((warning) => [
-    warning.code,
-    warning.path ?? '',
-    warning.message,
-  ]);
+  const rows = warnings.map((warning) => [warning.code, warning.path ?? '', warning.message]);
   container.appendChild(makeTable([t('import.code'), t('import.path'), t('import.message')], rows));
 }
 

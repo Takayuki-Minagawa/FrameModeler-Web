@@ -6,7 +6,7 @@ import { Wall } from '../../data/Wall';
 import { Point3D } from '../../math/Point3D';
 import { t } from '../../i18n';
 import { TwoClickAddHandler } from './TwoClickAddHandler';
-import { createQuadPoints } from './geometry';
+import { createQuadPoints, planNodes } from './geometry';
 
 /**
  * 壁系（壁/耐力壁）追加ハンドラの基底:
@@ -33,21 +33,13 @@ export abstract class AddQuadPlaneHandler extends TwoClickAddHandler<Point3D> {
       const { points, aboveExists } = createQuadPoints(pos, anchor);
 
       if (aboveExists) {
-        const nodes: Node[] = [];
-        for (const p of points) {
-          let n = doc.getNodeAt(p);
-          if (!n) {
-            n = new Node(p);
-            doc.add(n);
-          }
-          nodes.push(n);
-        }
+        const { nodes, additions } = planNodes(points);
 
         if (doc.getPlaneOf(nodes)) {
           alert(this.duplicateMessage());
         } else {
           const plane = this.createPlane(nodes);
-          doc.add(plane);
+          doc.addMany([...additions, plane]);
           if (this.showDialog) this.showDialog(plane);
         }
       }

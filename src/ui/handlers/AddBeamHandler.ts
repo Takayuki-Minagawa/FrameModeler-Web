@@ -1,32 +1,34 @@
 import type { CadView } from '../CadView';
 import { Document } from '../../data/Document';
-import { Node } from '../../data/Node';
 import { Beam } from '../../data/Beam';
-import type { Point3D } from '../../math/Point3D';
+import { Point3D } from '../../math/Point3D';
 import { t } from '../../i18n';
 import { TwoClickAddHandler } from './TwoClickAddHandler';
+import { planNodes } from './geometry';
 
 /** 梁追加ハンドラ: 2クリックでNodeI→NodeJを接続 */
-export class AddBeamHandler extends TwoClickAddHandler<Node> {
-  protected acquireAnchor(pos: Point3D): Node {
-    return Document.instance.getOrCreateNode(pos);
+export class AddBeamHandler extends TwoClickAddHandler<Point3D> {
+  protected acquireAnchor(pos: Point3D): Point3D {
+    return pos.clone();
   }
 
-  protected commit(anchor: Node, pos: Point3D): void {
+  protected commit(anchor: Point3D, pos: Point3D): void {
     const doc = Document.instance;
-    const node = doc.getOrCreateNode(pos);
+    const { nodes, additions } = planNodes([anchor, pos]);
+    const [nodeI, nodeJ] = nodes;
+    if (nodeI === nodeJ) return;
 
-    if (doc.getMemberOf(anchor, node)) {
+    if (doc.getMemberOf(nodeI, nodeJ)) {
       alert(t('msg.memberExists'));
     } else {
-      const beam = new Beam(anchor, node);
-      doc.add(beam);
+      const beam = new Beam(nodeI, nodeJ);
+      doc.addMany([...additions, beam]);
       if (this.showDialog) this.showDialog(beam);
     }
   }
 
-  protected drawPreview(view: CadView, anchor: Node, pos: Point3D): void {
-    view.addPreviewLine(anchor.pos, pos, view.previewColor);
-    view.addPreviewPoint(anchor.pos, view.previewColor);
+  protected drawPreview(view: CadView, anchor: Point3D, pos: Point3D): void {
+    view.addPreviewLine(anchor, pos, view.previewColor);
+    view.addPreviewPoint(anchor, view.previewColor);
   }
 }
