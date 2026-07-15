@@ -29,16 +29,20 @@ export interface ImportCountSummary {
   nodes: number;
   beams: number;
   pillars: number;
+  trusses: number;
+  springs: number;
   floors: number;
   walls: number;
   bearWalls: number;
+  supports: number;
+  constraints: number;
   layers: number;
 }
 
 export interface ImportIdMapRow {
   sourceId: string;
   appNumber: number;
-  kind: 'node' | 'member' | 'plane';
+  kind: 'node' | 'member' | 'plane' | 'constraint';
   type: string;
   detail?: string;
 }

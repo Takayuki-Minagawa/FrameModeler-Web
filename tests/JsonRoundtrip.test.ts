@@ -45,16 +45,40 @@ function actualCounts(): Counts {
   // BearWall extends Plane (not Wall) and Floor extends Plane; Wall is its own
   // class. Use exact constructor checks to avoid instanceof cross-counting.
   const isExact = (d: object, ctor: Function) =>
-    d instanceof (ctor as any) &&
-    (d as { constructor: Function }).constructor === ctor;
+    d instanceof (ctor as any) && (d as { constructor: Function }).constructor === ctor;
   return {
-    nodes: all.filter(d => isExact(d, Node)).length,
-    beams: all.filter(d => isExact(d, Beam)).length,
-    pillars: all.filter(d => isExact(d, Pillar)).length,
-    floors: all.filter(d => isExact(d, Floor)).length,
-    walls: all.filter(d => isExact(d, Wall)).length,
-    bearWalls: all.filter(d => isExact(d, BearWall)).length,
+    nodes: all.filter((d) => isExact(d, Node)).length,
+    beams: all.filter((d) => isExact(d, Beam)).length,
+    pillars: all.filter((d) => isExact(d, Pillar)).length,
+    floors: all.filter((d) => isExact(d, Floor)).length,
+    walls: all.filter((d) => isExact(d, Wall)).length,
+    bearWalls: all.filter((d) => isExact(d, BearWall)).length,
     layers: doc.layers.length,
+  };
+}
+
+function semanticSnapshot() {
+  return {
+    nodes: doc.nodeList.map((node) => ({
+      number: node.number,
+      pos: { x: node.pos.x, y: node.pos.y, z: node.pos.z },
+    })),
+    members: doc.memberList.map((member) => ({
+      type: member.constructor.name,
+      number: member.number,
+      nodeI: member.nodeI?.number,
+      nodeJ: member.nodeJ?.number,
+      section: member.section,
+    })),
+    planes: doc.planeList.map((plane) => ({
+      type: plane.constructor.name,
+      number: plane.number,
+      nodes: plane.nodeList.map((node) => node.number),
+      section: plane.section,
+      weight: plane instanceof Floor || plane instanceof Wall ? plane.weight : undefined,
+      direction: plane instanceof Floor ? plane.direction : undefined,
+    })),
+    layers: doc.layers.map((layer) => ({ name: layer.name, posZ: layer.posZ })),
   };
 }
 
@@ -104,6 +128,18 @@ describe('JSON round trip', () => {
       // further cycles must produce byte-identical output.
       expect(out2).toBe(out1);
       expect(out3).toBe(out2);
+    });
+
+    it(`${sample}: semantic round trip preserves references and model properties`, () => {
+      deserializeJson(readSample(sample));
+      const before = semanticSnapshot();
+      const output = serializeJson();
+      expect(JSON.parse(output).schemaVersion).toBe(2);
+
+      doc.init();
+      deserializeJson(output);
+
+      expect(semanticSnapshot()).toEqual(before);
     });
   }
 });

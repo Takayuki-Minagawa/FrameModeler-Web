@@ -1,4 +1,8 @@
-import type { Layer } from '../ui/Layer';
+import type { Layer } from './Layer';
+
+/** 永続化・検証・UI表示で共有する安定したモデル種別。constructor.nameには依存しない。 */
+export type DocumentDataKind =
+  'node' | 'beam' | 'pillar' | 'truss' | 'spring' | 'support' | 'constraint' | 'floor' | 'wall' | 'bearWall';
 
 /** 削除可否の判定結果 */
 export interface RemovableResult {
@@ -10,6 +14,7 @@ export abstract class DocumentData {
   number: number = 0;
   select: boolean = false;
 
+  abstract readonly kind: DocumentDataKind;
   abstract get typeText(): string;
 
   isRemovable(): RemovableResult {

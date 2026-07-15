@@ -35,12 +35,17 @@ export abstract class Plane extends DocumentData {
     this.nodes.push(n);
   }
 
+  /** Document transaction の復元・一括更新用。入力配列は保持しない。 */
+  setNodes(nodes: ReadonlyArray<Node>): void {
+    this.nodes = [...nodes];
+  }
+
   get ok(): boolean {
     return this.nodes.length > 0;
   }
 
   get center(): Point3D {
-    return Point3D.average(this.nodes.map(n => n.pos));
+    return Point3D.average(this.nodes.map((n) => n.pos));
   }
 
   get range(): Point3D {

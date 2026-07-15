@@ -57,15 +57,21 @@ describe('JSON robustness (I-7/I-8)', () => {
     expect(() => deserializeJson('{ not json')).toThrow(/Invalid JSON document/);
   });
 
-  it('dedupes layers by posZ on load (I-8)', () => {
-    deserializeJson(JSON.stringify({
-      nodes: [],
-      layers: [
-        { name: 'A', posZ: 0 },
-        { name: 'B', posZ: 0 },
-        { name: 'C', posZ: 3000 },
-      ],
-    }));
-    expect(Document.instance.layers.length).toBe(2);
+  it('rejects duplicate layer elevations instead of silently dropping data (I-8)', () => {
+    Document.instance.bulkLoad([new Node(new Point3D(1, 2, 3))], [new Layer(100, 'existing')]);
+    expect(() =>
+      deserializeJson(
+        JSON.stringify({
+          nodes: [],
+          layers: [
+            { name: 'A', posZ: 0 },
+            { name: 'B', posZ: 0 },
+            { name: 'C', posZ: 3000 },
+          ],
+        }),
+      ),
+    ).toThrow(/duplicate layer elevation/);
+    expect(Document.instance.nodeList).toHaveLength(1);
+    expect(Document.instance.layers.map((layer) => layer.name)).toEqual(['existing']);
   });
 });

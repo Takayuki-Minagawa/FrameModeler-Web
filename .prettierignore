@@ -1,0 +1,8 @@
+coverage
+dist
+node_modules
+package-lock.json
+sample-data
+AGENTS.md
+CLAUDE.md
+.claude

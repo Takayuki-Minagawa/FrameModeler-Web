@@ -10,12 +10,11 @@ export enum FloorDirection {
 
 /** 文字列を FloorDirection に変換（不正値は X にフォールバック） */
 export function parseFloorDirection(s: string): FloorDirection {
-  return (Object.values(FloorDirection) as string[]).includes(s)
-    ? (s as FloorDirection)
-    : FloorDirection.X;
+  return (Object.values(FloorDirection) as string[]).includes(s) ? (s as FloorDirection) : FloorDirection.X;
 }
 
 export class Floor extends Plane {
+  readonly kind = 'floor' as const;
   weight: number = 0;
   direction: FloorDirection = FloorDirection.X;
 

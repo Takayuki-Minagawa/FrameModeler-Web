@@ -31,12 +31,21 @@ export abstract class Member extends DocumentData {
   }
 
   getNode(index: number): Node | null {
-    return index === 0 ? this.nodeI : this.nodeJ;
+    if (index === 0) return this.nodeI;
+    if (index === 1) return this.nodeJ;
+    throw new RangeError(`Member node index must be 0 or 1, got ${index}`);
   }
 
   setNode(index: number, n: Node): void {
-    if (index === 0) this.nodeI = n;
-    else this.nodeJ = n;
+    if (index === 0) {
+      this.nodeI = n;
+      return;
+    }
+    if (index === 1) {
+      this.nodeJ = n;
+      return;
+    }
+    throw new RangeError(`Member node index must be 0 or 1, got ${index}`);
   }
 
   protected zRange(): { bottom: number; top: number } | null {

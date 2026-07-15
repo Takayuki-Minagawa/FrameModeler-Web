@@ -5,12 +5,24 @@ import { Wall } from '../../data/Wall';
 import { BearWall } from '../../data/BearWall';
 import { t } from '../../i18n';
 import {
-  createModalOverlay, createDialogBox, addFormRow, addNodeRow, addSelectRow, addButtonRow,
+  createModalOverlay,
+  createDialogBox,
+  addFormRow,
+  addNodeRow,
+  addSelectRow,
+  addButtonRow,
+  readFiniteNumber,
   wireDialog,
 } from './DialogUtil';
 
 /** Plane（床/壁/耐力壁）編集ダイアログ */
-export async function showPlaneDialog(plane: Plane): Promise<boolean> {
+export interface PlaneDialogChanges {
+  section: string;
+  weight?: number;
+  direction?: FloorDirection;
+}
+
+export async function showPlaneDialog(plane: Plane): Promise<PlaneDialogChanges | null> {
   const overlay = createModalOverlay();
 
   let title = t('dialog.planeProps');
@@ -59,40 +71,26 @@ export async function showPlaneDialog(plane: Plane): Promise<boolean> {
   const { okBtn, cancelBtn } = addButtonRow(box);
   overlay.appendChild(box);
 
-  let changed = false;
+  let result: PlaneDialogChanges | null = null;
   const confirmed = await wireDialog(overlay, okBtn, cancelBtn, () => {
-    const nextSection = inputSection.value;
-    if (plane.section !== nextSection) {
-      plane.section = nextSection;
-      changed = true;
-    }
+    const nextWeight = inputWeight ? readFiniteNumber(inputWeight) : null;
+    if (inputWeight && nextWeight === null) return false;
 
+    const next: PlaneDialogChanges = { section: inputSection.value };
     if (plane instanceof Floor) {
-      if (inputWeight) {
-        const nextWeight = parseFloat(inputWeight.value) || 0;
-        if (plane.weight !== nextWeight) {
-          plane.weight = nextWeight;
-          changed = true;
-        }
-      }
-      if (selectDirection) {
-        const nextDirection = selectDirection.value as FloorDirection;
-        if (plane.direction !== nextDirection) {
-          plane.direction = nextDirection;
-          changed = true;
-        }
-      }
+      if (nextWeight !== null) next.weight = nextWeight;
+      if (selectDirection) next.direction = selectDirection.value as FloorDirection;
+    } else if (plane instanceof Wall && nextWeight !== null) {
+      next.weight = nextWeight;
     }
 
-    if (plane instanceof Wall && inputWeight) {
-      const nextWeight = parseFloat(inputWeight.value) || 0;
-      if (plane.weight !== nextWeight) {
-        plane.weight = nextWeight;
-        changed = true;
-      }
-    }
+    const changed =
+      plane.section !== next.section ||
+      (plane instanceof Floor && (plane.weight !== next.weight || plane.direction !== next.direction)) ||
+      (plane instanceof Wall && plane.weight !== next.weight);
+    if (changed) result = next;
 
     return true;
   });
-  return confirmed && changed;
+  return confirmed ? result : null;
 }

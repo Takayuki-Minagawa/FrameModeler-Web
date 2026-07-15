@@ -11,14 +11,20 @@ export const CAD = {
   PREVIEW_POINT_SIZE: 8,
   /** 部材線の太さ */
   MEMBER_LINEWIDTH: 2,
-  /** ヒットテスト範囲 = cameraDistance に対する比率 */
-  HIT_RANGE_RATIO: 0.008,
+  /** Node/線材のヒットテスト許容幅（CSS px） */
+  HIT_TOLERANCE_PX: 8,
+  /** 支点glyphはNodeより大きいため、標準許容幅へ掛ける倍率 */
+  SUPPORT_HIT_TOLERANCE_FACTOR: 1.5,
+  /** オブジェクトスナップの許容幅（CSS px） */
+  OBJECT_SNAP_TOLERANCE_PX: 10,
   /** 柱円の半径 = cameraDistance に対する比率 */
   PILLAR_RADIUS_RATIO: 0.005,
   /** ダブルクリック判定の時間しきい値(ms) */
   DBLCLICK_MS: 400,
   /** ダブルクリック判定の距離しきい値(px) */
   DBLCLICK_PX: 10,
+  /** クリックとドラッグを区別する移動量（CSS px） */
+  DRAG_THRESHOLD_PX: 4,
   /** 3D回転の感度 */
   ROTATE_SENSITIVITY: 0.01,
   /** パン量の分母（大きいほど鈍い） */
@@ -32,6 +38,10 @@ export const CAD = {
   GRID_RANGE_RATIO: 2,
   /** グリッド線の最大本数（片方向あたり）。ズームアウト時の過剰生成を抑制 */
   MAX_GRID_LINES: 400,
+  /** 高DPI端末でGPU負荷が過大にならないようにするpixel ratio上限 */
+  MAX_PIXEL_RATIO: 2,
+  /** fit時にモデル外周へ確保する余白率 */
+  FIT_PADDING: 1.15,
 } as const;
 
 /** Canvas 描画に使う色（テーマ別） */
@@ -46,6 +56,11 @@ export interface CadPalette {
   node: number;
   /** 通常の部材（梁・柱・耐力壁） */
   member: number;
+  truss: number;
+  spring: number;
+  support: number;
+  constraint: number;
+  mass: number;
   /** 壁 */
   wall: number;
   /** プレビュー（要素追加中の仮表示） */
@@ -62,6 +77,11 @@ const LIGHT_PALETTE: CadPalette = {
   select: 0xff0000,
   node: 0x0000ff,
   member: 0x0000ff,
+  truss: 0xd97706,
+  spring: 0x8b5cf6,
+  support: 0xdc2626,
+  constraint: 0x0891b2,
+  mass: 0x7c3aed,
   wall: 0x00aa00,
   preview: 0xff0000,
   selectionRect: 0x0000ff,
@@ -75,6 +95,11 @@ const DARK_PALETTE: CadPalette = {
   select: 0xff6666,
   node: 0x66aaff,
   member: 0x66aaff,
+  truss: 0xffb347,
+  spring: 0xc4a7ff,
+  support: 0xff6b6b,
+  constraint: 0x5ee7f2,
+  mass: 0xd8b4fe,
   wall: 0x44bb66,
   preview: 0xff6666,
   selectionRect: 0x66aaff,
@@ -82,8 +107,7 @@ const DARK_PALETTE: CadPalette = {
 
 /** 現在のテーマがダークかどうか（main.ts の data-theme 属性に追従） */
 export function isDarkTheme(): boolean {
-  return typeof document !== 'undefined'
-    && document.documentElement.dataset.theme === 'dark';
+  return typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
 }
 
 /** 現在のテーマに対応するパレットを返す */
