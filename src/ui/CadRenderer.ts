@@ -254,7 +254,10 @@ export class CadRenderer {
       const projected = camera.worldToScreen(support.node.pos, rect);
       if (!projected) continue;
       const distance = projected.distanceTo(pointer);
-      if (distance <= tolerancePx * 1.5 && (!closestSupport || distance < closestSupport.distance)) {
+      if (
+        distance <= tolerancePx * CAD.SUPPORT_HIT_TOLERANCE_FACTOR &&
+        (!closestSupport || distance < closestSupport.distance)
+      ) {
         closestSupport = { data: support, distance };
       }
     }

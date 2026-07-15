@@ -8,7 +8,7 @@ import type { SelectionKind } from './selection/SelectionFilter';
 import { Member } from './data/Member';
 import { Plane } from './data/Plane';
 import { CadView, type CadOperationStatus } from './ui/CadView';
-import type { DocumentSnapshot } from './history/DocumentHistory';
+import type { DocumentSnapshot, HistoryState } from './history/DocumentHistory';
 import { clearDraft } from './history/DraftStore';
 import { showNodeDialog } from './ui/dialogs/NodeDialog';
 import { showMemberDialog } from './ui/dialogs/MemberDialog';
@@ -19,9 +19,17 @@ import { showModelValidationDialog } from './ui/dialogs/ModelValidationDialog';
 import { showHelpDialog } from './ui/dialogs/HelpDialog';
 import { showImportInfoDialog } from './ui/dialogs/ImportInfoDialog';
 import { showCalcYamlImportModeDialog } from './ui/dialogs/CalcYamlImportModeDialog';
-import { t, initI18n, toggleLocale, getLocale, subscribeLocaleChanged, type MessageKey } from './i18n';
+import {
+  t,
+  initI18n,
+  toggleLocale,
+  getLocale,
+  subscribeLocaleChanged,
+  translateHistoryLabel,
+  type MessageKey,
+} from './i18n';
 import { APP_VERSION } from './version';
-import { getObjectSnapCandidateKind, type ObjectSnapCandidateKind } from './ui/ObjectSnapEngine';
+import { getObjectSnapCandidateKind, getObjectSnapKindInfo, type ObjectSnapCandidateKind } from './ui/ObjectSnapEngine';
 import { Floor } from './data/Floor';
 import { Wall } from './data/Wall';
 import { DeleteSelectionCommand, UpdatePropertiesCommand } from './commands/DocumentCommands';
@@ -71,7 +79,7 @@ updateLangButton();
 
 async function showDataDialog(data: DocumentData): Promise<void> {
   try {
-    await performTrackedChange('プロパティ編集', async () => {
+    await performTrackedChange('history.propertyEdit', async () => {
       if (data instanceof Node) {
         const changes = await showNodeDialog(data);
         if (changes) {
@@ -334,7 +342,7 @@ document.getElementById('btn-delete')?.addEventListener('click', () => {
   )
     return;
 
-  void performTrackedChange('選択要素削除', () => doc.execute(new DeleteSelectionCommand(selected)))
+  void performTrackedChange('history.deleteSelection', () => doc.execute(new DeleteSelectionCommand(selected)))
     .then(() => refreshDocumentUi(false))
     .catch((error) => {
       alert(localized('削除できませんでした:\n', 'Delete failed:\n') + (error as Error).message);
@@ -369,6 +377,7 @@ function updateLangButton(): void {
 subscribeLocaleChanged(() => {
   layerController.render();
   updateStatusInfo();
+  refreshHistoryControls(history.state);
 });
 
 // ========== チェックボックス ==========
@@ -566,32 +575,7 @@ function updateStatusInfo(): void {
   const nodes = doc.nodeList.length;
   const members = doc.memberList.length;
   const planes = doc.planeList.length;
-  const snapLabels: Record<Exclude<ObjectSnapCandidateKind, 'none'>, string> = getLocale() === 'ja'
-    ? {
-        node: '節点',
-        endpoint: '端点',
-        midpoint: '中点',
-        intersection: '交点',
-        grid: 'グリッド',
-        horizontal: '画面水平',
-        vertical: '画面鉛直',
-        'axis-x': 'X軸',
-        'axis-y': 'Y軸',
-        orthogonal: '直交',
-      }
-    : {
-        node: 'Node',
-        endpoint: 'Endpoint',
-        midpoint: 'Midpoint',
-        intersection: 'Intersection',
-        grid: 'Grid',
-        horizontal: 'Horizontal',
-        vertical: 'Vertical',
-        'axis-x': 'X axis',
-        'axis-y': 'Y axis',
-        orthogonal: 'Orthogonal',
-      };
-  const snapStatus = snapKind === 'none' ? '' : `Snap: ${snapLabels[snapKind]}`;
+  const snapStatus = snapKind === 'none' ? '' : `${t('snap')}: ${t(getObjectSnapKindInfo(snapKind).labelKey)}`;
   const operationText = operationStatus ? t(operationStatusMessageKeys[operationStatus]) : '';
   const details = [operationText, workPlaneStatus, snapStatus].filter(Boolean).join(' / ');
   statusInfo.textContent = `N:${nodes} M:${members} P:${planes} S:${selectedCount}${details ? ` — ${details}` : ''}`;
@@ -637,18 +621,20 @@ redoButton?.addEventListener('click', () => {
   appController.redo();
 });
 
-appController.subscribeHistory((state) => {
+function refreshHistoryControls(state: HistoryState): void {
   document.title = `FrameModeler Web v${APP_VERSION}${state.isDirty ? ' *' : ''}`;
   statusVersion.textContent = `Ver.${APP_VERSION}${state.isDirty ? ' *' : ''}`;
   if (undoButton) {
     undoButton.disabled = !state.canUndo;
-    undoButton.title = state.undoLabel ? `Undo: ${state.undoLabel}` : 'Undo';
+    undoButton.title = state.undoLabel ? `${t('undo')}: ${translateHistoryLabel(state.undoLabel)}` : t('undo');
   }
   if (redoButton) {
     redoButton.disabled = !state.canRedo;
-    redoButton.title = state.redoLabel ? `Redo: ${state.redoLabel}` : 'Redo';
+    redoButton.title = state.redoLabel ? `${t('redo')}: ${translateHistoryLabel(state.redoLabel)}` : t('redo');
   }
-});
+}
+
+appController.subscribeHistory(refreshHistoryControls);
 
 document.addEventListener('keydown', (e) => {
   if (document.querySelector('.modal-overlay')) return;

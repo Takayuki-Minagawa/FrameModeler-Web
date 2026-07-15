@@ -13,6 +13,8 @@ export const CAD = {
   MEMBER_LINEWIDTH: 2,
   /** Node/線材のヒットテスト許容幅（CSS px） */
   HIT_TOLERANCE_PX: 8,
+  /** 支点glyphはNodeより大きいため、標準許容幅へ掛ける倍率 */
+  SUPPORT_HIT_TOLERANCE_FACTOR: 1.5,
   /** オブジェクトスナップの許容幅（CSS px） */
   OBJECT_SNAP_TOLERANCE_PX: 10,
   /** 柱円の半径 = cameraDistance に対する比率 */

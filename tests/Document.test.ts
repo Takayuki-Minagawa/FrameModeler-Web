@@ -166,6 +166,22 @@ describe('Document', () => {
     expect(kinds).toEqual(['layers']);
   });
 
+  it('rejects rename or reposition on a locked layer while allowing an explicit unlock', () => {
+    const layer = new Layer(0, 'locked');
+    doc.addLayer(layer);
+    doc.updateLayer(layer, { locked: true });
+
+    expect(() => doc.updateLayer(layer, { name: 'renamed' })).toThrow(/locked layer/);
+    expect(() => doc.updateLayer(layer, { posZ: 3000 })).toThrow(/locked layer/);
+    expect(() => doc.updateLayer(layer, { name: 'renamed', locked: false })).toThrow(/locked layer/);
+    expect(layer).toMatchObject({ name: 'locked', posZ: 0, visible: true, locked: true });
+
+    expect(doc.updateLayer(layer, { visible: false, locked: false })).toBe(true);
+    expect(layer).toMatchObject({ visible: false, locked: false });
+    expect(doc.updateLayer(layer, { name: 'renamed', posZ: 3000 })).toBe(true);
+    expect(layer).toMatchObject({ name: 'renamed', posZ: 3000 });
+  });
+
   it('sceneCenter is the average of node positions', () => {
     // empty -> origin
     expect(doc.sceneCenter.equals(new Point3D(0, 0, 0))).toBe(true);
@@ -214,6 +230,17 @@ describe('Document', () => {
     doc.remove(beam);
     expect(() => doc.remove(a)).not.toThrow();
     expect(doc.nodeList.length).toBe(1);
+  });
+
+  it('removeMany reports a friendly reference error before deleting a referenced node', () => {
+    const a = new Node(new Point3D(0, 0, 0));
+    const b = new Node(new Point3D(1000, 0, 0));
+    const beam = new Beam(a, b);
+    doc.addMany([a, b, beam]);
+
+    expect(() => doc.removeMany([a])).toThrow('削除できないデータ: 他のデータから参照されているノードは削除できません');
+    expect(doc.nodeList).toEqual([a, b]);
+    expect(doc.memberList).toEqual([beam]);
   });
 
   it('rejects a member that references a Node outside the Document', () => {

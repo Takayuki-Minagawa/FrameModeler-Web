@@ -31,4 +31,5 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
       - name: Browser E2E and visual regression
-        run: npm run test:e2e
+        # npm run check already produced dist; exercise that exact production bundle.
+        run: npm run test:e2e:built

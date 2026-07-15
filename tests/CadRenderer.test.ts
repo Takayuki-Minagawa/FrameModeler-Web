@@ -310,6 +310,26 @@ describe('CadRenderer picking and grid', () => {
     expect(renderer.hitTest2D(slaveScreen.x, slaveScreen.y, camera, rect, 10, (data) => data instanceof Support)).toBe(
       support,
     );
+    expect(
+      renderer.hitTest2D(
+        slaveScreen.x + 10 * CAD.SUPPORT_HIT_TOLERANCE_FACTOR - 0.1,
+        slaveScreen.y,
+        camera,
+        rect,
+        10,
+        (data) => data instanceof Support,
+      ),
+    ).toBe(support);
+    expect(
+      renderer.hitTest2D(
+        slaveScreen.x + 10 * CAD.SUPPORT_HIT_TOLERANCE_FACTOR + 0.1,
+        slaveScreen.y,
+        camera,
+        rect,
+        10,
+        (data) => data instanceof Support,
+      ),
+    ).toBeNull();
     expect(renderer.hitTest2D(slaveScreen.x, slaveScreen.y, camera, rect, 10, (data) => data instanceof Node)).toBe(
       slave,
     );

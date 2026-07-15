@@ -3,6 +3,7 @@ import type { DocumentSnapshot } from '../src/history/DocumentHistory';
 import {
   clearDraftFromStorage,
   clearDraftFamilyFromStorage,
+  createDraftRuntimeIdentity,
   loadDraftFromStorage,
   saveDraftToStorage,
   type DraftStorage,
@@ -23,6 +24,36 @@ class MemoryDraftStorage implements DraftStorage {
 
   async remove(keys: readonly string[]): Promise<void> {
     for (const key of keys) this.records.delete(key);
+  }
+}
+
+class FirstListBarrierStorage extends MemoryDraftStorage {
+  private listCount = 0;
+  private releaseInitialLists!: () => void;
+  private readonly initialLists = new Promise<void>((resolve) => {
+    this.releaseInitialLists = resolve;
+  });
+
+  override async list(): Promise<DraftStorageEntry[]> {
+    const entries = await super.list();
+    this.listCount += 1;
+    if (this.listCount <= 2) {
+      if (this.listCount === 2) this.releaseInitialLists();
+      await this.initialLists;
+    }
+    return entries;
+  }
+}
+
+class MemoryIdentityStorage {
+  constructor(private value: string | null) {}
+
+  getItem(): string | null {
+    return this.value;
+  }
+
+  setItem(_key: string, value: string): void {
+    this.value = value;
   }
 }
 
@@ -54,7 +85,46 @@ function storedDrafts(storage: MemoryDraftStorage): StoredDraft[] {
   );
 }
 
+function seedDraft(storage: MemoryDraftStorage, tabId: string, generation: number, savedAt: number): StoredDraft {
+  const draftKey = `active:${tabId}:generation:${generation}`;
+  const draft: StoredDraft = {
+    ...snapshot(`${tabId}-${generation}`),
+    savedAt,
+    formatVersion: 2,
+    draftKey,
+    tabId,
+    generation,
+  };
+  storage.records.set(draftKey, draft);
+  return draft;
+}
+
 describe('DraftStore generation management', () => {
+  it('rotates duplicated session identities and avoids concurrent generation-key collisions', async () => {
+    const duplicateA = new MemoryIdentityStorage('inherited-tab');
+    const duplicateB = new MemoryIdentityStorage('inherited-tab');
+    const identityA = createDraftRuntimeIdentity(duplicateA, () => 'writer-a');
+    const identityB = createDraftRuntimeIdentity(duplicateB, () => 'writer-b');
+
+    expect(identityA).toEqual({ tabId: 'writer-a', inheritedTabId: 'inherited-tab' });
+    expect(identityB).toEqual({ tabId: 'writer-b', inheritedTabId: 'inherited-tab' });
+    expect(duplicateA.getItem()).toBe('writer-a');
+    expect(duplicateB.getItem()).toBe('writer-b');
+
+    const storage = new FirstListBarrierStorage();
+    const [draftA, draftB] = await Promise.all([
+      saveDraftToStorage(storage, snapshot('duplicate-a'), { tabId: identityA.tabId, now: () => 100 }),
+      saveDraftToStorage(storage, snapshot('duplicate-b'), { tabId: identityB.tabId, now: () => 100 }),
+    ]);
+
+    expect(draftA.draftKey).not.toBe(draftB.draftKey);
+    expect(
+      storedDrafts(storage)
+        .map((draft) => draft.filename)
+        .sort(),
+    ).toEqual(['duplicate-a.json', 'duplicate-b.json']);
+  });
+
   it('keeps at most three monotonically numbered generations per tab', async () => {
     const storage = new MemoryDraftStorage();
 
@@ -76,7 +146,7 @@ describe('DraftStore generation management', () => {
     await saveDraftToStorage(storage, snapshot('old-session'), { tabId: 'old-tab', now: () => 100 });
     await saveDraftToStorage(storage, snapshot('other-session'), { tabId: 'other-tab', now: () => 200 });
 
-    const restored = await loadDraftFromStorage(storage, { tabId: 'new-tab' });
+    const restored = await loadDraftFromStorage(storage, { tabId: 'new-tab', now: () => 300 });
 
     expect(restored?.filename).toBe('other-session.json');
     expect(restored?.tabId).toBe('other-tab');
@@ -91,7 +161,7 @@ describe('DraftStore generation management', () => {
     });
     storage.records.set(second.draftKey, { ...second, json: '{broken' });
 
-    const restored = await loadDraftFromStorage(storage, { tabId: 'new-tab' });
+    const restored = await loadDraftFromStorage(storage, { tabId: 'new-tab', now: () => 300 });
 
     expect(restored?.draftKey).toBe(first.draftKey);
     expect(restored?.filename).toBe('valid.json');
@@ -102,24 +172,52 @@ describe('DraftStore generation management', () => {
     const storage = new MemoryDraftStorage();
     for (const tabId of ['tab-a', 'tab-b']) {
       for (let generation = 1; generation <= 4; generation++) {
-        const key = `active:${tabId}:generation:${generation}`;
-        storage.records.set(key, {
-          ...snapshot(`${tabId}-${generation}`),
-          savedAt: generation * 100,
-          formatVersion: 2,
-          draftKey: key,
-          tabId,
-          generation,
-        } satisfies StoredDraft);
+        seedDraft(storage, tabId, generation, generation * 100);
       }
     }
 
-    await loadDraftFromStorage(storage, { tabId: 'new-tab' });
+    await loadDraftFromStorage(storage, { tabId: 'new-tab', now: () => 500 });
 
     expect(storedDrafts(storage).filter((draft) => draft.tabId === 'tab-a')).toHaveLength(3);
     expect(storedDrafts(storage).filter((draft) => draft.tabId === 'tab-b')).toHaveLength(3);
     expect(storage.records.has('active:tab-a:generation:1')).toBe(false);
     expect(storage.records.has('active:tab-b:generation:1')).toBe(false);
+  });
+
+  it('garbage-collects abandoned tab families by TTL and global family cap', async () => {
+    const storage = new MemoryDraftStorage();
+    seedDraft(storage, 'expired-a', 1, 100);
+    seedDraft(storage, 'expired-b', 1, 200);
+    seedDraft(storage, 'recent-a', 1, 9_500);
+    seedDraft(storage, 'recent-b', 1, 9_600);
+    seedDraft(storage, 'newest', 1, 9_700);
+
+    const restored = await loadDraftFromStorage(storage, {
+      tabId: 'new-tab',
+      now: () => 10_000,
+      familyTtlMs: 1_000,
+      maxFamilies: 2,
+    });
+
+    expect(restored?.tabId).toBe('newest');
+    expect([...new Set(storedDrafts(storage).map((draft) => draft.tabId))].sort()).toEqual(['newest', 'recent-b']);
+  });
+
+  it('keeps the newest valid recovery family even when every family exceeds the TTL', async () => {
+    const storage = new MemoryDraftStorage();
+    seedDraft(storage, 'older', 1, 100);
+    const newest = seedDraft(storage, 'newest', 1, 200);
+
+    const restored = await loadDraftFromStorage(storage, {
+      tabId: 'new-tab',
+      now: () => 10_000,
+      familyTtlMs: 0,
+      maxFamilies: 1,
+    });
+
+    expect(restored?.draftKey).toBe(newest.draftKey);
+    expect(storedDrafts(storage)).toHaveLength(1);
+    expect(storage.records.has(newest.draftKey)).toBe(true);
   });
 
   it('loads a legacy per-tab record and normalizes its generation for migration compatibility', async () => {
@@ -132,7 +230,7 @@ describe('DraftStore generation management', () => {
       draftKey,
     });
 
-    const restored = await loadDraftFromStorage(storage, { tabId: 'new-tab' });
+    const restored = await loadDraftFromStorage(storage, { tabId: 'new-tab', now: () => 200 });
 
     expect(restored).toMatchObject({ draftKey, tabId: 'legacy-tab', generation: 0, formatVersion: 1 });
   });

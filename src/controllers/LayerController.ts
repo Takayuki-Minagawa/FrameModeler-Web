@@ -3,9 +3,9 @@ import type { Document } from '../data/Document';
 import { Layer } from '../data/Layer';
 import type { CadView } from '../ui/CadView';
 import { showLayerDialog } from '../ui/dialogs/LayerDialog';
-import { getLocale, t } from '../i18n';
+import { getLocale, t, type HistoryMessageKey } from '../i18n';
 
-type TrackChange = <T>(label: string, action: () => T | Promise<T>) => Promise<T>;
+type TrackChange = <T>(label: HistoryMessageKey, action: () => T | Promise<T>) => Promise<T>;
 
 export interface LayerControllerOptions {
   document: Document;
@@ -151,7 +151,7 @@ export class LayerController {
     this.options.cancelOperation();
     const layer = await showLayerDialog();
     if (!layer) return;
-    await this.run('レイヤー追加', () => {
+    await this.run('history.addLayer', () => {
       if (!this.options.document.execute(new AddLayerCommand(layer))) throw new Error(t('msg.duplicateLayer'));
       this.options.document.shownLayer = layer;
     });
@@ -165,7 +165,7 @@ export class LayerController {
     }
     const edited = await showLayerDialog(layer);
     if (!edited) return;
-    await this.run('レイヤー編集', () => {
+    await this.run('history.editLayer', () => {
       this.options.document.execute(
         new UpdateLayersCommand('レイヤー編集', (document) => {
           if (!document.updateLayer(layer, { name: edited.name, posZ: edited.posZ })) {
@@ -195,7 +195,7 @@ export class LayerController {
       )
     )
       return;
-    await this.run('レイヤー削除', () => {
+    await this.run('history.removeLayer', () => {
       this.options.document.execute(
         new UpdateLayersCommand('レイヤー削除', (document) => void document.removeLayer(layer)),
       );
@@ -207,16 +207,28 @@ export class LayerController {
     if (!source) return;
     const suggestion = new Layer(this.suggestAdjacentZ(source, 1), `${source.name} copy`, {
       visible: source.visible,
-      locked: false,
+      locked: source.locked,
     });
     const target = await showLayerDialog(suggestion);
     if (!target) return;
-    await this.run('レイヤー複製', () => {
+    await this.run('history.duplicateLayer', () => {
       this.options.document.execute(
         new UpdateLayersCommand('レイヤー複製', (document) => {
-          if (!document.addLayer(target)) throw new Error(t('msg.duplicateLayer'));
-          this.options.copyContents(source, target);
-          document.shownLayer = target;
+          // copyLayerContentsはlocked targetへの書込みを拒否する。複製結果としての
+          // lock状態は保持しつつ、同一transaction内のコピー中だけ解除する。
+          const requestedLocked = target.locked;
+          target.locked = false;
+          try {
+            if (!document.addLayer(target)) throw new Error(t('msg.duplicateLayer'));
+            this.options.copyContents(source, target);
+            if (requestedLocked && !document.updateLayer(target, { locked: true })) {
+              throw new Error('Layer not found');
+            }
+            document.shownLayer = target;
+          } catch (error) {
+            target.locked = requestedLocked;
+            throw error;
+          }
         }),
       );
     });
@@ -235,7 +247,7 @@ export class LayerController {
       alert(this.localized('コピー先レイヤーはロックされています。', 'The target layer is locked.'));
       return;
     }
-    await this.run('レイヤー要素コピー', () => {
+    await this.run('history.copyLayerElements', () => {
       this.options.document.execute(
         new UpdateLayersCommand('レイヤー要素コピー', () => this.options.copyContents(source, target)),
       );
@@ -243,7 +255,7 @@ export class LayerController {
   }
 
   private async toggleVisibility(layer: Layer): Promise<void> {
-    await this.run('レイヤー表示変更', () => {
+    await this.run('history.layerVisibility', () => {
       this.options.document.execute(
         new UpdateLayersCommand(
           'レイヤー表示変更',
@@ -254,7 +266,7 @@ export class LayerController {
   }
 
   private async toggleLocked(layer: Layer): Promise<void> {
-    await this.run('レイヤーロック変更', () => {
+    await this.run('history.layerLock', () => {
       this.options.document.execute(
         new UpdateLayersCommand(
           'レイヤーロック変更',
@@ -265,7 +277,7 @@ export class LayerController {
   }
 
   private async isolate(layer: Layer): Promise<void> {
-    await this.run('レイヤー隔離', () => {
+    await this.run('history.isolateLayer', () => {
       this.options.document.execute(
         new UpdateLayersCommand('レイヤー隔離', (document) => void document.isolateLayer(layer)),
       );
@@ -273,12 +285,12 @@ export class LayerController {
   }
 
   private async showAll(): Promise<void> {
-    await this.run('全レイヤー表示', () => {
+    await this.run('history.showAllLayers', () => {
       this.options.document.execute(new UpdateLayersCommand('全レイヤー表示', (document) => document.showAllLayers()));
     });
   }
 
-  private async run(label: string, action: () => void): Promise<void> {
+  private async run(label: HistoryMessageKey, action: () => void): Promise<void> {
     // レイヤー変更は作業面・編集可否・表示対象を変えるため、どの入口からでも
     // mutation直前に作図中のanchor/previewを共通境界で破棄する。
     this.options.cancelOperation();

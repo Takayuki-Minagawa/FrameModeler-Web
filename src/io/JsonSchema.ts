@@ -421,7 +421,9 @@ function validateStringTable(value: unknown, path: string): Record<string, strin
 
 function validatePropertyTable(value: unknown, path: string): ImportPropertyTable {
   const row = asRecord(value, path);
-  const result: ImportPropertyTable = {};
+  // `__proto__` 等を通常objectへ代入するとprototype setterが発火するため、
+  // 外部入力を保持する名前付きtableはnull-prototype辞書として構築する。
+  const result = Object.create(null) as ImportPropertyTable;
   for (const [key, item] of Object.entries(row)) {
     result[key] = cloneJsonRecord(asRecord(item, `${path}.${key}`), `${path}.${key}`);
   }

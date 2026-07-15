@@ -74,6 +74,17 @@ const messages = {
   'snap.constraint.orthogonal': { ja: '直交', en: 'Orthogonal' },
   'snap.constraint.none': { ja: 'なし', en: 'None' },
   'snap.cycle': { ja: '候補切替', en: 'Cycle snap' },
+  'snap.none': { ja: 'なし', en: 'None' },
+  'snap.node': { ja: '節点', en: 'Node' },
+  'snap.endpoint': { ja: '端点', en: 'Endpoint' },
+  'snap.midpoint': { ja: '中点', en: 'Midpoint' },
+  'snap.intersection': { ja: '交点', en: 'Intersection' },
+  'snap.grid': { ja: 'グリッド', en: 'Grid' },
+  'snap.horizontal': { ja: '画面水平', en: 'Horizontal' },
+  'snap.vertical': { ja: '画面鉛直', en: 'Vertical' },
+  'snap.axisX': { ja: 'X軸', en: 'X axis' },
+  'snap.axisY': { ja: 'Y軸', en: 'Y axis' },
+  'snap.orthogonal': { ja: '直交', en: 'Orthogonal' },
   'coordinate.distance': { ja: '距離', en: 'Distance' },
   'coordinate.angle': { ja: '角度', en: 'Angle' },
   'display.labels': { ja: 'ラベル', en: 'Labels' },
@@ -223,6 +234,27 @@ const messages = {
   'validation.warning': { ja: '警告', en: 'Warning' },
   'validation.selectTargets': { ja: '対象を選択', en: 'Select targets' },
 
+  // History labels
+  'history.cadEdit': { ja: 'CAD編集', en: 'CAD edit' },
+  'history.propertyEdit': { ja: 'プロパティ編集', en: 'Edit properties' },
+  'history.moveNode': { ja: '節点移動', en: 'Move nodes' },
+  'history.addNode': { ja: '節点追加', en: 'Add node' },
+  'history.addBeam': { ja: '梁追加', en: 'Add beam' },
+  'history.addPillar': { ja: '柱追加', en: 'Add pillar' },
+  'history.addFloor': { ja: '床追加', en: 'Add floor' },
+  'history.addWall': { ja: '壁追加', en: 'Add wall' },
+  'history.addBearWall': { ja: '耐力壁追加', en: 'Add bearing wall' },
+  'history.deleteSelection': { ja: '選択要素削除', en: 'Delete selected elements' },
+  'history.addLayer': { ja: 'レイヤー追加', en: 'Add layer' },
+  'history.editLayer': { ja: 'レイヤー編集', en: 'Edit layer' },
+  'history.removeLayer': { ja: 'レイヤー削除', en: 'Remove layer' },
+  'history.duplicateLayer': { ja: 'レイヤー複製', en: 'Duplicate layer' },
+  'history.copyLayerElements': { ja: 'レイヤー要素コピー', en: 'Copy layer elements' },
+  'history.layerVisibility': { ja: 'レイヤー表示変更', en: 'Change layer visibility' },
+  'history.layerLock': { ja: 'レイヤーロック変更', en: 'Change layer lock' },
+  'history.isolateLayer': { ja: 'レイヤー隔離', en: 'Isolate layer' },
+  'history.showAllLayers': { ja: '全レイヤー表示', en: 'Show all layers' },
+
   // Help dialog
   'help.title': { ja: '操作マニュアル', en: 'Operation Manual' },
   'help.tools': { ja: 'ツール操作', en: 'Tool Operations' },
@@ -300,11 +332,18 @@ const messages = {
 
 /** 翻訳キー（messages のキーに限定。タイポはコンパイルエラーになる） */
 export type MessageKey = keyof typeof messages;
+export type HistoryMessageKey = Extract<MessageKey, `history.${string}`>;
 
 export function t(key: MessageKey): string {
   const entry = messages[key];
   if (!entry) return key;
   return entry[currentLocale] ?? entry.ja ?? key;
+}
+
+/** 履歴へ保存した安定キーを現在localeへ変換し、任意ラベルはそのまま表示する。 */
+export function translateHistoryLabel(label: string): string {
+  if (label.startsWith('history.') && label in messages) return t(label as MessageKey);
+  return label;
 }
 
 export function getLocale(): Locale {

@@ -1,4 +1,5 @@
 import type { DocumentData } from '../data/DocumentData';
+import type { HistoryMessageKey } from '../i18n';
 import { SelectionFilter } from '../selection/SelectionFilter';
 import type { CadView } from '../ui/CadView';
 import { AddBeamHandler } from '../ui/handlers/AddBeamHandler';
@@ -70,17 +71,17 @@ export class ToolController {
     this.cadView.handler = this.createHandler(this.activeToolId);
   }
 
-  historyLabel(): string {
-    const labels: Partial<Record<ToolButtonId, string>> = {
-      'btn-move': '節点移動',
-      'btn-add-node': '節点追加',
-      'btn-add-beam': '梁追加',
-      'btn-add-pillar': '柱追加',
-      'btn-add-floor': '床追加',
-      'btn-add-wall': '壁追加',
-      'btn-add-bearwall': '耐力壁追加',
+  historyLabel(): HistoryMessageKey {
+    const labels: Partial<Record<ToolButtonId, HistoryMessageKey>> = {
+      'btn-move': 'history.moveNode',
+      'btn-add-node': 'history.addNode',
+      'btn-add-beam': 'history.addBeam',
+      'btn-add-pillar': 'history.addPillar',
+      'btn-add-floor': 'history.addFloor',
+      'btn-add-wall': 'history.addWall',
+      'btn-add-bearwall': 'history.addBearWall',
     };
-    return labels[this.activeToolId] ?? 'CAD編集';
+    return labels[this.activeToolId] ?? 'history.cadEdit';
   }
 
   private createHandler(id: ToolButtonId): ICadMouseHandler {

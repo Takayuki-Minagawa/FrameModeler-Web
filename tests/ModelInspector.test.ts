@@ -59,6 +59,10 @@ describe('inspectModel', () => {
     expect(errors.map((issue) => issue.path)).toEqual(
       expect.arrayContaining([expect.stringMatching(/^nodes\[/), expect.stringMatching(/^data\[/)]),
     );
+    const massIssue = errors.find((issue) => issue.path?.includes('.mass.values'));
+    expect(massIssue?.messageJa).toContain('該当する値または参照関係を確認してください');
+    expect(massIssue?.messageJa).not.toContain('must be non-negative');
+    expect(massIssue?.messageEn).toContain('must be non-negative');
   });
 
   it('suppresses validation duplicates caused by the same repeated object', () => {

@@ -1141,7 +1141,7 @@ function readCoord(value: unknown, label: string): Point3D {
 
 function readStringTable(value: unknown, label: string): Record<string, string> {
   const r = asRecord(value, label);
-  const out: Record<string, string> = {};
+  const out = Object.create(null) as Record<string, string>;
   for (const [key, v] of Object.entries(r)) {
     out[key] = asString(v, `${label}.${key}`);
   }
@@ -1150,7 +1150,8 @@ function readStringTable(value: unknown, label: string): Record<string, string> 
 
 function toPropertyTable(value: unknown, label: string): ImportPropertyTable {
   const r = readOptionalRecord(value, label);
-  const out: ImportPropertyTable = {};
+  // YAML由来のmaterial/section名をprototype setterへ渡さない。
+  const out = Object.create(null) as ImportPropertyTable;
   for (const [key, raw] of Object.entries(r)) {
     const prop = asRecord(raw, `${label}.${key}`);
     out[key] = { ...prop };

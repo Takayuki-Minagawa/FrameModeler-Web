@@ -7,6 +7,9 @@ vi.mock('../src/ui/dialogs/LayerDialog', () => ({ showLayerDialog: vi.fn() }));
 import { LayerController } from '../src/controllers/LayerController';
 import { Document } from '../src/data/Document';
 import { Layer } from '../src/data/Layer';
+import { copyLayerContents } from '../src/data/LayerCopy';
+import { Node } from '../src/data/Node';
+import { Point3D } from '../src/math/Point3D';
 import type { CadView } from '../src/ui/CadView';
 import { showLayerDialog } from '../src/ui/dialogs/LayerDialog';
 
@@ -61,26 +64,67 @@ describe('LayerController mutation boundary', () => {
     };
 
     showLayerDialogMock.mockResolvedValueOnce(new Layer(6000, '3F', { id: 'layer-duplicate' }));
-    await expectBoundary('レイヤー複製', () =>
+    await expectBoundary('history.duplicateLayer', () =>
       document.querySelector<HTMLButtonElement>('#btn-duplicate-layer')!.click(),
     );
 
-    await expectBoundary('レイヤー要素コピー', () =>
+    await expectBoundary('history.copyLayerElements', () =>
       document.querySelector<HTMLButtonElement>('#btn-copy-layer-down')!.click(),
     );
     expect(copyContents).toHaveBeenCalled();
 
-    await expectBoundary('レイヤー表示変更', () =>
+    await expectBoundary('history.layerVisibility', () =>
       document.querySelector<HTMLButtonElement>('li[data-layer-id="layer-lower"] [data-action="visibility"]')!.click(),
     );
-    await expectBoundary('レイヤーロック変更', () =>
+    await expectBoundary('history.layerLock', () =>
       document.querySelector<HTMLButtonElement>('li[data-layer-id="layer-lower"] [data-action="lock"]')!.click(),
     );
-    await expectBoundary('レイヤー隔離', () =>
+    await expectBoundary('history.isolateLayer', () =>
       document.querySelector<HTMLButtonElement>('li[data-layer-id="layer-upper"] [data-action="isolate"]')!.click(),
     );
-    await expectBoundary('全レイヤー表示', () =>
+    await expectBoundary('history.showAllLayers', () =>
       document.querySelector<HTMLButtonElement>('#btn-show-all-layers')!.click(),
     );
+  });
+
+  it('duplicates the source visibility and lock state without copying into a locked target', async () => {
+    const source = new Layer(0, '1F', { id: 'layer-source', visible: false });
+    doc.addLayer(source);
+    doc.shownLayer = source;
+    doc.add(new Node(new Point3D(250, 500, 0)));
+    doc.updateLayer(source, { locked: true });
+    const copyContents = vi.fn((copySource: Layer, target: Layer) => {
+      expect(target.locked).toBe(false);
+      copyLayerContents(copySource, target, doc);
+    });
+    const controller = new LayerController({
+      document: doc,
+      cadView: { render: vi.fn(), renderElements: vi.fn() } as unknown as CadView,
+      list: document.querySelector<HTMLUListElement>('#layer-list')!,
+      coordinateZ: document.querySelector<HTMLInputElement>('#coordinate-z')!,
+      cancelOperation: vi.fn(),
+      trackChange: async (_label, action) => await action(),
+      copyContents,
+      root: document,
+    });
+    controller.connect();
+    showLayerDialogMock.mockImplementationOnce(async (suggestion) => {
+      expect(suggestion).toMatchObject({ visible: false, locked: true });
+      return new Layer(suggestion!.posZ, suggestion!.name, {
+        id: 'layer-duplicate-state',
+        visible: suggestion!.visible,
+        locked: suggestion!.locked,
+      });
+    });
+
+    document.querySelector<HTMLButtonElement>('#btn-duplicate-layer')!.click();
+
+    await vi.waitFor(() => expect(copyContents).toHaveBeenCalledOnce());
+    expect(doc.shownLayer).toMatchObject({
+      id: 'layer-duplicate-state',
+      visible: false,
+      locked: true,
+    });
+    expect(doc.nodeList.some((node) => node.pos.x === 250 && node.pos.y === 500 && node.pos.z === 3000)).toBe(true);
   });
 });

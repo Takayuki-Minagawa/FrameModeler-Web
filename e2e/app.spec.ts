@@ -70,11 +70,16 @@ test('座標入力の編集をUndo/Redoできる', async ({ page }) => {
   await addNode(page, 125, 75, 0);
   await expect(page.locator('#status-info')).toContainText('N:1 M:0 P:0');
   await expect(page.locator('#btn-undo')).toBeEnabled();
+  await expect(page.locator('#btn-undo')).toHaveAttribute('title', '元に戻す: 節点追加');
+
+  await page.locator('#btn-lang').click();
+  await expect(page.locator('#btn-undo')).toHaveAttribute('title', 'Undo: Add node');
 
   await page.locator('#btn-undo').click();
   await expect(page.locator('#status-info')).toContainText('N:0 M:0 P:0');
   await expect(page.locator('#cad-canvas')).toHaveAttribute('data-selected-count', '0');
   await expect(page.locator('#btn-redo')).toBeEnabled();
+  await expect(page.locator('#btn-redo')).toHaveAttribute('title', 'Redo: Add node');
   await expect(page.locator('#status-version')).not.toContainText('*');
 
   await page.locator('#btn-redo').click();
@@ -132,7 +137,7 @@ test('作図anchor・失敗理由を表示し、取消時にoperation statusを�
 test('DeleteとUndo後に選択件数をcanvas・statusへ再同期する', async ({ page }) => {
   await addNode(page, 0, 0, 0);
   await expect(page.locator('#status-info')).toContainText('N:1 M:0 P:0');
-  await expect(page.locator('#btn-undo')).toHaveAttribute('title', 'Undo: 節点追加');
+  await expect(page.locator('#btn-undo')).toHaveAttribute('title', '元に戻す: 節点追加');
   await page.locator('#btn-select').click();
   const canvas = page.locator('#cad-canvas');
   const box = await canvas.boundingBox();
@@ -145,7 +150,7 @@ test('DeleteとUndo後に選択件数をcanvas・statusへ再同期する', asyn
   await expect(acceptedDelete).resolves.toMatch(/削除|Delete/);
   await expect(page.locator('#status-info')).toContainText('N:0 M:0 P:0 S:0');
   await expect(canvas).toHaveAttribute('data-selected-count', '0');
-  await expect(page.locator('#btn-undo')).toHaveAttribute('title', 'Undo: 選択要素削除');
+  await expect(page.locator('#btn-undo')).toHaveAttribute('title', '元に戻す: 選択要素削除');
 
   await page.locator('#btn-undo').click();
   await expect(page.locator('#status-info')).toContainText('N:1 M:0 P:0 S:0');

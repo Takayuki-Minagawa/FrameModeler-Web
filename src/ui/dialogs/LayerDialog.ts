@@ -25,7 +25,10 @@ export async function showLayerDialog(layer?: Layer): Promise<Layer | null> {
   await wireDialog(overlay, okBtn, cancelBtn, () => {
     const posZ = readFiniteNumber(inputPosZ);
     if (posZ === null) return false;
-    result = new Layer(posZ, inputName.value || t('msg.defaultLayerName'));
+    result = new Layer(posZ, inputName.value || t('msg.defaultLayerName'), {
+      visible: layer?.visible,
+      locked: layer?.locked,
+    });
     return true;
   });
 

@@ -25,7 +25,21 @@ export interface DraftStorage {
 export interface DraftStoreContext {
   tabId: string;
   maxGenerations?: number;
+  maxFamilies?: number;
+  familyTtlMs?: number;
   now?: () => number;
+}
+
+export interface DraftIdentityStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+export interface DraftRuntimeIdentity {
+  /** このページロードだけが書き込む一意なID。 */
+  tabId: string;
+  /** reload/タブ複製元がsessionStorageに残したID。復旧候補の追跡にのみ使う。 */
+  inheritedTabId: string | null;
 }
 
 const DB_NAME = 'framemodeler-web';
@@ -35,9 +49,11 @@ const DRAFT_KEY_PREFIX = 'active:';
 const GENERATION_SEPARATOR = ':generation:';
 const TAB_ID_KEY = 'framemodeler-draft-tab-id';
 export const MAX_DRAFT_GENERATIONS = 3;
+export const MAX_DRAFT_FAMILIES = 20;
+export const DRAFT_FAMILY_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 
 let mutationQueue: Promise<void> = Promise.resolve();
-let fallbackTabId = '';
+let runtimeIdentity: DraftRuntimeIdentity | null = null;
 
 /** IndexedDB が利用できない環境では静かに無効化する。 */
 export function saveDraft(snapshot: DocumentSnapshot): Promise<boolean> {
@@ -82,18 +98,17 @@ export async function saveDraftToStorage(
   snapshot: DocumentSnapshot,
   context: DraftStoreContext,
 ): Promise<StoredDraft> {
-  const maxGenerations = readMaxGenerations(context.maxGenerations);
   assertTabId(context.tabId);
   assertRestorableSnapshot(snapshot);
+  const requestedTime = readTimestamp(context.now);
+  const inspectionPolicy = readInspectionPolicy(context, requestedTime);
 
   const entries = await storage.list();
-  const inspection = inspectEntries(entries, maxGenerations);
+  const inspection = inspectEntries(entries, inspectionPolicy);
   const currentDrafts = inspection.retained.filter((draft) => draft.tabId === context.tabId);
   const maxGeneration = currentDrafts.reduce((maximum, draft) => Math.max(maximum, draft.generation), 0);
   if (maxGeneration >= Number.MAX_SAFE_INTEGER) throw new Error('Draft generation limit exceeded');
 
-  const requestedTime = (context.now ?? Date.now)();
-  if (!Number.isFinite(requestedTime) || requestedTime < 0) throw new Error('Invalid draft timestamp');
   const previousSavedAt = currentDrafts.reduce((maximum, draft) => Math.max(maximum, draft.savedAt), -1);
   const generation = maxGeneration + 1;
   const savedAt = Math.max(requestedTime, previousSavedAt + 1);
@@ -111,7 +126,7 @@ export async function saveDraftToStorage(
 
   const nextEntries = entries.filter((entry) => entry.key !== draftKey);
   nextEntries.push({ key: draftKey, value: draft });
-  const nextInspection = inspectEntries(nextEntries, maxGenerations);
+  const nextInspection = inspectEntries(nextEntries, inspectionPolicy);
   await bestEffortRemove(storage, nextInspection.purgeKeys);
   return draft;
 }
@@ -121,15 +136,14 @@ export async function loadDraftFromStorage(
   storage: DraftStorage,
   context: DraftStoreContext,
 ): Promise<StoredDraft | null> {
-  const maxGenerations = readMaxGenerations(context.maxGenerations);
   assertTabId(context.tabId);
-  const inspection = inspectEntries(await storage.list(), maxGenerations);
+  const inspection = inspectEntries(await storage.list(), readInspectionPolicy(context, readTimestamp(context.now)));
   await bestEffortRemove(storage, inspection.purgeKeys);
 
   const latestByTab = new Map<string, StoredDraft>();
   for (const draft of inspection.retained) {
     const latest = latestByTab.get(draft.tabId);
-    if (!latest || compareGenerations(draft, latest) < 0) latestByTab.set(draft.tabId, draft);
+    if (!latest || compareDraftRecency(draft, latest) < 0) latestByTab.set(draft.tabId, draft);
   }
 
   return (
@@ -169,7 +183,15 @@ interface DraftInspection {
   purgeKeys: string[];
 }
 
-function inspectEntries(entries: readonly DraftStorageEntry[], maxGenerations: number): DraftInspection {
+interface DraftInspectionPolicy {
+  currentTabId: string;
+  maxGenerations: number;
+  maxFamilies: number;
+  familyTtlMs: number;
+  now: number;
+}
+
+function inspectEntries(entries: readonly DraftStorageEntry[], policy: DraftInspectionPolicy): DraftInspection {
   const draftsByTab = new Map<string, StoredDraft[]>();
   const purgeKeys = new Set<string>();
 
@@ -185,11 +207,36 @@ function inspectEntries(entries: readonly DraftStorageEntry[], maxGenerations: n
     draftsByTab.set(draft.tabId, drafts);
   }
 
-  const retained: StoredDraft[] = [];
-  for (const drafts of draftsByTab.values()) {
+  const retainedByTab = new Map<string, StoredDraft[]>();
+  for (const [tabId, drafts] of draftsByTab) {
     drafts.sort(compareGenerations);
-    retained.push(...drafts.slice(0, maxGenerations));
-    for (const stale of drafts.slice(maxGenerations)) purgeKeys.add(stale.draftKey);
+    retainedByTab.set(tabId, drafts.slice(0, policy.maxGenerations));
+    for (const stale of drafts.slice(policy.maxGenerations)) purgeKeys.add(stale.draftKey);
+  }
+
+  const latestByTab = [...retainedByTab.entries()]
+    .map(([tabId, drafts]) => ({ tabId, draft: [...drafts].sort(compareDraftRecency)[0] }))
+    .filter((candidate): candidate is { tabId: string; draft: StoredDraft } => candidate.draft !== undefined)
+    .sort((left, right) => compareDraftRecency(left.draft, right.draft));
+
+  // TTLを超えたfamilyも、全体最新の有効draftだけは必ず残して復旧経路を失わない。
+  const protectedTabs = new Set<string>();
+  if (latestByTab[0]) protectedTabs.add(latestByTab[0].tabId);
+  if (retainedByTab.has(policy.currentTabId)) protectedTabs.add(policy.currentTabId);
+
+  const cutoff = policy.now - policy.familyTtlMs;
+  const eligibleTabs = latestByTab.filter(({ tabId, draft }) => protectedTabs.has(tabId) || draft.savedAt >= cutoff);
+  const retainedTabs = new Set(protectedTabs);
+  for (const { tabId } of eligibleTabs) {
+    if (retainedTabs.has(tabId)) continue;
+    if (retainedTabs.size >= policy.maxFamilies) break;
+    retainedTabs.add(tabId);
+  }
+
+  const retained: StoredDraft[] = [];
+  for (const [tabId, drafts] of retainedByTab) {
+    if (retainedTabs.has(tabId)) retained.push(...drafts);
+    else for (const draft of drafts) purgeKeys.add(draft.draftKey);
   }
   return { retained, purgeKeys: [...purgeKeys] };
 }
@@ -283,6 +330,12 @@ function compareGenerations(left: StoredDraft, right: StoredDraft): number {
   return right.draftKey.localeCompare(left.draftKey);
 }
 
+function compareDraftRecency(left: StoredDraft, right: StoredDraft): number {
+  if (left.savedAt !== right.savedAt) return right.savedAt - left.savedAt;
+  if (left.generation !== right.generation) return right.generation - left.generation;
+  return right.draftKey.localeCompare(left.draftKey);
+}
+
 function compareRecoveryCandidates(left: StoredDraft, right: StoredDraft, currentTab: string): number {
   if (left.savedAt !== right.savedAt) return right.savedAt - left.savedAt;
   const leftIsCurrent = left.tabId === currentTab;
@@ -326,6 +379,34 @@ function readMaxGenerations(value: number | undefined): number {
   return result;
 }
 
+function readMaxFamilies(value: number | undefined): number {
+  const result = value ?? MAX_DRAFT_FAMILIES;
+  if (!Number.isSafeInteger(result) || result < 1) throw new Error('Invalid draft family limit');
+  return result;
+}
+
+function readFamilyTtlMs(value: number | undefined): number {
+  const result = value ?? DRAFT_FAMILY_TTL_MS;
+  if (!Number.isFinite(result) || result < 0) throw new Error('Invalid draft family TTL');
+  return result;
+}
+
+function readTimestamp(now: (() => number) | undefined): number {
+  const result = (now ?? Date.now)();
+  if (!Number.isFinite(result) || result < 0) throw new Error('Invalid draft timestamp');
+  return result;
+}
+
+function readInspectionPolicy(context: DraftStoreContext, now: number): DraftInspectionPolicy {
+  return {
+    currentTabId: context.tabId,
+    maxGenerations: readMaxGenerations(context.maxGenerations),
+    maxFamilies: readMaxFamilies(context.maxFamilies),
+    familyTtlMs: readFamilyTtlMs(context.familyTtlMs),
+    now,
+  };
+}
+
 async function bestEffortRemove(storage: DraftStorage, keys: readonly string[]): Promise<void> {
   if (keys.length === 0) return;
   try {
@@ -335,19 +416,44 @@ async function bestEffortRemove(storage: DraftStorage, keys: readonly string[]):
   }
 }
 
-function currentTabId(): string {
-  let tabId: string;
+/**
+ * sessionStorageは「タブを複製」で値まで複製されるため、保存済みIDをwriter IDとして再利用しない。
+ * ページロードごとに新IDへローテーションし、旧IDのdraftは全family走査で復旧する。
+ */
+export function createDraftRuntimeIdentity(
+  storage: DraftIdentityStorage | null | undefined,
+  idFactory: () => string = createId,
+): DraftRuntimeIdentity {
+  let inheritedTabId: string | null = null;
   try {
-    tabId = sessionStorage.getItem(TAB_ID_KEY) ?? '';
-    if (!tabId) {
-      tabId = createId();
-      sessionStorage.setItem(TAB_ID_KEY, tabId);
-    }
+    inheritedTabId = storage?.getItem(TAB_ID_KEY) ?? null;
   } catch {
-    fallbackTabId ||= createId();
-    tabId = fallbackTabId;
+    // sessionStorageを読めなくてもmemory上のwriter IDで保存を継続する。
   }
-  return tabId;
+
+  let tabId = idFactory();
+  if (tabId === inheritedTabId) tabId = idFactory();
+  assertTabId(tabId);
+  if (tabId === inheritedTabId) throw new Error('Draft writer id was not rotated');
+
+  try {
+    storage?.setItem(TAB_ID_KEY, tabId);
+  } catch {
+    // private browsing等で書き込めなくても、このページ内ではmodule cacheがIDを保持する。
+  }
+  return { tabId, inheritedTabId };
+}
+
+function currentTabId(): string {
+  if (runtimeIdentity) return runtimeIdentity.tabId;
+  let storage: DraftIdentityStorage | null = null;
+  try {
+    if (typeof sessionStorage !== 'undefined') storage = sessionStorage;
+  } catch {
+    // global自体にアクセスできない環境ではmemory identityへfallbackする。
+  }
+  runtimeIdentity = createDraftRuntimeIdentity(storage);
+  return runtimeIdentity.tabId;
 }
 
 function createId(): string {

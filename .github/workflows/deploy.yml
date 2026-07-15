@@ -1,8 +1,9 @@
 name: Deploy to GitHub Pages
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -16,9 +17,16 @@ concurrency:
 
 jobs:
   build:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -26,10 +34,24 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      # workflow_run is admitted only after CI (including Playwright) succeeds.
+      # A manual deployment runs the same complete gate before publishing.
       - name: Quality, coverage, build and bundle budget
+        if: github.event_name == 'workflow_dispatch'
         run: npm run check
       - name: Audit high-severity dependencies
+        if: github.event_name == 'workflow_dispatch'
         run: npm audit --audit-level=high
+      - name: Install Playwright Chromium
+        if: github.event_name == 'workflow_dispatch'
+        run: npx playwright install --with-deps chromium
+      - name: Browser E2E and visual regression
+        if: github.event_name == 'workflow_dispatch'
+        run: npm run test:e2e:built
+      - name: Build the CI-verified commit
+        if: github.event_name == 'workflow_run'
+        run: npm run build
 
       - uses: actions/upload-pages-artifact@v3
         with:

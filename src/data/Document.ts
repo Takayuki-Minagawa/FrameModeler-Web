@@ -162,6 +162,10 @@ export class Document {
   removeMany(data: ReadonlyArray<DocumentData>): void {
     const removals = new Set(data.filter((item) => this.dataList.includes(item)));
     if (removals.size === 0) return;
+    for (const item of removals) {
+      const { removable, reason } = item instanceof Node ? this.checkNodeRemovable(item, removals) : item.isRemovable();
+      if (!removable) throw new Error('削除できないデータ: ' + reason);
+    }
     this.commitDataCandidate(this.dataList.filter((item) => !removals.has(item)));
   }
 
@@ -588,6 +592,11 @@ export class Document {
   /** レイヤー名/高さを検証・再整列し、1 transactionとして通知する。 */
   updateLayer(layer: Layer, changes: { name?: string; posZ?: number; visible?: boolean; locked?: boolean }): boolean {
     if (!this._layers.includes(layer)) return false;
+    const renamesLockedLayer = changes.name !== undefined && changes.name !== layer.name;
+    const repositionsLockedLayer = changes.posZ !== undefined && changes.posZ !== layer.posZ;
+    if (layer.locked && (renamesLockedLayer || repositionsLockedLayer)) {
+      throw new Error('Cannot rename or reposition a locked layer');
+    }
     this.transaction(() => {
       if (changes.name !== undefined) layer.name = changes.name;
       if (changes.posZ !== undefined) layer.posZ = changes.posZ;
@@ -727,8 +736,9 @@ export class Document {
   }
 
   /** Node削除可能チェック用: 参照元があるかチェック */
-  checkNodeRemovable(node: Node): RemovableResult {
+  checkNodeRemovable(node: Node, pendingRemovals: ReadonlySet<DocumentData> = new Set()): RemovableResult {
     for (const data of this.dataList) {
+      if (pendingRemovals.has(data)) continue;
       if (
         (data instanceof Member || data instanceof Plane || data instanceof Support || data instanceof Constraint) &&
         data.isReferring(node)

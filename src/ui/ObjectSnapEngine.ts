@@ -1,5 +1,6 @@
 import type { Member } from '../data/Member';
 import type { Node } from '../data/Node';
+import type { MessageKey } from '../i18n';
 import { Point3D } from '../math/Point3D';
 
 /** ステータス表示や将来のglyph描画で利用するスナップ種別。 */
@@ -27,7 +28,7 @@ export type ObjectSnapGlyph =
 export interface ObjectSnapKindInfo {
   readonly kind: ObjectSnapCandidateKind;
   /** i18n層で翻訳するための安定キー。 */
-  readonly labelKey: string;
+  readonly labelKey: MessageKey;
   /** i18n未接続の利用者向け英語fallback。 */
   readonly label: string;
   readonly glyph: ObjectSnapGlyph;

@@ -57,13 +57,13 @@ npm run lint             # ESLint
 npm run format:check     # Prettier差分確認
 npm test                 # 単体・DOMテスト
 npm run test:coverage    # カバレッジと閾値確認
-npm run test:e2e         # Chromium E2E・visual regression
-npm run test:e2e:update  # visual baseline更新
+npm run test:e2e         # 本番buildをpreviewするChromium E2E・visual regression
+npm run test:e2e:update  # 本番buildでvisual baseline更新
 npm run check:bundle     # JS chunk / 合計サイズbudget確認
 npm run check            # format / 型検査 / lint / unit / coverage / build / bundle budget
 ```
 
-Pull Request と `main` への push では CI が `npm run check`、high 以上の依存監査、Playwright E2E と screenshot 比較を実行します。GitHub Pages の deploy も同じ型検査・テスト・coverage・build・bundle budget・監査を通過した成果物だけを公開します。
+Pull Request と `main` への push では CI が `npm run check`、high 以上の依存監査、本番buildに対する Playwright E2E と screenshot 比較を実行します。GitHub Pages の deploy は `main` の CI 成功後にだけ起動し、検証済みcommitを再buildして公開します。手動deployでも同じ品質ゲートを省略しません。
 
 ## 操作方法
 
@@ -162,7 +162,7 @@ YAML / JSON から読み込んだ Truss、Spring、Support、Constraint は専�
 - 選択状態だけの変更は編集履歴や未保存判定に含めません。
 - 保存済み状態との差があると、ブラウザタイトルとステータスのバージョン表示に `*` が付きます。
 - 未保存状態で New / Open / ブラウザ終了を行う場合は確認します。Open と削除は失敗時に元状態へ戻す atomic 操作です。
-- 未保存モデルは一定時間後に IndexedDB へタブごと最大 3 世代の draft として保存されます。次回起動時は旧セッションを含む最新の有効世代を提示し、最新世代が破損していても直前の有効世代へフォールバックします。復旧または破棄した系列は再提示されません。
+- 未保存モデルは一定時間後に IndexedDB へページ単位で最大 3 世代の draft として保存されます。writer ID はページロードごとに再生成されるため、ブラウザの「タブを複製」でも保存キーが競合しません。次回起動時は旧セッションを含む最新の有効世代を提示し、最新世代が破損していても直前の有効世代へフォールバックします。復旧または破棄した系列は再提示されません。放置された系列は 30 日または 20 系列の上限で整理し、現在の系列と最新の有効 draft は保護します。
 
 ## モデル検証
 
@@ -280,11 +280,11 @@ scripts/                    # bundle size budget
 
 ## 品質基準
 
-- Vitest: 31 ファイル・287 テスト
-- coverage 閾値: statements / functions / lines 75%、branches 60%（実測 77.03% / 78.21% / 79.72% / 66.26%）
+- Vitest: 33 ファイル・300 テスト
+- coverage 閾値: statements / functions / lines 75%、branches 60%（実測 77.85% / 78.88% / 80.61% / 66.83%）
 - Playwright: sample 読込、dirty New / Open、Undo / Redo、2D / 3D 選択、操作状態・選択数同期、resize / theme、WebGL screenshot の 8 テスト
 - bundle budget: 1 chunk 525 KiB 以下、JavaScript 合計 850 KiB 以下
-- 現在の本番 build: app 249.23 kB + 97.39 kB、Three.js 506.59 kB（合計 853,214 bytes）
+- 現在の本番 build: app 252.71 kB + 97.39 kB、Three.js 506.59 kB（合計 856,691 bytes）
 - app version は `package.json` を単一ソースとし、Vite が画面表示と HTML title へ注入
 
 全レビュー項目の実装根拠は [CODE_REVIEW_AND_ROADMAP.md](CODE_REVIEW_AND_ROADMAP.md) を参照してください。

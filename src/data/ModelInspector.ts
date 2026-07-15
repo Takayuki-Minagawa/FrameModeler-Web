@@ -29,7 +29,7 @@ export function inspectModel(doc: Document): ModelIssue[] {
       severity: 'error',
       code: 'MODEL_INVALID',
       path: validation.path,
-      messageJa: `モデル不変条件に違反しています: ${validation.message}`,
+      messageJa: `モデル不変条件に違反しています（${validation.path}）。該当する値または参照関係を確認してください。`,
       messageEn: `The model violates an invariant: ${validation.message}`,
       targets: targetFromPath(allData, validation.path),
     });

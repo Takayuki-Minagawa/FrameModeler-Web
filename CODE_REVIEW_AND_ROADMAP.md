@@ -2,6 +2,7 @@
 
 - レビュー日: 2026-07-14
 - 実装反映日: 2026-07-14
+- PRレビュー反映日: 2026-07-15
 - 対象: `src/`、`tests/`、`index.html`、Vite/TypeScript/Vitest設定、GitHub Pages workflow
 - 前提: `Document` のシングルトン、X=右・Y=奥・Z=上、mm単位、静的ホスティングという既存方針は維持する
 
@@ -37,19 +38,39 @@
 
 ## 検証結果
 
-以下は 2026-07-14 の最終統合時点の検証基準と実測である。
+以下は 2026-07-15 のPRレビュー反映後の検証基準と実測である。
 
-| 確認項目               | 結果 | 補足                                                                                                               |
-| ---------------------- | ---: | ------------------------------------------------------------------------------------------------------------------ |
-| `npm run check`        | 成功 | Prettier、app / test 型検査、ESLint、Vitest、coverage、Vite build、bundle budget                                   |
-| `npm test`             | 成功 | 31 ファイル・287 テスト                                                                                            |
-| `npm run test:e2e`     | 成功 | Chromium で sample 読込、dirty New / Open、Undo / Redo、2D / 3D 選択、状態同期、resize / theme、visual の 8 テスト |
-| coverage threshold     | 成功 | 閾値 statements / functions / lines 75%、branches 60%。実測 77.03% / 78.21% / 79.72% / 66.26%                      |
-| `npm run format:check` | 成功 | 対象ファイルはすべて Prettier 準拠                                                                                 |
-| `npm audit`            | 成功 | high 以上の既知脆弱性 0 件                                                                                         |
-| bundle budget          | 成功 | 3 chunks、JavaScript 合計 853,214 bytes。上限は 1 chunk 525 KiB / 合計 850 KiB                                     |
+| 確認項目                | 結果 | 補足                                                                                                               |
+| ----------------------- | ---: | ------------------------------------------------------------------------------------------------------------------ |
+| `npm run check`         | 成功 | Prettier、app / test 型検査、ESLint、Vitest、coverage、Vite build、bundle budget                                   |
+| `npm run test:coverage` | 成功 | 33 ファイル・300 テスト                                                                                            |
+| `npm run test:e2e`      | 成功 | Chromium で sample 読込、dirty New / Open、Undo / Redo、2D / 3D 選択、状態同期、resize / theme、visual の 8 テスト |
+| coverage threshold      | 成功 | 閾値 statements / functions / lines 75%、branches 60%。実測 77.85% / 78.88% / 80.61% / 66.83%                      |
+| `npm run format:check`  | 成功 | 対象ファイルはすべて Prettier 準拠                                                                                 |
+| `npm audit`             | 成功 | high 以上の既知脆弱性 0 件                                                                                         |
+| bundle budget           | 成功 | 3 chunks、JavaScript 合計 856,691 bytes。上限は 1 chunk 525 KiB / 合計 850 KiB                                     |
 
-本番 build は app chunk 249.23 kB / 97.39 kB と Three.js chunk 506.59 kB に分離した。app version は `package.json` を単一ソースとし、Vite がランタイム表示と HTML title に注入する。
+本番 build は app chunk 252.71 kB / 97.39 kB と Three.js chunk 506.59 kB に分離した。app version は `package.json` を単一ソースとし、Vite がランタイム表示と HTML title に注入する。
+
+## PRレビュー追補（2026-07-15）
+
+PR #6 に投稿されたレビュー本文の実行可能な13項目をすべて反映した。インラインレビュー・スレッドはなく、以下を回帰テストと品質ゲートへ追加した。
+
+|   # | 指摘                                         | 対応結果                                                                                                                              | 主な実装・テスト                                                                                                                                                                                                             |
+| --: | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|   1 | 外部tableのprototype汚染                     | JSON / YAML のunits・materials・sectionsをnull-prototype辞書で構築し、`__proto__` / `constructor` / `prototype`を通常データとして隔離 | [JsonSchema.ts](src/io/JsonSchema.ts)、[CalcYamlDeserializer.ts](src/io/CalcYamlDeserializer.ts)、[JsonValidation.test.ts](tests/JsonValidation.test.ts)、[CalcYamlDeserializer.test.ts](tests/CalcYamlDeserializer.test.ts) |
+|   2 | locked layerをdomain APIから改名・移動できる | `Document.updateLayer`で改名・高さ変更を拒否し、表示変更と明示的なlock解除だけを許可                                                  | [Document.ts](src/data/Document.ts)、[Document.test.ts](tests/Document.test.ts)                                                                                                                                              |
+|   3 | Pages deployがE2E成功を待たない              | deployを`CI`の成功した`main` pushの`workflow_run`へ限定し、検証済みSHAをcheckout。手動deployにも全品質ゲートを適用                    | [ci.yml](.github/workflows/ci.yml)、[deploy.yml](.github/workflows/deploy.yml)                                                                                                                                               |
+|   4 | 複製タブでdraft keyが競合する                | ページロードごとにwriter IDをローテーションし、同時保存でも別keyを使用                                                                | [DraftStore.ts](src/history/DraftStore.ts)、[DraftStore.test.ts](tests/DraftStore.test.ts)                                                                                                                                   |
+|   5 | 履歴・検証・Snapのi18n漏れ                   | `history.*` / `snap.*`キーへ集約し、Undo / Redoと検証dialogをlocale変更へ即時追随。日本語検証文から英語Validator本文を分離            | [i18n.ts](src/i18n.ts)、[main.ts](src/main.ts)、[ModelInspector.ts](src/data/ModelInspector.ts)、[ModelValidationDialog.test.ts](tests/ModelValidationDialog.test.ts)                                                        |
+|   6 | Layer dialogが表示・lock状態を落とす         | dialogと複製処理で`visible` / `locked`を保持し、内容コピー中だけtargetを一時unlock                                                    | [LayerDialog.ts](src/ui/dialogs/LayerDialog.ts)、[LayerController.ts](src/controllers/LayerController.ts)、[LayerDialog.test.ts](tests/LayerDialog.test.ts)、[LayerController.test.ts](tests/LayerController.test.ts)        |
+|   7 | 放置draftが無期限に残る                      | 30日TTLと最大20系列のGCを追加し、現在系列と最新の有効draftを保護                                                                      | [DraftStore.ts](src/history/DraftStore.ts)、[DraftStore.test.ts](tests/DraftStore.test.ts)                                                                                                                                   |
+|   8 | `removeMany`のNode参照検査が間接的           | 削除集合外に残る参照元を事前検査し、参照元との同時削除は許可                                                                          | [Document.ts](src/data/Document.ts)、[Document.test.ts](tests/Document.test.ts)                                                                                                                                              |
+|   9 | tracked change例外rollbackが未テスト         | snapshot、filename、shown layer、history、UI refreshの復元を回帰テスト                                                                | [AppController.test.ts](tests/AppController.test.ts)                                                                                                                                                                         |
+|  10 | 検証dialogが未テスト                         | 一覧、severity、対象選択、開いている間のJA / EN切替をテストし、close時に購読解除                                                      | [ModelValidationDialog.ts](src/ui/dialogs/ModelValidationDialog.ts)、[ModelValidationDialog.test.ts](tests/ModelValidationDialog.test.ts)                                                                                    |
+|  11 | `check`がVitestを二重実行                    | `test:coverage`の1回へ統合                                                                                                            | [package.json](package.json)                                                                                                                                                                                                 |
+|  12 | E2Eがdevelopment serverを検査                | `vite preview`で本番bundleを検査し、CIでは`npm run check`が生成した同じ`dist`を使用                                                   | [playwright.config.ts](playwright.config.ts)、[package.json](package.json)、[app.spec.ts](e2e/app.spec.ts)                                                                                                                   |
+|  13 | 支点hit倍率がマジックナンバー                | `CAD.SUPPORT_HIT_TOLERANCE_FACTOR`へ集約し、境界内外をテスト                                                                          | [CadConfig.ts](src/ui/CadConfig.ts)、[CadRenderer.ts](src/ui/CadRenderer.ts)、[CadRenderer.test.ts](tests/CadRenderer.test.ts)                                                                                               |
 
 ## レビュー詳細
 

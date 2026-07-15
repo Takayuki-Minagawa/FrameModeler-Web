@@ -4,6 +4,7 @@ import { deserializeJson } from '../src/io/JsonDeserializer';
 import { serializeJson } from '../src/io/JsonSerializer';
 import { Node } from '../src/data/Node';
 import { Point3D } from '../src/math/Point3D';
+import { validateJsonImportMetadata } from '../src/io/JsonSchema';
 
 const doc = Document.instance;
 
@@ -16,6 +17,55 @@ function json(obj: unknown): string {
 }
 
 describe('JsonDeserializer validation (I-2/I-3/I-4)', () => {
+  it('keeps prototype-like property-table keys as inert own data properties', () => {
+    const table = JSON.parse(
+      '{"__proto__":{"pollutedByJsonMetadata":true},"constructor":{"value":"ctor"},"prototype":{"value":"proto"}}',
+    );
+    const summary = {
+      nodes: 0,
+      beams: 0,
+      pillars: 0,
+      trusses: 0,
+      springs: 0,
+      floors: 0,
+      walls: 0,
+      bearWalls: 0,
+      supports: 0,
+      constraints: 0,
+      layers: 0,
+      format: 'test',
+      modelName: '',
+      units: {},
+      warnings: [],
+      sourceIdMap: [],
+      materials: table,
+      sections: table,
+    };
+
+    const validated = validateJsonImportMetadata({
+      summary,
+      sourceNodes: [],
+      sourceElements: [],
+      materials: table,
+      sections: table,
+    });
+
+    for (const propertyTable of [
+      validated.materials,
+      validated.sections,
+      validated.summary.materials,
+      validated.summary.sections,
+    ]) {
+      expect(Object.getPrototypeOf(propertyTable)).toBeNull();
+      expect(Object.prototype.hasOwnProperty.call(propertyTable, '__proto__')).toBe(true);
+      expect(propertyTable['__proto__']).toEqual({ pollutedByJsonMetadata: true });
+      expect(propertyTable.constructor).toEqual({ value: 'ctor' });
+      expect(propertyTable.prototype).toEqual({ value: 'proto' });
+      expect(propertyTable.pollutedByJsonMetadata).toBeUndefined();
+    }
+    expect(({} as { pollutedByJsonMetadata?: boolean }).pollutedByJsonMetadata).toBeUndefined();
+  });
+
   it('rejects a non-object document', () => {
     expect(() => deserializeJson('[]')).toThrow();
   });

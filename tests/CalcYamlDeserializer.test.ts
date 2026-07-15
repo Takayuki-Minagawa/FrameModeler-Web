@@ -283,6 +283,41 @@ describe('Calc YAML import', () => {
     expect(summary.sections.ALC_S_center_beam.inertia_z).toBe(1040000000);
   });
 
+  it('keeps prototype-like YAML table keys as inert own data properties', async () => {
+    const calc = readCalcObject();
+    calc.units = Object.fromEntries([
+      ...Object.entries(calc.units),
+      ['__proto__', 'proto-unit'],
+      ['constructor', 'constructor-unit'],
+      ['prototype', 'prototype-unit'],
+    ]);
+    for (const field of ['materials', 'sections']) {
+      calc.model[field] = Object.fromEntries([
+        ...Object.entries(calc.model[field]),
+        ['__proto__', { pollutedByCalcYaml: true }],
+        ['constructor', { value: 'ctor' }],
+        ['prototype', { value: 'proto' }],
+      ]);
+    }
+
+    const summary = await deserializeCalcYaml(stringify(calc));
+
+    expect(Object.getPrototypeOf(summary.units)).toBeNull();
+    expect(Object.prototype.hasOwnProperty.call(summary.units, '__proto__')).toBe(true);
+    expect(summary.units['__proto__']).toBe('proto-unit');
+    expect(summary.units.constructor).toBe('constructor-unit');
+    expect(summary.units.prototype).toBe('prototype-unit');
+    for (const propertyTable of [summary.materials, summary.sections]) {
+      expect(Object.getPrototypeOf(propertyTable)).toBeNull();
+      expect(Object.prototype.hasOwnProperty.call(propertyTable, '__proto__')).toBe(true);
+      expect(propertyTable['__proto__']).toEqual({ pollutedByCalcYaml: true });
+      expect(propertyTable.constructor).toEqual({ value: 'ctor' });
+      expect(propertyTable.prototype).toEqual({ value: 'proto' });
+      expect(propertyTable.pollutedByCalcYaml).toBeUndefined();
+    }
+    expect(({} as { pollutedByCalcYaml?: boolean }).pollutedByCalcYaml).toBeUndefined();
+  });
+
   it('infers steel for beam source types even when section starts with S', async () => {
     const calc = readCalcObject();
     calc.model.traceability.source_members[0].source_section = 'SN400';
