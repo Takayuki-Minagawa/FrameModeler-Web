@@ -41,16 +41,16 @@ SkyCiv Structural 3D、xeokit、That Open Engine、StbDiffViewer、frame-ts な�
 1. [x] R0a 追跡解除
 2. [x] R0b 依存更新・Actions 更新・bundle 予算
 3. [x] R0c 改行コード統一
-4. [ ] R1 / R2 データ層リファクタリング
-5. [ ] R4 i18n パラメータ対応
-6. [ ] R3 `main.ts` 分割
-7. [ ] F1 ショートカットと選択操作
-8. [ ] F2 配列複写
-9. [ ] F3 モデル整理
-10. [ ] F4 計測ツール
-11. [ ] F5 数量集計
-12. [ ] F6 出力
-13. [ ] ヘルプ、README、version 1.1.0、単体 / E2E テスト
+4. [x] R1 / R2 データ層リファクタリング
+5. [x] R4 i18n パラメータ対応
+6. [x] R3 `main.ts` 分割
+7. [x] F1 ショートカットと選択操作
+8. [x] F2 配列複写
+9. [x] F3 モデル整理
+10. [x] F4 計測ツール
+11. [x] F5 数量集計
+12. [x] F6 出力
+13. [x] ヘルプ、README、version 1.1.0、単体 / E2E テスト
 14. [ ] PR 作成、サブエージェントレビュー、指摘対応
 15. [ ] 本ファイルと完了済みの `CODE_REVIEW_AND_ROADMAP.md` を削除、マージ、ブランチ整理
 
