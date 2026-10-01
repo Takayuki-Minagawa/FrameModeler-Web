@@ -1,9 +1,12 @@
+import type { DocumentDataKind } from './data/DocumentData';
+
 export type Locale = 'ja' | 'en';
 
 const STORAGE_KEY = 'framemodeler-locale';
 
-const savedLocale = localStorage.getItem(STORAGE_KEY);
-let currentLocale: Locale = savedLocale === 'en' ? 'en' : 'ja';
+// data層やnode環境のテストからも翻訳を参照できるよう、localStorageが無い環境では既定localeを使う。
+const storage: Pick<Storage, 'getItem' | 'setItem'> | null = typeof localStorage === 'undefined' ? null : localStorage;
+let currentLocale: Locale = storage?.getItem(STORAGE_KEY) === 'en' ? 'en' : 'ja';
 let legacyLocaleChanged: (() => void) | null = null;
 const localeChangeListeners = new Set<(locale: Locale) => void>();
 
@@ -24,6 +27,7 @@ const messages = {
   floor: { ja: '床', en: 'Floor' },
   wall: { ja: '壁', en: 'Wall' },
   bearwall: { ja: '耐力壁', en: 'BearWall' },
+  measure: { ja: '計測', en: 'Measure' },
   truss: { ja: 'トラス', en: 'Truss' },
   spring: { ja: 'ばね', en: 'Spring' },
   support: { ja: '支点', en: 'Support' },
@@ -40,17 +44,58 @@ const messages = {
   'title.save': { ja: '保存', en: 'Save' },
   'title.validate': { ja: '保存前モデル検証', en: 'Validate model before saving' },
   'title.importInfo': { ja: 'YAML読込情報', en: 'YAML import info' },
-  'title.select': { ja: '選択', en: 'Select' },
-  'title.move': { ja: '移動', en: 'Move' },
-  'title.node': { ja: '節点追加', en: 'Add Node' },
-  'title.beam': { ja: '梁追加', en: 'Add Beam' },
-  'title.pillar': { ja: '柱追加', en: 'Add Pillar' },
-  'title.floor': { ja: '床追加', en: 'Add Floor' },
-  'title.wall': { ja: '壁追加', en: 'Add Wall' },
-  'title.bearwall': { ja: '耐力壁追加', en: 'Add BearWall' },
+  'title.select': { ja: '選択 (1)', en: 'Select (1)' },
+  'title.move': { ja: '節点移動 (2)', en: 'Move nodes (2)' },
+  'title.node': { ja: '節点追加 (3)', en: 'Add Node (3)' },
+  'title.beam': { ja: '梁追加 (4)', en: 'Add Beam (4)' },
+  'title.pillar': { ja: '柱追加 (5)', en: 'Add Pillar (5)' },
+  'title.floor': { ja: '床追加 (6)', en: 'Add Floor (6)' },
+  'title.wall': { ja: '壁追加 (7)', en: 'Add Wall (7)' },
+  'title.bearwall': { ja: '耐力壁追加 (8)', en: 'Add BearWall (8)' },
+  'title.measure': { ja: '2点間の距離を計測 (9)', en: 'Measure the distance between two points (9)' },
   'title.undo': { ja: '元に戻す (Ctrl/Cmd+Z)', en: 'Undo (Ctrl/Cmd+Z)' },
   'title.redo': { ja: 'やり直す (Ctrl+Y / Cmd+Shift+Z)', en: 'Redo (Ctrl+Y / Cmd+Shift+Z)' },
-  'title.delete': { ja: '選択要素を削除', en: 'Delete selected' },
+  'title.delete': { ja: '選択要素を削除 (Delete)', en: 'Delete selected (Delete)' },
+  'edit.menu': { ja: '編集', en: 'Edit' },
+  'edit.selectAll': { ja: '全選択', en: 'Select all' },
+  'title.selectAll': { ja: '表示中の要素をすべて選択 (Ctrl/Cmd+A)', en: 'Select every visible element (Ctrl/Cmd+A)' },
+  'edit.invertSelection': { ja: '選択反転', en: 'Invert selection' },
+  'title.invertSelection': { ja: '選択と非選択を入れ替える (Ctrl/Cmd+I)', en: 'Invert the selection (Ctrl/Cmd+I)' },
+  'edit.arrayCopy': { ja: '配列複写…', en: 'Array copy…' },
+  'title.arrayCopy': {
+    ja: '選択要素を一定間隔で繰り返し複写 (Ctrl/Cmd+D)',
+    en: 'Repeat the selection at a fixed offset (Ctrl/Cmd+D)',
+  },
+  'edit.mergeNodes': { ja: '重複節点を結合…', en: 'Merge coincident nodes…' },
+  'title.mergeNodes': {
+    ja: '近接した節点を1つにまとめ、参照を付け替える',
+    en: 'Merge nodes within a tolerance and re-point their references',
+  },
+  'edit.removeOrphanNodes': { ja: '孤立節点を削除', en: 'Remove orphan nodes' },
+  'title.removeOrphanNodes': {
+    ja: 'どの要素からも参照されていない節点を削除',
+    en: 'Delete nodes that no element references',
+  },
+  'export.menu': { ja: '出力', en: 'Export' },
+  'export.summary': { ja: '数量集計…', en: 'Quantities…' },
+  'title.exportSummary': {
+    ja: '種別・断面ごとの本数、延長、面積を集計',
+    en: 'Count, total length and area per type and section',
+  },
+  'export.png': { ja: 'PNG画像', en: 'PNG image' },
+  'title.exportPng': { ja: '現在の表示を画像として保存', en: 'Save the current view as an image' },
+  'export.dxf': { ja: 'DXF', en: 'DXF' },
+  'title.exportDxf': {
+    ja: '平面表示では現在の階の伏図、3D・立面表示ではモデル全体をDXF (R12, mm) で保存',
+    en: 'Save the current storey plan (plan view) or the whole model (3D / elevation) as DXF (R12, mm)',
+  },
+  'export.nodesCsv': { ja: '節点CSV', en: 'Nodes CSV' },
+  'title.exportNodesCsv': { ja: '節点番号と座標をCSVで保存', en: 'Save node numbers and coordinates as CSV' },
+  'export.elementsCsv': { ja: '要素CSV', en: 'Elements CSV' },
+  'title.exportElementsCsv': {
+    ja: '部材・面材・支点・拘束の一覧をCSVで保存',
+    en: 'Save members, planes, supports and constraints as CSV',
+  },
   'title.coordinateCommit': { ja: '現在のツールへ座標を入力', en: 'Send coordinates to the active tool' },
   'title.help': { ja: '操作マニュアル', en: 'Help' },
   'title.theme': { ja: 'テーマ切替', en: 'Toggle theme' },
@@ -113,6 +158,19 @@ const messages = {
   layer: { ja: 'レイヤー', en: 'Layer' },
   'title.addLayer': { ja: 'レイヤー追加', en: 'Add Layer' },
   'title.removeLayer': { ja: 'レイヤー削除', en: 'Remove Layer' },
+  'title.duplicateLayer': { ja: 'レイヤー複製', en: 'Duplicate layer' },
+  'title.copyLayerUp': { ja: '上階へコピー', en: 'Copy to the layer above' },
+  'title.copyLayerDown': { ja: '下階へコピー', en: 'Copy to the layer below' },
+  'title.showAllLayers': { ja: '全レイヤー表示', en: 'Show all layers' },
+  'layer.hide': { ja: 'レイヤーを非表示', en: 'Hide layer' },
+  'layer.show': { ja: 'レイヤーを表示', en: 'Show layer' },
+  'layer.lock': { ja: 'レイヤーをロック', en: 'Lock layer' },
+  'layer.unlock': { ja: 'レイヤーのロックを解除', en: 'Unlock layer' },
+  'layer.isolate': { ja: 'このレイヤーだけ表示', en: 'Isolate layer' },
+  'layer.state.visible': { ja: '表示', en: 'visible' },
+  'layer.state.hidden': { ja: '非表示', en: 'hidden' },
+  'layer.state.locked': { ja: 'ロック中', en: 'locked' },
+  'layer.state.editable': { ja: '編集可', en: 'editable' },
 
   // Accessible names
   'aria.toolbar': { ja: '作図ツールバー', en: 'Drawing toolbar' },
@@ -150,6 +208,37 @@ const messages = {
   'dialog.importInfo': { ja: '読込情報', en: 'Import Info' },
   'dialog.modelValidation': { ja: 'モデル検証', en: 'Model Validation' },
   'dialog.calcYamlImportMode': { ja: 'YAML読込モード', en: 'YAML Import Mode' },
+  'dialog.arrayCopy': { ja: '配列複写', en: 'Array Copy' },
+  'dialog.mergeNodes': { ja: '重複節点の結合', en: 'Merge Coincident Nodes' },
+  'dialog.summary': { ja: '数量集計', en: 'Quantities' },
+  'arrayCopy.description': {
+    ja: '選択した要素を指定した間隔で繰り返し複写します。複写先に節点や同じ要素が既にあれば再利用し、重複して作りません。',
+    en: 'Repeats the selection at the given offset. Existing nodes and identical elements at the destination are reused instead of duplicated.',
+  },
+  'arrayCopy.dx': { ja: 'ΔX (mm)', en: 'ΔX (mm)' },
+  'arrayCopy.dy': { ja: 'ΔY (mm)', en: 'ΔY (mm)' },
+  'arrayCopy.dz': { ja: 'ΔZ (mm)', en: 'ΔZ (mm)' },
+  'arrayCopy.count': { ja: '個数', en: 'Copies' },
+  'mergeNodes.description': {
+    ja: '指定した距離以内にある節点を1つにまとめ、部材・面材・支点・拘束の参照を付け替えます。同じ要素が両方を参照している節点（零長ばねの両端など）、双方に質量がある節点、ロック中の階の節点は結合しません。',
+    en: 'Merges nodes within the given distance and re-points members, planes, supports and constraints. Nodes referenced by the same element (such as both ends of a zero-length spring), nodes that both carry mass, and nodes on locked layers are left as they are.',
+  },
+  'mergeNodes.tolerance': { ja: '許容距離 (mm)', en: 'Tolerance (mm)' },
+  'summary.counts': { ja: '要素数', en: 'Element counts' },
+  'summary.members': { ja: '線材（種別・断面別）', en: 'Members by type and section' },
+  'summary.planes': { ja: '面材（種別・断面別）', en: 'Planes by type and section' },
+  'summary.extent': { ja: 'モデル範囲 (mm)', en: 'Model extent (mm)' },
+  'summary.kind': { ja: '種別', en: 'Type' },
+  'summary.count': { ja: '数', en: 'Count' },
+  'summary.totalLength': { ja: '延長 (m)', en: 'Length (m)' },
+  'summary.totalArea': { ja: '面積 (m²)', en: 'Area (m²)' },
+  'summary.total': { ja: '合計', en: 'Total' },
+  'summary.unassigned': { ja: '（未設定）', en: '(none)' },
+  'summary.none': { ja: '該当する要素はありません。', en: 'No elements.' },
+  'summary.min': { ja: '最小', en: 'Min' },
+  'summary.max': { ja: '最大', en: 'Max' },
+  'summary.size': { ja: '寸法', en: 'Size' },
+  'summary.exportCsv': { ja: 'CSVを保存', en: 'Save CSV' },
   section: { ja: '断面', en: 'Section' },
   weight: { ja: '荷重', en: 'Weight' },
   direction: { ja: '方向', en: 'Direction' },
@@ -199,11 +288,93 @@ const messages = {
   'msg.floorExists': { ja: '既に同一の床が存在します', en: 'The same floor already exists' },
   'msg.wallExists': { ja: '既に同一の壁が存在します', en: 'The same wall already exists' },
   'msg.bearwallExists': { ja: '既に同一の耐力壁が存在します', en: 'The same bearing wall already exists' },
+  'msg.nothingSelected': { ja: '要素が選択されていません。', en: 'No elements are selected.' },
+  'msg.copyResult': {
+    ja: '{nodes}節点、{elements}要素を追加しました',
+    en: 'Added {nodes} node(s) and {elements} element(s)',
+  },
+  'msg.copyNothing': {
+    ja: '複写先に同じ要素が既にあるため、追加はありませんでした',
+    en: 'Nothing was added because identical elements already exist at the destination',
+  },
+  'msg.copyFailed': { ja: '複写できませんでした: {message}', en: 'The copy failed: {message}' },
+  'msg.mergeResult': {
+    ja: '{nodes}個の節点を結合し、重複した{elements}要素を削除しました',
+    en: 'Merged {nodes} node(s) and removed {elements} duplicate element(s)',
+  },
+  'msg.mergeNothing': { ja: '結合できる節点はありませんでした', en: 'No nodes could be merged' },
+  'msg.mergeFailed': { ja: '節点を結合できませんでした: {message}', en: 'The nodes could not be merged: {message}' },
+  'msg.noOrphans': { ja: '孤立節点はありません', en: 'There are no orphan nodes' },
+  'msg.confirmRemoveOrphans': {
+    ja: 'どの要素からも参照されていない節点{count}個を削除しますか？',
+    en: 'Delete {count} node(s) that no element references?',
+  },
+  'msg.orphansRemoved': { ja: '孤立節点を{count}個削除しました', en: 'Removed {count} orphan node(s)' },
+  'msg.exportFailed': { ja: '出力に失敗しました: {message}', en: 'The export failed: {message}' },
+  'msg.exported': { ja: '{name} を保存しました', en: 'Saved {name}' },
+  'measure.result': {
+    ja: '距離 {distance} mm（ΔX {dx} / ΔY {dy} / ΔZ {dz}）',
+    en: 'Distance {distance} mm (ΔX {dx} / ΔY {dy} / ΔZ {dz})',
+  },
+  'msg.applyChangeFailed': {
+    ja: '変更を適用できませんでした: {message}',
+    en: 'The change could not be applied: {message}',
+  },
+  'msg.confirmOpen': {
+    ja: '未保存の変更を破棄してファイルを開きますか？',
+    en: 'Discard unsaved changes and open another file?',
+  },
+  'msg.fileReadFailed': { ja: 'ファイルを読み取れませんでした', en: 'File read failed' },
+  'msg.nodeReferenced': {
+    ja: '節点 {node} は {type} {number} から参照されています',
+    en: 'Node {node} is referenced by {type} {number}',
+  },
+  'msg.deleteBlocked': { ja: '削除できません:\n{details}', en: 'Delete failed:\n{details}' },
+  'msg.confirmDelete': { ja: '選択した{count}要素を削除しますか？', en: 'Delete {count} selected element(s)?' },
+  'msg.deleteFailed': { ja: '削除できませんでした:\n{message}', en: 'Delete failed:\n{message}' },
+  'msg.firstPointRequired': {
+    ja: '先に1点目を指定してください。',
+    en: 'Specify the first point before distance/angle input.',
+  },
+  'msg.confirmRestoreDraft': { ja: '{when} の未保存データを復旧しますか？', en: 'Restore unsaved data from {when}?' },
+  'msg.draftInvalid': {
+    ja: '復旧データを読み込めなかったため破棄しました: {message}',
+    en: 'The recovery draft was invalid and has been discarded: {message}',
+  },
+  'msg.layerLockedEdit': { ja: 'ロック中のレイヤーは編集できません。', en: 'A locked layer cannot be edited.' },
+  'msg.layerLockedDelete': { ja: 'ロック中のレイヤーは削除できません。', en: 'A locked layer cannot be deleted.' },
+  'msg.confirmDeleteLayer': {
+    ja: 'レイヤー「{name}」を削除しますか？（関連要素: {count}）',
+    en: 'Delete layer "{name}"? ({count} related elements)',
+  },
+  'msg.noAdjacentLayer': { ja: 'コピー先の隣接レイヤーがありません。', en: 'There is no adjacent target layer.' },
+  'msg.targetLayerLocked': { ja: 'コピー先レイヤーはロックされています。', en: 'The target layer is locked.' },
+  'msg.layerOperationFailed': {
+    ja: 'レイヤー操作に失敗しました: {message}',
+    en: 'Layer operation failed: {message}',
+  },
+  'workPlane.viewport-unavailable': {
+    ja: '表示領域のサイズが0のため操作できません',
+    en: 'The view has no size, so it cannot be operated',
+  },
+  'workPlane.parallel': {
+    ja: '視線が現在レイヤーの作業平面と平行なため配置できません',
+    en: 'The view direction is parallel to the work plane of the current layer',
+  },
+  'workPlane.behind': {
+    ja: '現在レイヤーの作業平面がカメラ後方にあるため配置できません',
+    en: 'The work plane of the current layer is behind the camera',
+  },
   'validation.finiteNumber': { ja: '有限の数値を入力してください', en: 'Enter a finite number.' },
   'validation.requiredText': { ja: '空でない値を入力してください', en: 'Enter a non-empty value.' },
   'validation.positiveNumber': { ja: '0より大きい数値を入力してください', en: 'Enter a number greater than zero.' },
   'validation.nonNegativeNumber': { ja: '0以上の数値を入力してください', en: 'Enter a non-negative number.' },
   'validation.zeroToOne': { ja: '0以上1以下の数値を入力してください', en: 'Enter a number from 0 to 1.' },
+  'validation.copyCount': { ja: '1以上{max}以下の整数を入力してください', en: 'Enter an integer from 1 to {max}.' },
+  'validation.offsetNonZero': {
+    ja: 'ΔX・ΔY・ΔZのいずれかを0以外にしてください',
+    en: 'At least one of ΔX, ΔY and ΔZ must be non-zero.',
+  },
   'validation.massDofCount': { ja: '質量は6自由度すべてを入力してください', en: 'Enter all six nodal mass DOFs.' },
   'validation.springDofRequired': {
     ja: 'ばね剛性を1自由度以上設定してください',
@@ -245,6 +416,9 @@ const messages = {
   'history.addWall': { ja: '壁追加', en: 'Add wall' },
   'history.addBearWall': { ja: '耐力壁追加', en: 'Add bearing wall' },
   'history.deleteSelection': { ja: '選択要素削除', en: 'Delete selected elements' },
+  'history.arrayCopy': { ja: '配列複写', en: 'Array copy' },
+  'history.mergeNodes': { ja: '重複節点結合', en: 'Merge nodes' },
+  'history.removeOrphanNodes': { ja: '孤立節点削除', en: 'Remove orphan nodes' },
   'history.addLayer': { ja: 'レイヤー追加', en: 'Add layer' },
   'history.editLayer': { ja: 'レイヤー編集', en: 'Edit layer' },
   'history.removeLayer': { ja: 'レイヤー削除', en: 'Remove layer' },
@@ -268,6 +442,65 @@ const messages = {
   },
   'help.move.name': { ja: '移動', en: 'Move' },
   'help.move.desc': { ja: '選択した節点をクリックで移動先を指定', en: 'Click to set destination for selected nodes' },
+  'help.measure.name': { ja: '計測', en: 'Measure' },
+  'help.measure.desc': {
+    ja: '2点をクリックして距離と ΔX / ΔY / ΔZ を表示\n節点をクリックするとその節点の座標を使うため、3D・立面でも階をまたいで測れる',
+    en: 'Click two points to show the distance and ΔX / ΔY / ΔZ\nClicking a node uses its coordinates, so storeys can be spanned in 3D and elevation views',
+  },
+  'help.edit': { ja: '編集と出力', en: 'Editing and Export' },
+  'help.arrayCopy.name': { ja: '配列複写', en: 'Array copy' },
+  'help.arrayCopy.desc': {
+    ja: '選択要素を ΔX / ΔY / ΔZ の間隔で指定個数だけ複写\n複写先の既存節点は再利用し、同じ要素は重複して作らない',
+    en: 'Repeat the selection by ΔX / ΔY / ΔZ for the given number of copies\nExisting nodes are reused and identical elements are not duplicated',
+  },
+  'help.mergeNodes.name': { ja: '重複節点の結合', en: 'Merge nodes' },
+  'help.mergeNodes.desc': {
+    ja: '許容距離以内の節点を1つにまとめる\n結合で完全に同じになった要素は1つだけ残す',
+    en: 'Merge nodes within a tolerance\nElements that become identical are kept only once',
+  },
+  'help.removeOrphans.name': { ja: '孤立節点の削除', en: 'Remove orphan nodes' },
+  'help.removeOrphans.desc': {
+    ja: 'どの要素からも参照されていない節点を削除',
+    en: 'Delete nodes that no element references',
+  },
+  'help.summary.name': { ja: '数量集計', en: 'Quantities' },
+  'help.summary.desc': {
+    ja: '種別・断面ごとの本数、延長 (m)、面積 (m²) を表示し、CSVで保存',
+    en: 'Count, length (m) and area (m²) per type and section, with CSV export',
+  },
+  'help.export.name': { ja: '出力', en: 'Export' },
+  'help.export.desc': {
+    ja: 'PNG: 現在の表示を画像で保存\nDXF: 平面表示では現在の階の伏図、3D・立面表示ではモデル全体（R12, mm）\nCSV: 節点一覧、要素一覧',
+    en: 'PNG: save the current view as an image\nDXF: the current storey plan in plan view, the whole model in 3D / elevation (R12, mm)\nCSV: node list and element list',
+  },
+  'help.shortcuts': { ja: 'キーボードショートカット', en: 'Keyboard Shortcuts' },
+  'help.shortcut.tools': { ja: '1 〜 9', en: '1 to 9' },
+  'help.shortcut.tools.desc': {
+    ja: 'ツール切替（選択・移動・節点・梁・柱・床・壁・耐力壁・計測）',
+    en: 'Switch tool (select, move, node, beam, pillar, floor, wall, bearing wall, measure)',
+  },
+  'help.shortcut.file': { ja: 'Ctrl/Cmd + S / O', en: 'Ctrl/Cmd + S / O' },
+  'help.shortcut.file.desc': { ja: '保存 / 開く', en: 'Save / Open' },
+  'help.shortcut.history': { ja: 'Ctrl/Cmd + Z / Y', en: 'Ctrl/Cmd + Z / Y' },
+  'help.shortcut.history.desc': {
+    ja: '元に戻す / やり直す（Cmd+Shift+Z も可）',
+    en: 'Undo / Redo (Cmd+Shift+Z also redoes)',
+  },
+  'help.shortcut.selection': { ja: 'Ctrl/Cmd + A / I', en: 'Ctrl/Cmd + A / I' },
+  'help.shortcut.selection.desc': { ja: '全選択 / 選択反転', en: 'Select all / Invert selection' },
+  'help.shortcut.copy': { ja: 'Ctrl/Cmd + D', en: 'Ctrl/Cmd + D' },
+  'help.shortcut.copy.desc': { ja: '配列複写', en: 'Array copy' },
+  'help.shortcut.delete': { ja: 'Delete', en: 'Delete' },
+  'help.shortcut.delete.desc': { ja: '選択要素を削除', en: 'Delete the selection' },
+  'help.shortcut.escape': { ja: 'Esc', en: 'Esc' },
+  'help.shortcut.escape.desc': { ja: '途中の操作を取り消す', en: 'Cancel the operation in progress' },
+  'help.shortcut.fit': { ja: 'Home / F', en: 'Home / F' },
+  'help.shortcut.fit.desc': { ja: 'モデル全体を表示', en: 'Fit the model to the view' },
+  'help.shortcut.snap': { ja: 'Tab / Alt', en: 'Tab / Alt' },
+  'help.shortcut.snap.desc': {
+    ja: 'スナップ候補の切替 / 押している間スナップ無効',
+    en: 'Cycle snap candidates / Disable snapping while held',
+  },
   'help.addNode.name': { ja: '節点追加', en: 'Add Node' },
   'help.addNode.desc': { ja: 'クリック位置に節点を追加', en: 'Click to add a node at that position' },
   'help.addBeam.name': { ja: '梁追加', en: 'Add Beam' },
@@ -334,10 +567,35 @@ const messages = {
 export type MessageKey = keyof typeof messages;
 export type HistoryMessageKey = Extract<MessageKey, `history.${string}`>;
 
-export function t(key: MessageKey): string {
+export type MessageParams = Readonly<Record<string, string | number>>;
+
+/** 現在localeの文言を返す。`{name}` 形式のplaceholderは params の値で置換する。 */
+export function t(key: MessageKey, params?: MessageParams): string {
   const entry = messages[key];
   if (!entry) return key;
-  return entry[currentLocale] ?? entry.ja ?? key;
+  const text: string = entry[currentLocale] ?? entry.ja ?? key;
+  if (!params) return text;
+  return text.replace(/\{(\w+)\}/g, (placeholder, name: string) =>
+    name in params ? String(params[name]) : placeholder,
+  );
+}
+
+const KIND_MESSAGE_KEYS: Record<DocumentDataKind, MessageKey> = {
+  node: 'node',
+  beam: 'beam',
+  pillar: 'pillar',
+  truss: 'truss',
+  spring: 'spring',
+  support: 'support',
+  constraint: 'constraint',
+  floor: 'floor',
+  wall: 'wall',
+  bearWall: 'bearwall',
+};
+
+/** モデル種別の表示名。data層の typeText（日本語固定）に代えてUIで使う。 */
+export function kindLabel(kind: DocumentDataKind): string {
+  return t(KIND_MESSAGE_KEYS[kind]);
 }
 
 /** 履歴へ保存した安定キーを現在localeへ変換し、任意ラベルはそのまま表示する。 */
@@ -352,8 +610,8 @@ export function getLocale(): Locale {
 
 export function setLocale(locale: Locale): void {
   currentLocale = locale;
-  localStorage.setItem(STORAGE_KEY, locale);
-  updateDom();
+  storage?.setItem(STORAGE_KEY, locale);
+  if (typeof document !== 'undefined') updateDom();
   legacyLocaleChanged?.();
   for (const listener of [...localeChangeListeners]) listener(locale);
 }

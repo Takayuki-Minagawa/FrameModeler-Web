@@ -4,6 +4,8 @@ import type { Layer } from '../data/Layer';
 import { Node } from '../data/Node';
 import type { Point3D } from '../math/Point3D';
 import type { DocumentCommand } from './DocumentCommand';
+import { planElementCopies, type ElementCopyRequest } from '../data/ElementCopy';
+import { applyNodeMerge, findOrphanNodes, planNodeMerge, type NodeMergePlan } from '../data/NodeMerge';
 
 export class AddElementsCommand implements DocumentCommand {
   readonly label: string;
@@ -108,6 +110,46 @@ export class AddLayerCommand implements DocumentCommand<boolean> {
 
   execute(document: Document): boolean {
     return document.addLayer(this.layer);
+  }
+}
+
+/** 選択要素を座標変換して複製する。追加した要素（Nodeを含む）を返す。 */
+export class CopyElementsCommand implements DocumentCommand<DocumentData[]> {
+  constructor(
+    private readonly request: ElementCopyRequest,
+    readonly label: string = '配列複写',
+  ) {}
+
+  execute(document: Document): DocumentData[] {
+    const additions = planElementCopies(document, this.request);
+    assertUnlocked(document, additions, this.label);
+    document.addMany(additions);
+    return additions;
+  }
+}
+
+/** 許容距離以内のNodeを結合し、参照を付け替える。適用した計画を返す。 */
+export class MergeNodesCommand implements DocumentCommand<NodeMergePlan> {
+  constructor(
+    private readonly tolerance: number,
+    readonly label: string = '重複節点結合',
+  ) {}
+
+  execute(document: Document): NodeMergePlan {
+    const plan = planNodeMerge(document, this.tolerance);
+    applyNodeMerge(document, plan);
+    return plan;
+  }
+}
+
+/** どの要素からも参照されていないNodeを削除する。削除したNodeを返す。 */
+export class RemoveOrphanNodesCommand implements DocumentCommand<Node[]> {
+  readonly label = '孤立節点削除';
+
+  execute(document: Document): Node[] {
+    const orphans = findOrphanNodes(document);
+    document.removeMany(orphans);
+    return orphans;
   }
 }
 

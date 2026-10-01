@@ -17,6 +17,36 @@
           <button id="btn-save" data-i18n="save" data-i18n-title="title.save">保存</button>
           <button id="btn-validate" data-i18n="validate" data-i18n-title="title.validate">検証</button>
           <button id="btn-import-info" data-i18n="importInfo" data-i18n-title="title.importInfo">読込情報</button>
+          <details class="toolbar-menu" id="export-menu">
+            <summary data-i18n="export.menu">出力</summary>
+            <div class="toolbar-popover" role="group" data-i18n-aria-label="export.menu" aria-label="出力">
+              <button id="btn-summary" type="button" data-i18n="export.summary" data-i18n-title="title.exportSummary">
+                数量集計…
+              </button>
+              <button id="btn-export-png" type="button" data-i18n="export.png" data-i18n-title="title.exportPng">
+                PNG画像
+              </button>
+              <button id="btn-export-dxf" type="button" data-i18n="export.dxf" data-i18n-title="title.exportDxf">
+                DXF
+              </button>
+              <button
+                id="btn-export-nodes-csv"
+                type="button"
+                data-i18n="export.nodesCsv"
+                data-i18n-title="title.exportNodesCsv"
+              >
+                節点CSV
+              </button>
+              <button
+                id="btn-export-elements-csv"
+                type="button"
+                data-i18n="export.elementsCsv"
+                data-i18n-title="title.exportElementsCsv"
+              >
+                要素CSV
+              </button>
+            </div>
+          </details>
         </div>
         <div class="toolbar-separator" role="separator" aria-orientation="vertical"></div>
         <div class="toolbar-group" role="group" data-i18n-aria-label="aria.drawingTools" aria-label="作図ツール">
@@ -67,6 +97,15 @@
             data-i18n-title="title.bearwall"
           >
             耐力壁
+          </button>
+          <button
+            id="btn-measure"
+            class="tool-btn"
+            aria-pressed="false"
+            data-i18n="measure"
+            data-i18n-title="title.measure"
+          >
+            計測
           </button>
         </div>
         <div class="toolbar-separator" role="separator" aria-orientation="vertical"></div>
@@ -198,6 +237,36 @@
           <button id="btn-undo" disabled data-i18n="undo" data-i18n-title="title.undo">元に戻す</button>
           <button id="btn-redo" disabled data-i18n="redo" data-i18n-title="title.redo">やり直す</button>
           <button id="btn-delete" data-i18n="delete" data-i18n-title="title.delete">削除</button>
+          <details class="toolbar-menu" id="edit-menu">
+            <summary data-i18n="edit.menu">編集</summary>
+            <div class="toolbar-popover" role="group" data-i18n-aria-label="edit.menu" aria-label="編集">
+              <button id="btn-select-all" type="button" data-i18n="edit.selectAll" data-i18n-title="title.selectAll">
+                全選択
+              </button>
+              <button
+                id="btn-invert-selection"
+                type="button"
+                data-i18n="edit.invertSelection"
+                data-i18n-title="title.invertSelection"
+              >
+                選択反転
+              </button>
+              <button id="btn-array-copy" type="button" data-i18n="edit.arrayCopy" data-i18n-title="title.arrayCopy">
+                配列複写…
+              </button>
+              <button id="btn-merge-nodes" type="button" data-i18n="edit.mergeNodes" data-i18n-title="title.mergeNodes">
+                重複節点を結合…
+              </button>
+              <button
+                id="btn-remove-orphans"
+                type="button"
+                data-i18n="edit.removeOrphanNodes"
+                data-i18n-title="title.removeOrphanNodes"
+              >
+                孤立節点を削除
+              </button>
+            </div>
+          </details>
         </div>
         <div class="toolbar-group" role="group" data-i18n-aria-label="aria.displayActions" aria-label="表示要素">
           <details class="toolbar-menu" id="display-label-menu">
@@ -292,10 +361,42 @@
             >
               -
             </button>
-            <button id="btn-duplicate-layer" type="button" title="レイヤー複製" aria-label="レイヤー複製">⧉</button>
-            <button id="btn-copy-layer-up" type="button" title="上階へコピー" aria-label="上階へコピー">↑</button>
-            <button id="btn-copy-layer-down" type="button" title="下階へコピー" aria-label="下階へコピー">↓</button>
-            <button id="btn-show-all-layers" type="button" title="全レイヤー表示" aria-label="全レイヤー表示">◉</button>
+            <button
+              id="btn-duplicate-layer"
+              type="button"
+              data-i18n-title="title.duplicateLayer"
+              data-i18n-aria-label="title.duplicateLayer"
+              aria-label="レイヤー複製"
+            >
+              ⧉
+            </button>
+            <button
+              id="btn-copy-layer-up"
+              type="button"
+              data-i18n-title="title.copyLayerUp"
+              data-i18n-aria-label="title.copyLayerUp"
+              aria-label="上階へコピー"
+            >
+              ↑
+            </button>
+            <button
+              id="btn-copy-layer-down"
+              type="button"
+              data-i18n-title="title.copyLayerDown"
+              data-i18n-aria-label="title.copyLayerDown"
+              aria-label="下階へコピー"
+            >
+              ↓
+            </button>
+            <button
+              id="btn-show-all-layers"
+              type="button"
+              data-i18n-title="title.showAllLayers"
+              data-i18n-aria-label="title.showAllLayers"
+              aria-label="全レイヤー表示"
+            >
+              ◉
+            </button>
           </div>
           <ul id="layer-list" role="listbox" data-i18n-aria-label="aria.layers" aria-label="レイヤー一覧"></ul>
         </aside>

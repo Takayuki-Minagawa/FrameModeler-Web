@@ -9,9 +9,11 @@ import { AddNodeHandler } from '../ui/handlers/AddNodeHandler';
 import { AddPillarHandler } from '../ui/handlers/AddPillarHandler';
 import { AddWallHandler } from '../ui/handlers/AddWallHandler';
 import type { ICadMouseHandler } from '../ui/handlers/ICadMouseHandler';
+import { MeasureHandler } from '../ui/handlers/MeasureHandler';
 import { MoveNodeHandler } from '../ui/handlers/MoveNodeHandler';
 import { SelectionHandler } from '../ui/handlers/SelectionHandler';
 
+/** ツールバーの並び順。数字キー 1〜9 のショートカットはこの順に対応する。 */
 export const TOOL_BUTTON_IDS = [
   'btn-select',
   'btn-move',
@@ -21,9 +23,10 @@ export const TOOL_BUTTON_IDS = [
   'btn-add-floor',
   'btn-add-wall',
   'btn-add-bearwall',
+  'btn-measure',
 ] as const;
 
-type ToolButtonId = (typeof TOOL_BUTTON_IDS)[number];
+export type ToolButtonId = (typeof TOOL_BUTTON_IDS)[number];
 
 /** 作図ツールの生成、切替、途中操作破棄をmainから分離する。 */
 export class ToolController {
@@ -45,6 +48,7 @@ export class ToolController {
       'btn-add-floor': () => new AddFloorHandler(),
       'btn-add-wall': () => new AddWallHandler(),
       'btn-add-bearwall': () => new AddBearWallHandler(),
+      'btn-measure': () => new MeasureHandler(),
     };
   }
 
@@ -64,6 +68,18 @@ export class ToolController {
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
     });
+  }
+
+  /** ツールバーの並び順（1始まり）でツールを切り替える。数字キーのショートカット用。 */
+  activateByIndex(index: number): boolean {
+    const id = TOOL_BUTTON_IDS[index - 1];
+    if (!id) return false;
+    this.activate(id);
+    return true;
+  }
+
+  get activeTool(): ToolButtonId {
+    return this.activeToolId;
   }
 
   cancelCurrentOperation(): void {

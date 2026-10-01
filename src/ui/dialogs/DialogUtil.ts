@@ -202,7 +202,7 @@ export function showModalBase<T>(
       element.inert = wasInert;
     });
     overlay.remove();
-    if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    restoreFocus(previouslyFocused);
     resolveFunc(result);
   };
 
@@ -321,6 +321,17 @@ export function clearFieldError(input: HTMLInputElement): void {
   input.removeAttribute('aria-invalid');
   input.removeAttribute('aria-errormessage');
   input.closest('.form-row')?.querySelector('.field-error')?.remove();
+}
+
+/**
+ * ダイアログを開いた要素へフォーカスを戻す。閉じたツールバーメニュー内のボタンのように
+ * 既にフォーカスできない場合は、そのメニューの見出しへ戻してキーボード操作を継続できるようにする。
+ */
+function restoreFocus(target: HTMLElement | null): void {
+  if (!target?.isConnected) return;
+  target.focus();
+  if (document.activeElement === target) return;
+  target.closest('details')?.querySelector<HTMLElement>(':scope > summary')?.focus();
 }
 
 function getFocusableElements(container: HTMLElement): HTMLElement[] {

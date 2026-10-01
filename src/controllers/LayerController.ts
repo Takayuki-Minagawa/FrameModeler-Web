@@ -3,7 +3,7 @@ import type { Document } from '../data/Document';
 import { Layer } from '../data/Layer';
 import type { CadView } from '../ui/CadView';
 import { showLayerDialog } from '../ui/dialogs/LayerDialog';
-import { getLocale, t, type HistoryMessageKey } from '../i18n';
+import { subscribeLocaleChanged, t, type HistoryMessageKey } from '../i18n';
 
 type TrackChange = <T>(label: HistoryMessageKey, action: () => T | Promise<T>) => Promise<T>;
 
@@ -38,6 +38,8 @@ export class LayerController {
     this.root.getElementById('btn-show-all-layers')?.addEventListener('click', () => void this.showAll());
 
     this.options.document.subscribeLayerView(() => this.refreshAfterDocumentChange());
+    // 行ごとの操作ボタンの文言はここで生成するため、言語切替時に作り直す。
+    subscribeLocaleChanged(() => this.render());
     this.render();
   }
 
@@ -70,9 +72,9 @@ export class LayerController {
     const controls = this.root.createElement('span');
     controls.className = 'layer-item-controls';
     controls.append(
-      this.createActionButton('visibility', layer.visible ? '◉' : '○', layer.visible ? 'Hide layer' : 'Show layer'),
-      this.createActionButton('lock', layer.locked ? '🔒' : '🔓', layer.locked ? 'Unlock layer' : 'Lock layer'),
-      this.createActionButton('isolate', '◎', 'Isolate layer'),
+      this.createActionButton('visibility', layer.visible ? '◉' : '○', t(layer.visible ? 'layer.hide' : 'layer.show')),
+      this.createActionButton('lock', layer.locked ? '🔒' : '🔓', t(layer.locked ? 'layer.unlock' : 'layer.lock')),
+      this.createActionButton('isolate', '◎', t('layer.isolate')),
     );
     item.appendChild(controls);
 
@@ -87,6 +89,7 @@ export class LayerController {
     button.dataset.action = action;
     button.textContent = text;
     button.setAttribute('aria-label', label);
+    button.title = label;
     return button;
   }
 
@@ -98,7 +101,7 @@ export class LayerController {
     item.setAttribute('aria-selected', String(active));
     item.setAttribute(
       'aria-description',
-      `${layer.visible ? 'visible' : 'hidden'}, ${layer.locked ? 'locked' : 'editable'}`,
+      `${t(layer.visible ? 'layer.state.visible' : 'layer.state.hidden')}, ${t(layer.locked ? 'layer.state.locked' : 'layer.state.editable')}`,
     );
     item.tabIndex = active || (!this.options.document.shownLayer && this.options.document.layers[0] === layer) ? 0 : -1;
   }
@@ -160,7 +163,7 @@ export class LayerController {
   private async edit(layer: Layer): Promise<void> {
     this.options.cancelOperation();
     if (layer.locked) {
-      alert(this.localized('ロック中のレイヤーは編集できません。', 'A locked layer cannot be edited.'));
+      alert(t('msg.layerLockedEdit'));
       return;
     }
     const edited = await showLayerDialog(layer);
@@ -182,19 +185,11 @@ export class LayerController {
     const layer = this.options.document.shownLayer;
     if (!layer) return;
     if (layer.locked) {
-      alert(this.localized('ロック中のレイヤーは削除できません。', 'A locked layer cannot be deleted.'));
+      alert(t('msg.layerLockedDelete'));
       return;
     }
     const count = this.options.document.allDataList.filter((data) => data.existsOn(layer)).length;
-    if (
-      !confirm(
-        this.localized(
-          `レイヤー「${layer.name}」を削除しますか？（関連要素: ${count}）`,
-          `Delete layer "${layer.name}"? (${count} related elements)`,
-        ),
-      )
-    )
-      return;
+    if (!confirm(t('msg.confirmDeleteLayer', { name: layer.name, count }))) return;
     await this.run('history.removeLayer', () => {
       this.options.document.execute(
         new UpdateLayersCommand('レイヤー削除', (document) => void document.removeLayer(layer)),
@@ -240,11 +235,11 @@ export class LayerController {
     const index = this.options.document.layers.indexOf(source);
     const target = this.options.document.layers[index + direction];
     if (!target) {
-      alert(this.localized('コピー先の隣接レイヤーがありません。', 'There is no adjacent target layer.'));
+      alert(t('msg.noAdjacentLayer'));
       return;
     }
     if (target.locked) {
-      alert(this.localized('コピー先レイヤーはロックされています。', 'The target layer is locked.'));
+      alert(t('msg.targetLayerLocked'));
       return;
     }
     await this.run('history.copyLayerElements', () => {
@@ -299,12 +294,7 @@ export class LayerController {
       this.render();
       this.options.cadView.renderElements();
     } catch (error) {
-      alert(
-        this.localized(
-          `レイヤー操作に失敗しました: ${(error as Error).message}`,
-          `Layer operation failed: ${(error as Error).message}`,
-        ),
-      );
+      alert(t('msg.layerOperationFailed', { message: (error as Error).message }));
     }
   }
 
@@ -331,12 +321,12 @@ export class LayerController {
       const visibility = item.querySelector<HTMLButtonElement>('[data-action="visibility"]');
       if (visibility) {
         visibility.textContent = layer.visible ? '◉' : '○';
-        visibility.setAttribute('aria-label', layer.visible ? 'Hide layer' : 'Show layer');
+        setActionLabel(visibility, t(layer.visible ? 'layer.hide' : 'layer.show'));
       }
       const lock = item.querySelector<HTMLButtonElement>('[data-action="lock"]');
       if (lock) {
         lock.textContent = layer.locked ? '🔒' : '🔓';
-        lock.setAttribute('aria-label', layer.locked ? 'Unlock layer' : 'Lock layer');
+        setActionLabel(lock, t(layer.locked ? 'layer.unlock' : 'layer.lock'));
       }
       this.applyItemState(item, layer);
     });
@@ -361,10 +351,11 @@ export class LayerController {
     const height = other ? Math.abs(other.posZ - source.posZ) : 3000;
     return source.posZ + direction * (height || 3000);
   }
+}
 
-  private localized(ja: string, en: string): string {
-    return getLocale() === 'ja' ? ja : en;
-  }
+function setActionLabel(button: HTMLButtonElement, label: string): void {
+  button.setAttribute('aria-label', label);
+  button.title = label;
 }
 
 /** data層のLayerへ表示責務を戻さないためのUI formatter。 */

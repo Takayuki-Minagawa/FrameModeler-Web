@@ -2,6 +2,7 @@ import { Document } from '../data/Document';
 import { ModelValidator } from '../data/ModelValidator';
 import { serializeDocumentData } from './DocumentDataCodecRegistry';
 import { encodeImportMetadata } from './ImportMetadataCodec';
+import { downloadText } from './download';
 import { getLayerJsonExtras } from './LayerJsonExtras';
 import { JSON_SCHEMA_VERSION, type JsonDocument } from './JsonSchema';
 
@@ -34,12 +35,5 @@ export function exportDocumentJson(doc: Document = Document.instance): JsonDocum
 
 /** JSON文字列をファイルとしてダウンロード。 */
 export function downloadJson(filename: string): void {
-  const jsonStr = serializeJson();
-  const blob = new Blob([jsonStr], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadText(filename, serializeJson(), 'application/json');
 }

@@ -23,8 +23,41 @@ export function showHelpDialog(): void {
     ['help.addFloor.name', 'help.addFloor.desc'],
     ['help.addWall.name', 'help.addWall.desc'],
     ['help.addBearWall.name', 'help.addBearWall.desc'],
+    ['help.measure.name', 'help.measure.desc'],
   ];
   content.appendChild(createTable(toolRows));
+
+  // Editing and export
+  const editH4 = document.createElement('h4');
+  editH4.textContent = t('help.edit');
+  content.appendChild(editH4);
+
+  const editRows: [MessageKey, MessageKey][] = [
+    ['help.arrayCopy.name', 'help.arrayCopy.desc'],
+    ['help.mergeNodes.name', 'help.mergeNodes.desc'],
+    ['help.removeOrphans.name', 'help.removeOrphans.desc'],
+    ['help.summary.name', 'help.summary.desc'],
+    ['help.export.name', 'help.export.desc'],
+  ];
+  content.appendChild(createTable(editRows));
+
+  // Keyboard shortcuts
+  const shortcutH4 = document.createElement('h4');
+  shortcutH4.textContent = t('help.shortcuts');
+  content.appendChild(shortcutH4);
+
+  const shortcutRows: [MessageKey, MessageKey][] = [
+    ['help.shortcut.tools', 'help.shortcut.tools.desc'],
+    ['help.shortcut.file', 'help.shortcut.file.desc'],
+    ['help.shortcut.history', 'help.shortcut.history.desc'],
+    ['help.shortcut.selection', 'help.shortcut.selection.desc'],
+    ['help.shortcut.copy', 'help.shortcut.copy.desc'],
+    ['help.shortcut.delete', 'help.shortcut.delete.desc'],
+    ['help.shortcut.escape', 'help.shortcut.escape.desc'],
+    ['help.shortcut.fit', 'help.shortcut.fit.desc'],
+    ['help.shortcut.snap', 'help.shortcut.snap.desc'],
+  ];
+  content.appendChild(createTable(shortcutRows));
 
   // Camera controls
   const cameraH4 = document.createElement('h4');
