@@ -37,6 +37,7 @@ const REDUNDANT_REMOVAL_KINDS: ReadonlySet<DocumentDataKind> = new Set(['beam', 
  * 残すNodeは、レイヤーの高さにあるNode、面材から参照されているNodeを優先し、
  * 同条件なら Document の並び順（Z, Y, X 昇順）で先に現れる方とする。
  * これにより、わずかにずれたNodeが階の上のNodeを吸収して部材が階から外れることを避ける。
+ * その向きでは要素が不正になり、逆向きなら成立する場合に限り、逆向きに結合する。
  */
 export function planNodeMerge(document: Document, tolerance: number): NodeMergePlan {
   if (!Number.isFinite(tolerance) || tolerance < 0) {
@@ -75,6 +76,10 @@ export function planNodeMerge(document: Document, tolerance: number): NodeMergeP
   const groupElements = new Map<Node, Set<DocumentData>>();
   const groupHasMass = new Map<Node, boolean>();
   const replacements = new Map<Node, Node>();
+  /** 他のNodeを吸収済みの代表。 */
+  const absorbing = new Set<Node>();
+  const cellKeyOf = (node: Node): string =>
+    `${Math.floor(node.pos.x / cellSize)},${Math.floor(node.pos.y / cellSize)},${Math.floor(node.pos.z / cellSize)}`;
 
   /** node を target へ付け替えても、node を参照する要素が不変条件を満たすか。 */
   const staysValid = (node: Node, target: Node): boolean => {
@@ -109,27 +114,55 @@ export function planNodeMerge(document: Document, tolerance: number): NodeMergeP
     }
     nearby.sort((a, b) => a.distance - b.distance);
 
-    const match = nearby.find(({ target }) => {
-      if (node.mass && groupHasMass.get(target)) return false;
+    let kept: Node | null = null;
+    let reversed = false;
+    for (const { target } of nearby) {
+      if (node.mass && groupHasMass.get(target)) continue;
       const shared = groupElements.get(target)!;
-      if ([...elements].some((element) => shared.has(element))) return false;
-      return staysValid(node, target);
-    });
+      if ([...elements].some((element) => shared.has(element))) continue;
+      if (staysValid(node, target)) {
+        kept = target;
+        break;
+      }
+      // 優先度の高い側を残すと要素が不正になる場合は、逆向き（target を node へ寄せる）を試す。
+      // 例: 階の高さにある梁端を、わずかに低い床の頂点へ寄せる。床の頂点を1つだけ動かすと平面でなくなる。
+      // 既に他のNodeを吸収した代表は、その結合を検証し直す必要があるため対象にしない。
+      if (!absorbing.has(target) && staysValid(target, node)) {
+        kept = target;
+        reversed = true;
+        break;
+      }
+    }
 
-    if (match) {
-      replacements.set(node, match.target);
-      const shared = groupElements.get(match.target)!;
+    if (kept && !reversed) {
+      replacements.set(node, kept);
+      absorbing.add(kept);
+      const shared = groupElements.get(kept)!;
       for (const element of elements) shared.add(element);
-      if (node.mass) groupHasMass.set(match.target, true);
+      if (node.mass) groupHasMass.set(kept, true);
       continue;
+    }
+
+    const group = new Set(elements);
+    let hasMass = node.mass !== null;
+    if (kept) {
+      // node を代表にし、これまで代表だった kept を node へ付け替える。
+      replacements.set(kept, node);
+      absorbing.add(node);
+      for (const element of groupElements.get(kept)!) group.add(element);
+      hasMass ||= groupHasMass.get(kept) === true;
+      groupElements.delete(kept);
+      groupHasMass.delete(kept);
+      const keptCell = cells.get(cellKeyOf(kept))!;
+      keptCell.splice(keptCell.indexOf(kept), 1);
     }
 
     const key = `${cx},${cy},${cz}`;
     const cell = cells.get(key);
     if (cell) cell.push(node);
     else cells.set(key, [node]);
-    groupElements.set(node, new Set(elements));
-    groupHasMass.set(node, node.mass !== null);
+    groupElements.set(node, group);
+    groupHasMass.set(node, hasMass);
   }
 
   return { replacements, redundantElements: findRedundantElements(document, replacements) };

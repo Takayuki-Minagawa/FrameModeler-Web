@@ -363,8 +363,9 @@ export class CadView implements InputHost {
     return result.position.clone();
   }
 
+  /** 次のスナップ候補へ切り替える。切り替える先が無い（候補が1つ以下）場合は false。 */
   cycleSnapCandidate(direction: number = 1): boolean {
-    if (!this._snapping) return false;
+    if (!this._snapping || this.lastSnapCandidates.length < 2) return false;
     const selection = cycleObjectSnapCandidate(this.lastSnapCandidates, this.selectedSnapCandidateId, direction);
     if (!selection) return false;
     this.selectedSnapCandidateId = selection.candidate.candidateId ?? null;

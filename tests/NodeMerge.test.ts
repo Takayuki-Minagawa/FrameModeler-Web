@@ -5,12 +5,14 @@ import { Constraint } from '../src/data/Constraint';
 import { Document } from '../src/data/Document';
 import { Floor } from '../src/data/Floor';
 import { Layer } from '../src/data/Layer';
+import { ModelValidator } from '../src/data/ModelValidator';
 import { Node } from '../src/data/Node';
 import { Pillar } from '../src/data/Pillar';
 import { findOrphanNodes, planNodeMerge } from '../src/data/NodeMerge';
 import { Spring } from '../src/data/Spring';
 import { Support } from '../src/data/Support';
 import { Truss } from '../src/data/Truss';
+import { Wall } from '../src/data/Wall';
 import { Point3D } from '../src/math/Point3D';
 
 const doc = Document.instance;
@@ -131,6 +133,35 @@ describe('planNodeMerge', () => {
     expect(beam.nodeI).toBe(corners[0]);
   });
 
+  it('merges in the reverse direction when only that keeps every element valid', () => {
+    // 階の高さ(3000)にある梁端4点の 0.5 mm 下に床がある。床の頂点を1つずつ持ち上げると平面でなくなるため、
+    // 梁端の方を床の頂点へ寄せる。
+    doc.addLayer(new Layer(3000, '2F'));
+    const corners = [node(0, 0, 2999.5), node(1000, 0, 2999.5), node(1000, 1000, 2999.5), node(0, 1000, 2999.5)];
+    const ends = corners.map((corner) => node(corner.pos.x, corner.pos.y, 3000));
+    const floor = new Floor(corners);
+    const beams = ends.map((end, index) => new Beam(end, ends[(index + 1) % ends.length]));
+    doc.addMany([...corners, ...ends, floor, ...beams]);
+
+    const plan = doc.execute(new MergeNodesCommand(1));
+    expect(plan.replacements.size).toBe(4);
+    expect(ends.every((end) => plan.replacements.has(end))).toBe(true);
+    expect(floor.nodeList).toEqual(corners);
+    expect(beams.every((beam) => corners.includes(beam.nodeI!) && corners.includes(beam.nodeJ!))).toBe(true);
+    expect(doc.nodeList).toHaveLength(4);
+  });
+
+  it('gives the same number of merges for mirrored geometry', () => {
+    const build = (dx: number): number => {
+      doc.init();
+      const wallA = [node(0, 0), node(1000, 0), node(1000, 0, 3000), node(0, 0, 3000)];
+      const wallB = [node(dx, 0), node(dx, 1000), node(dx, 1000, 3000), node(dx, 0, 3000)];
+      doc.addMany([...wallA, ...wallB, new Wall(wallA), new Wall(wallB)]);
+      return doc.execute(new MergeNodesCommand(1)).replacements.size;
+    };
+    expect(build(0.3)).toBe(build(-0.3));
+  });
+
   it('keeps the node that lies on a layer elevation', () => {
     doc.addLayer(new Layer(3000, '2F'));
     const offLayer = node(0, 0, 2999.5);
@@ -247,6 +278,78 @@ describe('MergeNodesCommand', () => {
     expect(plan.replacements.size).toBe(0);
     expect(plan.redundantElements).toEqual([]);
     expect(doc.allDataList).toHaveLength(3);
+  });
+});
+
+describe('node merge on random models', () => {
+  /** 再現可能な擬似乱数 (mulberry32)。 */
+  function random(seed: number): () => number {
+    let state = seed;
+    return () => {
+      state = (state + 0x6d2b79f5) | 0;
+      let value = Math.imul(state ^ (state >>> 15), 1 | state);
+      value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value;
+      return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  it('never throws and always leaves a valid model', () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const next = random(seed);
+      const pick = <T>(items: ReadonlyArray<T>): T => items[Math.floor(next() * items.length)];
+      doc.init();
+      doc.addLayer(new Layer(0, '1F'));
+      doc.addLayer(new Layer(3000, '2F', { locked: next() < 0.15 }));
+
+      // 1000 mm 格子の交点へ、わずかにずれた重複節点を複数置く。
+      const jitter = (): number => (next() < 0.5 ? 0 : (next() - 0.5) * 1.6);
+      const nodes: Node[] = [];
+      for (let index = 0; index < 40; index++) {
+        const created = node(
+          Math.floor(next() * 4) * 1000 + jitter(),
+          Math.floor(next() * 4) * 1000 + jitter(),
+          pick([0, 3000]) + jitter(),
+        );
+        if (next() < 0.1) {
+          created.mass = { values: [1, 1, 1, 0, 0, 0], translationalUnit: 'kg', rotationalUnit: 'kg*mm^2' };
+        }
+        nodes.push(created);
+      }
+      doc.addMany(nodes);
+
+      // 不正な要素（零長の梁、非平面の床など）は追加時に拒否されるので読み飛ばす。
+      const tryAdd = (create: () => Parameters<typeof doc.add>[0]): void => {
+        try {
+          doc.add(create());
+        } catch {
+          // 乱数で作った要素がモデルの不変条件を満たさなかっただけ
+        }
+      };
+      for (let index = 0; index < 30; index++) {
+        tryAdd(() => new Beam(pick(nodes), pick(nodes)));
+        tryAdd(() => new Truss(pick(nodes), pick(nodes)));
+        tryAdd(() => {
+          const spring = new Spring(pick(nodes), pick(nodes));
+          spring.components = [{ dof: 'ux', stiffness: 1, unit: 'N/mm' }];
+          return spring;
+        });
+        tryAdd(() => new Floor([pick(nodes), pick(nodes), pick(nodes)]));
+        tryAdd(() => new Support(pick(nodes), ['uz']));
+        tryAdd(() => new Constraint(pick(nodes), 'ux', [{ node: pick(nodes), dof: 'ux', coefficient: 1 }]));
+      }
+
+      const tolerance = pick([0, 0.3, 1, 2, 1500]);
+      const before = doc.allDataList.length;
+      const plan = doc.execute(new MergeNodesCommand(tolerance));
+      expect(() => ModelValidator.validateModel(doc.allDataList, doc.layers), `seed ${seed}`).not.toThrow();
+      expect(doc.allDataList.length, `seed ${seed}`).toBe(
+        before - plan.replacements.size - plan.redundantElements.length,
+      );
+      // 残したNodeが、同じ計画の中で削除される側になっていない。
+      for (const keptNode of plan.replacements.values()) {
+        expect(plan.replacements.has(keptNode), `seed ${seed}`).toBe(false);
+      }
+    }
   });
 });
 

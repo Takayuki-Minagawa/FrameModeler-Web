@@ -107,7 +107,7 @@ YAML / JSON から読み込んだ Truss、Spring、Support、Constraint は専�
 - 結合すると部材長が 0 になる、面が平面でなくなるなど、モデルが不正になる節点
 - 双方に質量がある節点、ロック中の階の節点
 
-残す節点は、レイヤーの高さにある節点と面材の頂点を優先します。並列に置いたばね・トラス・支点・拘束は、結合で同一になっても削除しません。
+残す節点は、レイヤーの高さにある節点と面材の頂点を優先します。その向きではモデルが不正になり、逆向きなら成立する場合だけ逆向きに結合します。並列に置いたばね・トラス・支点・拘束は、結合で同一になっても削除しません。
 
 ### 出力メニュー
 
@@ -335,11 +335,11 @@ scripts/                    # bundle size budget
 
 ## 品質基準
 
-- Vitest: 48 ファイル・412 テスト
-- coverage 閾値: statements / functions / lines 75%、branches 60%（実測 80.54% / 81.88% / 82.99% / 71.18%）
+- Vitest: 48 ファイル・415 テスト
+- coverage 閾値: statements / functions / lines 75%、branches 60%（実測 80.66% / 81.94% / 83.08% / 71.41%）
 - Playwright: sample 読込、dirty New / Open、Undo / Redo、2D / 3D 選択、操作状態・選択数同期、resize / theme、WebGL screenshot、ショートカットと選択操作、配列複写、計測、節点結合・孤立節点削除、数量集計と各出力、言語切替とメニューの 14 テスト
 - bundle budget: Three.js vendor chunk 560 KiB 以下、アプリ JavaScript（遅延読込 chunk を含む）合計 440 KiB 以下
-- 現在の本番 build: app 290.69 kB + 97.42 kB、Three.js 536.90 kB
+- 現在の本番 build: app 291.06 kB + 97.42 kB、Three.js 536.90 kB
 - 依存監査: `npm audit` 0 件
 - app version は `package.json` を単一ソースとし、Vite が画面表示と HTML title へ注入
 
