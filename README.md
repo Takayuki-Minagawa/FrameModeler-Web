@@ -1,6 +1,6 @@
 # FrameModeler-Web
 
-**Ver.1.0.0**
+**Ver.1.1.0**
 
 建築構造フレームモデリング CAD ツールの Web アプリケーション版です。ブラウザ上で節点・線材・面材を配置・編集し、構造解析用 YAML のトラス、ばね、支点、節点質量、拘束を保持したまま 2D / 3D で確認できます。GitHub Pages へ静的サイトとして配布します。
 
@@ -13,13 +13,17 @@
 - stable ID、表示、ロック、隔離、複製、上下階コピーを備えたレイヤー管理
 - 節点・端点・中点・部材交点・グリッドへのスナップと、水平・鉛直・X/Y 軸・直交拘束
 - スナップ候補切替、種別 glyph、X / Y / Z 座標入力、距離・角度入力
-- 複数種別を組み合わせられる選択フィルタ、ラベル表示、選択要素の表示・非表示・隔離
+- 複数種別を組み合わせられる選択フィルタ、全選択・選択反転、ラベル表示、選択要素の表示・非表示・隔離
+- 選択要素の配列複写（オフセット × 個数）、重複節点の結合、孤立節点の削除
+- 2 点間の距離と ΔX / ΔY / ΔZ を表示する計測ツール
+- 種別・断面ごとの数量集計（本数、延長、面積）と CSV 出力
+- 現在の表示の PNG 出力、伏図または全体モデルの DXF (R12) 出力、節点・要素一覧の CSV 出力
 - JSON schema version 2 での保存・読込と、version なしの legacy v0 / schema v1 からの自動移行
 - 構造解析用 YAML の source / generated 読込と、元 ID・材料・断面・単位・警告などの provenance 永続化
 - Command 経由のモデル変更、構造差分 Undo / Redo、未保存状態表示、破壊操作前の確認、世代付き IndexedDB draft 復旧
 - 保存前モデル検証、複数エラー収集、対象選択と自動ズーム
 - Pointer Events によるパン・ズーム・回転とレスポンシブな canvas resize
-- 日本語 / English、ダーク / ライトテーマ、キーボード操作、アクセシブルなダイアログ
+- 日本語 / English、ダーク / ライトテーマ、ツール切替を含むキーボードショートカット、アクセシブルなダイアログ
 - アプリ内操作マニュアル
 
 ## 技術スタック
@@ -59,7 +63,7 @@ npm test                 # 単体・DOMテスト
 npm run test:coverage    # カバレッジと閾値確認
 npm run test:e2e         # 本番buildをpreviewするChromium E2E・visual regression
 npm run test:e2e:update  # 本番buildでvisual baseline更新
-npm run check:bundle     # JS chunk / 合計サイズbudget確認
+npm run check:bundle     # vendor chunk / アプリJSのサイズbudget確認
 npm run check            # format / 型検査 / lint / unit / coverage / build / bundle budget
 ```
 
@@ -79,10 +83,59 @@ Pull Request と `main` への push では CI が `npm run check`、high 以上�
 | 床追加     | 2 点クリックで矩形の床を追加                                                                      |
 | 壁追加     | 2 点クリックで壁を追加                                                                            |
 | 耐力壁追加 | 2 点クリックで耐力壁を追加                                                                        |
+| 計測       | 2 点クリックで距離と ΔX / ΔY / ΔZ をステータスバーへ表示。モデルは変更しない                      |
 
 2 点作図の 1 点目は preview として保持され、ステータスバーへ「1 点目選択済み」と表示されます。2 点目の確定時に必要な節点と要素を 1 Command で追加します。新規作成、読込、削除、すべてのレイヤー変更、2D / 3D 切替、Esc、ツール切替では途中操作をキャンセルします。柱・壁の直上要素が見つからない場合など、確定できなかった理由もステータスバーへ表示します。
 
 YAML / JSON から読み込んだ Truss、Spring、Support、Constraint は専用色と glyph で描画され、ダブルクリックで構造プロパティを編集できます。Node ダイアログでは 6 自由度質量も編集できます。
+
+計測ツールは、節点をクリックするとその節点の座標を使います。作業平面の高さに縛られないため、3D 表示や正面・側面表示でも階をまたぐ距離を測れます。立面表示では節点だけが計測点になります。
+
+### 編集メニュー
+
+| 操作           | 機能                                                                                                                             |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 全選択         | 選択フィルタ・表示フィルタ・レイヤーの表示とロックに従って選択。平面表示では現在の階、3D・立面表示ではモデル全体が対象           |
+| 選択反転       | 上と同じ範囲で選択と非選択を入れ替える                                                                                           |
+| 配列複写       | 選択要素を ΔX / ΔY / ΔZ の間隔で指定個数（1〜200）複写。複写先の既存節点は再利用し、同じ要素は重複して作らない                   |
+| 重複節点を結合 | 許容距離以内の節点を 1 つにまとめ、部材・面材・支点・拘束の参照を付け替える。結合で完全に同じになった梁・柱・面材は 1 つだけ残す |
+| 孤立節点を削除 | どの要素からも参照されていない節点を削除                                                                                         |
+
+配列複写・結合・削除はそれぞれ 1 回の Undo で戻せます。重複節点の結合では、次の節点をそのまま残します。
+
+- 零長ばねや拘束で互いに結ばれた節点（意図して重ねてある節点）
+- 結合すると部材長が 0 になる、面が平面でなくなるなど、モデルが不正になる節点
+- 双方に質量がある節点、ロック中の階の節点
+
+残す節点は、レイヤーの高さにある節点と面材の頂点を優先します。その向きではモデルが不正になり、逆向きなら成立する場合だけ逆向きに結合します。並列に置いたばね・トラス・支点・拘束は、結合で同一になっても削除しません。
+
+### 出力メニュー
+
+| 操作     | 機能                                                                                              |
+| -------- | ------------------------------------------------------------------------------------------------- |
+| 数量集計 | 種別ごとの要素数、種別・断面ごとの本数と延長 (m)・面積 (m²)、モデル範囲を表示し、CSV で保存       |
+| PNG 画像 | 現在の表示をラベルごと画像で保存                                                                  |
+| DXF      | 平面表示では現在の階の伏図、3D・立面表示ではモデル全体を ASCII DXF (R12 / AC1009, 単位 mm) で保存 |
+| 節点 CSV | 節点番号と座標 (mm)                                                                               |
+| 要素 CSV | 部材・面材・支点・拘束の種別、番号、断面、参照節点番号、長さ (mm)、面積 (mm²)                     |
+
+DXF は種別ごとに `NODE` / `BEAM` / `PILLAR` / `TRUSS` / `SPRING` / `FLOOR` / `WALL` / `BEARWALL` / `SECTION` レイヤーへ分けます。伏図では階を貫く柱を円、階に立つ壁を階の高さにある辺の線で表し、断面名を文字として配置します。非表示のレイヤーと要素は出力しません。CSV は Excel で開けるよう BOM 付き UTF-8 で保存し、`=` などで始まる文字列は数式として実行されないよう `'` を前置します。
+
+### キーボードショートカット
+
+| キー               | 動作                                                         |
+| ------------------ | ------------------------------------------------------------ |
+| 1 〜 9             | ツール切替（選択・移動・節点・梁・柱・床・壁・耐力壁・計測） |
+| Ctrl / Cmd + S / O | 保存 / 開く                                                  |
+| Ctrl / Cmd + Z / Y | 元に戻す / やり直す（Cmd + Shift + Z も可）                  |
+| Ctrl / Cmd + A / I | 全選択 / 選択反転                                            |
+| Ctrl / Cmd + D     | 配列複写                                                     |
+| Delete             | 選択要素を削除                                               |
+| Esc                | 途中の操作を取り消す。数値入力中でも有効                     |
+| Home / F           | モデル全体を表示                                             |
+| Tab / Alt          | スナップ候補の切替 / 押している間スナップ無効                |
+
+Esc 以外のショートカットは、入力欄の編集中とダイアログ表示中は働きません。
 
 ### スナップと数値入力
 
@@ -216,7 +269,7 @@ YAML / JSON から読み込んだ Truss、Spring、Support、Constraint は専�
 }
 ```
 
-data 層の `TYPE_REGISTRY` を型の順序、constructor、採番 category の単一ソースとし、`DocumentDataCodecRegistry` が各型の JSON collection、検証、serialize / deserialize、レイヤーコピー時の clone を結び付けます。全 core 型と codec の 1 対 1 対応は起動時とテストで検査されます。未登録型は保存時にエラーとなり、既知 collection だけが黙って欠落することはありません。レイヤーの未知 optional field は migration / round-trip で保持します。
+data 層の `TYPE_REGISTRY` を型の順序、constructor、採番 category の単一ソースとし、`DocumentDataCodecRegistry` が各型の JSON collection、検証、serialize / deserialize を結び付けます。複製は data 層の `cloneWithNodes` が型ごとの state API だけで行います。全 core 型と codec の 1 対 1 対応は起動時とテストで検査されます。未登録型は保存時にエラーとなり、既知 collection だけが黙って欠落することはありません。レイヤーの未知 optional field は migration / round-trip で保持します。
 
 `select` などの一時 UI 状態はモデル JSON には保存しません。YAML から読み込んだモデルでは、次の情報を optional な `importMetadata` として同じ JSON に保存します。
 
@@ -253,7 +306,9 @@ data 層の `TYPE_REGISTRY` を型の順序、constructor、採番 category の�
 - データ追加・更新は検証後に自動ソートし、Node / Member / Plane / Constraint category ごとに番号を再割り当てします。
 - Node 削除前に Member / Plane / Support / Constraint の参照を確認します。
 - `Point3D` は `{ x, y, z }` 形式、構造自由度は `ux, uy, uz, rx, ry, rz` の安定名で保存します。
-- `main.ts` からアプリ横断状態、ファイル、ツール、レイヤー、設定の責務を各 Controller へ分離しています。
+- `main.ts` は composition root として各 Controller を生成・結線するだけで、操作ロジックを持ちません。
+- 各モデル型は `captureState` / `restoreState` / `referencedNodes` / `remapNodes` を実装します。`Document` の transaction rollback と変更検出、複製、節点結合はこの API だけを使うため、型を追加しても `Document` 側の列挙を増やす必要がありません。
+- Controller と UI 部品の文言は `t(key, params)` に集約しています。`CadView` は操作状態や作業平面エラーを言語に依存しないコードで通知し、文言への変換は購読側で行います。
 
 ```text
 src/
@@ -261,14 +316,14 @@ src/
 ├── version.ts              # package.json由来のアプリversion
 ├── i18n.ts                 # 多言語・ARIA文言
 ├── commands/               # Document Command群
-├── controllers/            # App / File / Tool / Layer / Settings
-├── data/                   # Document、モデル型、Layer、Validator/Inspector
+├── controllers/            # App / File / FileMenu / Edit / Export / Tool / Layer / ViewOptions / Shortcut ほか
+├── data/                   # Document、モデル型、Layer、Validator/Inspector、複製・節点結合・数量集計
 ├── display/                # 表示filterとlabel設定
 ├── history/                # 構造差分Undo/Redoと世代付きIndexedDB draft
 ├── math/                   # Point3D、Point2D、距離・角度入力
-├── io/                     # schema v2、codec registry、metadata、YAML入出力
+├── io/                     # schema v2、codec registry、metadata、YAML入出力、CSV / DXF 出力
 ├── selection/              # 複数種別選択フィルタ
-├── ui/                     # CadView、Camera、Renderer、Input、ObjectSnap
+├── ui/                     # CadView、Camera、Renderer、Input、ObjectSnap、StatusBar
 │   ├── handlers/           # マウスハンドラ
 │   └── dialogs/            # プロパティ、検証、読込情報、ヘルプ
 └── styles/                 # CSS
@@ -280,19 +335,19 @@ scripts/                    # bundle size budget
 
 ## 品質基準
 
-- Vitest: 33 ファイル・300 テスト
-- coverage 閾値: statements / functions / lines 75%、branches 60%（実測 77.85% / 78.88% / 80.61% / 66.83%）
-- Playwright: sample 読込、dirty New / Open、Undo / Redo、2D / 3D 選択、操作状態・選択数同期、resize / theme、WebGL screenshot の 8 テスト
-- bundle budget: 1 chunk 525 KiB 以下、JavaScript 合計 850 KiB 以下
-- 現在の本番 build: app 252.71 kB + 97.39 kB、Three.js 506.59 kB（合計 856,691 bytes）
+- Vitest: 48 ファイル・415 テスト
+- coverage 閾値: statements / functions / lines 75%、branches 60%（実測 80.64% / 81.94% / 83.06% / 71.38%）
+- Playwright: sample 読込、dirty New / Open、Undo / Redo、2D / 3D 選択、操作状態・選択数同期、resize / theme、WebGL screenshot、ショートカットと選択操作、配列複写、計測、節点結合・孤立節点削除、数量集計と各出力、言語切替とメニューの 14 テスト
+- bundle budget: Three.js vendor chunk 560 KiB 以下、アプリ JavaScript（遅延読込 chunk を含む）合計 440 KiB 以下
+- 現在の本番 build: app 291.06 kB + 97.42 kB、Three.js 536.90 kB
+- 依存監査: `npm audit` 0 件
 - app version は `package.json` を単一ソースとし、Vite が画面表示と HTML title へ注入
-
-全レビュー項目の実装根拠は [CODE_REVIEW_AND_ROADMAP.md](CODE_REVIEW_AND_ROADMAP.md) を参照してください。
 
 ## アクセシビリティ
 
 - toolbar / group、canvas、layer listbox、dialog の role と accessible name を設定しています。
-- ダイアログは label と control を関連付け、初期 focus、Tab trap、Enter 確定、Esc、focus 復帰、inline 数値エラーに対応します。
+- ダイアログは label と control を関連付け、初期 focus、Tab trap、Enter 確定、Esc、focus 復帰、inline 数値エラーに対応します。ツールバーメニューから開いたダイアログは、閉じるとメニューの見出しへ focus を戻します。
+- ツールバーメニューは外側のクリック、Esc、項目の実行で閉じ、同時に 1 つだけ開きます。
 - 言語切替時は表示テキスト、ARIA label、`<html lang>` を同期します。
 - `:focus-visible`、高コントラスト、狭幅表示、coarse pointer 向け 44px 操作対象を用意しています。
 

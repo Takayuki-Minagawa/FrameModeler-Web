@@ -237,6 +237,7 @@ export class CadRenderer {
     tolerancePx: number = CAD.HIT_TOLERANCE_PX,
     predicate: (data: DocumentData) => boolean = () => true,
     showAllLayers: boolean = false,
+    includeLocked: boolean = false,
   ): DocumentData | null {
     const doc = Document.instance;
     const layer = doc.shownLayer;
@@ -245,7 +246,7 @@ export class CadRenderer {
       this.displayFilter.allows(data) &&
       predicate(data) &&
       doc.isDataVisible(data) &&
-      !doc.isDataLocked(data) &&
+      (includeLocked || !doc.isDataLocked(data)) &&
       (showAllLayers || !layer || data.existsOn(layer));
 
     let closestSupport: { data: Support; distance: number } | null = null;

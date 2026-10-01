@@ -4,6 +4,8 @@ import type { Layer } from '../data/Layer';
 import { Node } from '../data/Node';
 import type { Point3D } from '../math/Point3D';
 import type { DocumentCommand } from './DocumentCommand';
+import { planElementCopies, type ElementCopyRequest } from '../data/ElementCopy';
+import { applyNodeMerge, findOrphanNodes, planNodeMerge, type NodeMergePlan } from '../data/NodeMerge';
 
 export class AddElementsCommand implements DocumentCommand {
   readonly label: string;
@@ -111,6 +113,46 @@ export class AddLayerCommand implements DocumentCommand<boolean> {
   }
 }
 
+/** 選択要素を座標変換して複製する。追加した要素（Nodeを含む）を返す。 */
+export class CopyElementsCommand implements DocumentCommand<DocumentData[]> {
+  constructor(
+    private readonly request: ElementCopyRequest,
+    readonly label: string = '配列複写',
+  ) {}
+
+  execute(document: Document): DocumentData[] {
+    const additions = planElementCopies(document, this.request);
+    assertUnlocked(document, additions, this.label);
+    document.addMany(additions);
+    return additions;
+  }
+}
+
+/** 許容距離以内のNodeを結合し、参照を付け替える。適用した計画を返す。 */
+export class MergeNodesCommand implements DocumentCommand<NodeMergePlan> {
+  constructor(
+    private readonly tolerance: number,
+    readonly label: string = '重複節点結合',
+  ) {}
+
+  execute(document: Document): NodeMergePlan {
+    const plan = planNodeMerge(document, this.tolerance);
+    applyNodeMerge(document, plan);
+    return plan;
+  }
+}
+
+/** どの要素からも参照されていないNodeを削除する。削除したNodeを返す。 */
+export class RemoveOrphanNodesCommand implements DocumentCommand<Node[]> {
+  readonly label = '孤立節点削除';
+
+  execute(document: Document): Node[] {
+    const orphans = findOrphanNodes(document);
+    document.removeMany(orphans);
+    return orphans;
+  }
+}
+
 /** UI Commandからロック階のモデル要素を変更しないための共通境界。 */
 function assertUnlocked(document: Document, elements: ReadonlyArray<DocumentData>, action: string): void {
   const locked = elements.find((element) => document.isDataLocked(element));
@@ -121,11 +163,6 @@ function assertUnlocked(document: Document, elements: ReadonlyArray<DocumentData
 function affectedByNodeChanges(document: Document, nodes: ReadonlyArray<Node>): DocumentData[] {
   const nodeSet = new Set(nodes);
   return document.allDataList.filter(
-    (element) => nodeSet.has(element as Node) || nodes.some((node) => refersToNode(element, node)),
+    (element) => nodeSet.has(element as Node) || element.referencedNodes.some((node) => nodeSet.has(node)),
   );
-}
-
-function refersToNode(element: DocumentData, node: Node): boolean {
-  const candidate = element as DocumentData & { isReferring?: (target: Node) => boolean };
-  return typeof candidate.isReferring === 'function' && candidate.isReferring(node);
 }

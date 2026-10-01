@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Download, type Locator, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const PILLAR_SAMPLE = fileURLToPath(new URL('../sample-data/pillar_test.json', import.meta.url));
@@ -17,8 +18,8 @@ test('サンプルJSONを読み込み、モデル件数とレイヤーを反映�
   await loadSample(page, PILLAR_SAMPLE, 'N:19 M:12 P:0');
 
   await expect(page.locator('#layer-list > li')).toHaveCount(2);
-  await expect(page.locator('#status-version')).toHaveText('Ver.1.0.0');
-  await expect(page).toHaveTitle('FrameModeler Web v1.0.0');
+  await expect(page.locator('#status-version')).toHaveText('Ver.1.1.0');
+  await expect(page).toHaveTitle('FrameModeler Web v1.1.0');
 });
 
 test('dirtyモデルのNew/Openを確認し、拒否時はモデルを保持する', async ({ page }) => {
@@ -204,18 +205,265 @@ test('WebGLモデル描画をvisual baselineと比較する', async ({ page }) =
   });
 });
 
+test('数字キーでツールを切り替え、全選択と選択反転を行う', async ({ page }) => {
+  await loadSample(page, PILLAR_SAMPLE, 'N:19 M:12 P:0');
+  const canvas = page.locator('#cad-canvas');
+
+  await page.keyboard.press('9');
+  await expect(page.locator('#btn-measure')).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('4');
+  await expect(page.locator('#btn-add-beam')).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('1');
+  await expect(page.locator('#btn-select')).toHaveAttribute('aria-pressed', 'true');
+
+  // 平面表示では現在の階にある要素だけ、3Dではモデル全体が対象になる。
+  await page.keyboard.press('Control+a');
+  const planCount = Number(await canvas.getAttribute('data-selected-count'));
+  expect(planCount).toBeGreaterThan(0);
+  expect(planCount).toBeLessThan(31);
+
+  await page.locator('#btn-view-isometric').click();
+  await page.keyboard.press('Control+a');
+  await expect(canvas).toHaveAttribute('data-selected-count', '31');
+  await expect(page.locator('#status-info')).toContainText('S:31');
+
+  await page.keyboard.press('Control+i');
+  await expect(canvas).toHaveAttribute('data-selected-count', '0');
+
+  await page.locator('#edit-menu > summary').click();
+  await page.locator('#btn-invert-selection').click();
+  await expect(canvas).toHaveAttribute('data-selected-count', '31');
+  await expect(page.locator('#edit-menu')).not.toHaveAttribute('open');
+
+  // 選択対象のチェックボックスを操作した直後でも、ショートカットは有効なままにする。
+  await page.locator('#selection-filter-menu > summary').click();
+  await page.locator('[data-selection-kind="pillar"]').uncheck();
+  await expect(canvas).toHaveAttribute('data-selected-count', '22');
+  await page.keyboard.press('Control+i');
+  await expect(canvas).toHaveAttribute('data-selected-count', '0');
+  await page.keyboard.press('Control+a');
+  await expect(canvas).toHaveAttribute('data-selected-count', '22');
+});
+
+test('配列複写で梁を繰り返し複写し、1回のUndoで戻す', async ({ page }) => {
+  await addBeam(page, [0, 0, 0], [6000, 0, 0]);
+  await expect(page.locator('#status-info')).toContainText('N:2 M:1 P:0');
+
+  await page.keyboard.press('1');
+  await page.keyboard.press('Control+a');
+  await expect(page.locator('#cad-canvas')).toHaveAttribute('data-selected-count', '3');
+
+  await page.keyboard.press('Control+d');
+  const dialog = page.getByRole('dialog', { name: '配列複写' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog.getByRole('alert')).toHaveText('ΔX・ΔY・ΔZのいずれかを0以外にしてください');
+
+  await dialog.getByLabel('ΔY (mm)').fill('4000');
+  await dialog.getByLabel('個数').fill('2');
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('#status-info')).toContainText('N:6 M:3 P:0');
+  await expect(page.locator('#status-info')).toContainText('4節点、2要素を追加しました');
+  await expect(page.locator('#btn-undo')).toHaveAttribute('title', '元に戻す: 配列複写');
+
+  // 同じ条件で再実行しても、複写先に同じ要素があるため増えない。
+  await page.locator('#edit-menu > summary').click();
+  await page.locator('#btn-array-copy').click();
+  await expect(dialog.getByLabel('ΔY (mm)')).toHaveValue('4000');
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(page.locator('#status-info')).toContainText('N:6 M:3 P:0');
+  await expect(page.locator('#status-info')).toContainText('追加はありませんでした');
+
+  await page.locator('#btn-undo').click();
+  await expect(page.locator('#status-info')).toContainText('N:2 M:1 P:0');
+  await page.locator('#btn-redo').click();
+  await expect(page.locator('#status-info')).toContainText('N:6 M:3 P:0');
+});
+
+test('計測ツールで距離と各軸の差分を表示する', async ({ page }) => {
+  const status = page.locator('#status-info');
+  await page.locator('#btn-measure').click();
+
+  await enterCoordinate(page, 0, 0, 0);
+  await expect(status).toContainText('1点目選択済み');
+  await enterCoordinate(page, 3000, 4000, 0);
+  await expect(status).toContainText('距離 5000.0 mm（ΔX 3000.0 / ΔY 4000.0 / ΔZ 0.0）');
+  await expect(status).not.toContainText('1点目選択済み');
+  // 計測はモデルを変更しない。
+  await expect(status).toContainText('N:0 M:0 P:0');
+  await expect(page.locator('#btn-undo')).toBeDisabled();
+
+  await page.locator('#btn-lang').click();
+  await expect(status).toContainText('Distance 5000.0 mm (ΔX 3000.0 / ΔY 4000.0 / ΔZ 0.0)');
+
+  await page.keyboard.press('Escape');
+  await expect(status).not.toContainText('Distance');
+
+  // 数値入力した点は、近くに節点があっても入力値のまま使う。
+  await addNode(page, 0, 0, 0);
+  await page.keyboard.press('Home');
+  await page.locator('#btn-measure').click();
+  await enterCoordinate(page, 1, 0, 0);
+  await enterCoordinate(page, 1, 0, 3000);
+  await expect(status).toContainText('Distance 3000.0 mm (ΔX 0.0 / ΔY 0.0 / ΔZ 3000.0)');
+
+  // 計測は立面表示でも使えるため、正面へ切り替えても選択ツールへ戻さない。
+  await page.locator('#btn-view-front').click();
+  await expect(page.locator('#btn-measure')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#btn-view-top').click();
+  await page.locator('#btn-add-beam').click();
+  await page.locator('#btn-view-front').click();
+  await expect(page.locator('#btn-select')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('重複節点を結合し、孤立節点を削除する', async ({ page }) => {
+  const status = page.locator('#status-info');
+  await addBeam(page, [0, 0, 0], [6000, 0, 0]);
+  await addBeam(page, [0.8, 0, 0], [0.8, 4000, 0]);
+  await addNode(page, 3000, 3000, 0);
+  await expect(status).toContainText('N:5 M:2 P:0');
+
+  await page.locator('#edit-menu > summary').click();
+  await page.locator('#btn-merge-nodes').click();
+  const dialog = page.getByRole('dialog', { name: '重複節点の結合' });
+  await expect(dialog.getByLabel('許容距離 (mm)')).toHaveValue('1');
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(status).toContainText('N:4 M:2 P:0');
+  await expect(status).toContainText('1個の節点を結合し、重複した0要素を削除しました');
+  await expect(page.locator('#btn-undo')).toHaveAttribute('title', '元に戻す: 重複節点結合');
+
+  const confirmed = handleNextConfirm(page, true);
+  await page.locator('#edit-menu > summary').click();
+  await page.locator('#btn-remove-orphans').click();
+  await expect(confirmed).resolves.toContain('節点1個を削除しますか');
+  await expect(status).toContainText('N:3 M:2 P:0');
+  await expect(status).toContainText('孤立節点を1個削除しました');
+
+  await page.locator('#btn-undo').click();
+  await page.locator('#btn-undo').click();
+  await expect(status).toContainText('N:5 M:2 P:0');
+});
+
+test('数量集計を表示し、CSV・PNG・DXFを保存する', async ({ page }) => {
+  await loadSample(page, PILLAR_SAMPLE, 'N:19 M:12 P:0');
+
+  await page.locator('#export-menu > summary').click();
+  await page.locator('#btn-summary').click();
+  const dialog = page.getByRole('dialog', { name: '数量集計' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('row', { name: /^節点\s*19$/ })).toBeVisible();
+  await expect(dialog.getByRole('row', { name: /^合計\s+12\s/ })).toBeVisible();
+
+  const summary = await saveDownload(page, () => dialog.getByRole('button', { name: 'CSVを保存' }).click());
+  expect(summary.name).toBe('pillar_test_summary.csv');
+  expect(summary.content.subarray(0, 3)).toEqual(Buffer.from([0xef, 0xbb, 0xbf]));
+  expect(summary.content.toString('utf8')).toContain('種別,断面,数,延長 (m),面積 (m²)');
+  await dialog.getByRole('button', { name: '閉じる' }).click();
+  await expect(dialog).toBeHidden();
+
+  const nodes = await saveDownload(page, () => clickExport(page, '#btn-export-nodes-csv'));
+  expect(nodes.name).toBe('pillar_test_nodes.csv');
+  expect(nodes.content.toString('utf8').trim().split('\r\n')).toHaveLength(20);
+
+  const elements = await saveDownload(page, () => clickExport(page, '#btn-export-elements-csv'));
+  expect(elements.name).toBe('pillar_test_elements.csv');
+  expect(elements.content.toString('utf8').trim().split('\r\n')).toHaveLength(13);
+
+  const dxf = await saveDownload(page, () => clickExport(page, '#btn-export-dxf'));
+  expect(dxf.name).toMatch(/^pillar_test_.+\.dxf$/);
+  const dxfText = dxf.content.toString('latin1');
+  expect(dxfText).toContain('AC1009');
+  expect(dxfText).toContain('CIRCLE');
+  expect(dxfText.endsWith('0\r\nEOF\r\n')).toBe(true);
+
+  await page.locator('#btn-view-isometric').click();
+  const wholeModel = await saveDownload(page, () => clickExport(page, '#btn-export-dxf'));
+  expect(wholeModel.name).toBe('pillar_test.dxf');
+  expect(wholeModel.content.toString('latin1')).not.toContain('CIRCLE');
+
+  const png = await saveDownload(page, () => clickExport(page, '#btn-export-png'));
+  expect(png.name).toBe('pillar_test.png');
+  expect(png.content.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  // 単色の空画像ではなく、モデルが描かれた画像であること。
+  expect(png.content.length).toBeGreaterThan(5000);
+  await expect(page.locator('#status-info')).toContainText('pillar_test.png を保存しました');
+  // 出力はモデルを変更しない。
+  await expect(page.locator('#status-version')).not.toContainText('*');
+});
+
+test('レイヤー操作の文言を言語切替へ追随させ、メニューを外側クリックで閉じる', async ({ page }) => {
+  await loadSample(page, PILLAR_SAMPLE, 'N:19 M:12 P:0');
+  const visibility = page.locator('#layer-list > li').first().locator('[data-action="visibility"]');
+  await expect(visibility).toHaveAttribute('aria-label', 'レイヤーを非表示');
+  await expect(page.locator('#btn-duplicate-layer')).toHaveAttribute('title', 'レイヤー複製');
+
+  await page.locator('#btn-lang').click();
+  await expect(visibility).toHaveAttribute('aria-label', 'Hide layer');
+  await expect(page.locator('#btn-duplicate-layer')).toHaveAttribute('title', 'Duplicate layer');
+  await expect(page.locator('#btn-measure')).toHaveText('Measure');
+  await expect(page.locator('#edit-menu > summary')).toHaveText('Edit');
+
+  await page.locator('#edit-menu > summary').click();
+  await expect(page.locator('#edit-menu')).toHaveAttribute('open', '');
+  await page.locator('#export-menu > summary').click();
+  await expect(page.locator('#edit-menu')).not.toHaveAttribute('open');
+  await expect(page.locator('#export-menu')).toHaveAttribute('open', '');
+  await page.locator('#cad-canvas').click({ position: { x: 5, y: 5 } });
+  await expect(page.locator('#export-menu')).not.toHaveAttribute('open');
+
+  // メニューを閉じるEscは、作図中の1点目を取り消さない。
+  const canvas = page.locator('#cad-canvas');
+  await page.locator('#btn-add-beam').click();
+  await enterCoordinate(page, 0, 0, 0);
+  await expect(canvas).toHaveAttribute('data-operation-status', 'firstPointSelected');
+  await page.locator('#edit-menu > summary').click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#edit-menu')).not.toHaveAttribute('open');
+  await expect(page.locator('#edit-menu > summary')).toBeFocused();
+  await expect(canvas).toHaveAttribute('data-operation-status', 'firstPointSelected');
+  await page.keyboard.press('Escape');
+  await expect(canvas).not.toHaveAttribute('data-operation-status');
+});
+
 async function loadSample(page: Page, file: string, expectedCounts: string): Promise<void> {
   await page.locator('#file-input').setInputFiles(file);
   await expect(page.locator('#status-info')).toContainText(expectedCounts);
   await settleRendering(page);
 }
 
-async function addNode(page: Page, x: number, y: number, z: number): Promise<void> {
-  await page.locator('#btn-add-node').click();
+async function enterCoordinate(page: Page, x: number, y: number, z: number): Promise<void> {
   await page.locator('#input-coordinate-x').fill(String(x));
   await page.locator('#input-coordinate-y').fill(String(y));
   await page.locator('#input-coordinate-z').fill(String(z));
   await page.locator('#btn-coordinate-commit').click();
+}
+
+async function addNode(page: Page, x: number, y: number, z: number): Promise<void> {
+  await page.locator('#btn-add-node').click();
+  await enterCoordinate(page, x, y, z);
+}
+
+/** 座標入力で梁を追加し、追加直後に開くプロパティダイアログを既定値のまま閉じる。 */
+async function addBeam(page: Page, from: [number, number, number], to: [number, number, number]): Promise<void> {
+  await page.locator('#btn-add-beam').click();
+  await enterCoordinate(page, ...from);
+  await enterCoordinate(page, ...to);
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'キャンセル' }).click();
+  await expect(dialog).toBeHidden();
+}
+
+async function clickExport(page: Page, selector: string): Promise<void> {
+  await page.locator('#export-menu > summary').click();
+  await page.locator(selector).click();
+}
+
+async function saveDownload(page: Page, trigger: () => Promise<void>): Promise<{ name: string; content: Buffer }> {
+  const [download] = await Promise.all([page.waitForEvent('download') as Promise<Download>, trigger()]);
+  const path = await download.path();
+  return { name: download.suggestedFilename(), content: await readFile(path) };
 }
 
 function handleNextConfirm(page: Page, accept: boolean): Promise<string> {

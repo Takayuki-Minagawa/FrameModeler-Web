@@ -18,12 +18,8 @@ import {
 } from './ObjectSnapEngine';
 import { DisplayFilter } from '../display/DisplayFilter';
 import { createDisplayLabelDescriptors, DisplayLabelOptions, type DisplayLabelOption } from '../display/DisplayLabels';
-import { Member } from '../data/Member';
 import { Node } from '../data/Node';
-import { Plane } from '../data/Plane';
 import { CadLabelRenderer } from './CadLabelRenderer';
-import { Support } from '../data/Support';
-import { Constraint } from '../data/Constraint';
 
 const enum DirtyFlag {
   Camera = 1 << 0,
@@ -35,6 +31,16 @@ const enum DirtyFlag {
 
 /** 作図ハンドラからステータスバーへ渡す、翻訳非依存の操作状態。 */
 export type CadOperationStatus = 'firstPointSelected' | 'noPointAbove' | 'coincidentPoints' | 'duplicateElement';
+
+/** 平面図 / 立面（正面・側面）/ 3D のどの投影で表示しているか。 */
+export type CadViewMode = 'plan' | 'elevation' | '3d';
+
+/** 計測ツールの結果。final=false は2点目を確定する前の仮表示。 */
+export interface CadMeasurement {
+  from: Point3D;
+  to: Point3D;
+  final: boolean;
+}
 
 /** CADビューの公開ファサード。描画・カメラ・入力のライフサイクルを束ねる。 */
 export class CadView implements InputHost {
@@ -61,6 +67,7 @@ export class CadView implements InputHost {
   private _mouseWorldPos = new Point3D();
   private _handler: ICadMouseHandler | null = null;
   private _operationStatus: CadOperationStatus | null = null;
+  private _measurement: CadMeasurement | null = null;
   private palette: CadPalette = getPalette();
 
   private rafId = 0;
@@ -71,7 +78,6 @@ export class CadView implements InputHost {
   private disposed = false;
   private activeScreenPoint: THREE.Vector2 | null = null;
   private lastWorkPlaneError: WorkPlaneIntersectionError | null = null;
-  private readonly originalCanvasTitle: string;
   private _currentSnapResult: ObjectSnapResult = {
     position: new Point3D(),
     kind: 'none',
@@ -82,14 +88,14 @@ export class CadView implements InputHost {
   onMouseMove: ((pos: Point3D) => void) | null = null;
   onSelectionChanged: ((selected: ReadonlyArray<DocumentData>) => void) | null = null;
   onOperationStatusChanged: ((status: CadOperationStatus | null) => void) | null = null;
+  onMeasurementChanged: ((measurement: Readonly<CadMeasurement> | null) => void) | null = null;
   /** kind/位置が変わった時に、ステータス表示やsnap glyphへ通知する。 */
   onSnapChanged: ((result: Readonly<ObjectSnapResult>) => void) | null = null;
-  /** nullはエラー解消。main等からステータス表示へ接続できる。 */
-  onWorkPlaneUnavailable: ((message: string | null) => void) | null = null;
+  /** 作業平面へ投影できない理由のコード。nullはエラー解消。文言への変換は購読側で行う。 */
+  onWorkPlaneUnavailable: ((error: WorkPlaneIntersectionError | null) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.originalCanvasTitle = canvas.title;
     this.canvas.dataset.snapKind = 'none';
     this.canvas.dataset.selectedCount = '0';
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -197,6 +203,32 @@ export class CadView implements InputHost {
     this.onOperationStatusChanged?.(status);
   }
 
+  get measurement(): Readonly<CadMeasurement> | null {
+    return this._measurement;
+  }
+
+  /** 計測ツールの結果をステータスバーなどの購読者へ通知する。nullで解除。 */
+  setMeasurement(measurement: CadMeasurement | null): void {
+    if (this._measurement === null && measurement === null) return;
+    this._measurement = measurement
+      ? { from: measurement.from.clone(), to: measurement.to.clone(), final: measurement.final }
+      : null;
+    this.onMeasurementChanged?.(this._measurement);
+  }
+
+  /**
+   * 処理中の操作がポインタの画面位置を伴うか。座標の数値入力から呼ばれたクリックでは false になり、
+   * ハンドラは入力値をそのまま使うべきかを判断できる。
+   */
+  get hasPointerPosition(): boolean {
+    return this.activeScreenPoint !== null;
+  }
+
+  get viewMode(): CadViewMode {
+    if (this.show3D) return '3d';
+    return this.isElevationView ? 'elevation' : 'plan';
+  }
+
   get constraintAnchor(): Point3D | null {
     return this._handler?.getConstraintAnchor?.() ?? null;
   }
@@ -241,18 +273,8 @@ export class CadView implements InputHost {
   fitToData(data: ReadonlyArray<DocumentData>): void {
     const bounds = new THREE.Box3();
     for (const item of data) {
-      if (item instanceof Node) bounds.expandByPoint(toVector3(item.pos));
-      else if (item instanceof Member && item.ok) {
-        bounds.expandByPoint(toVector3(item.posI));
-        bounds.expandByPoint(toVector3(item.posJ));
-      } else if (item instanceof Plane) {
-        for (const node of item.nodeList) bounds.expandByPoint(toVector3(node.pos));
-      } else if (item instanceof Support && item.node) {
-        bounds.expandByPoint(toVector3(item.node.pos));
-      } else if (item instanceof Constraint) {
-        if (item.slaveNode) bounds.expandByPoint(toVector3(item.slaveNode.pos));
-        for (const term of item.terms) bounds.expandByPoint(toVector3(term.node.pos));
-      }
+      const nodes = item instanceof Node ? [item] : item.referencedNodes;
+      for (const node of nodes) bounds.expandByPoint(toVector3(node.pos));
     }
     if (bounds.isEmpty()) return;
     this.cameraCtrl.fitToBounds(bounds);
@@ -287,8 +309,7 @@ export class CadView implements InputHost {
   getMouseCoord(event: MouseEvent): Point3D | null {
     const position = this.screenToWorld(event.clientX, event.clientY);
     if (!position) {
-      const elevationView = this.cameraCtrl.standardView === 'front' || this.cameraCtrl.standardView === 'right';
-      if (elevationView && this._handler?.supportsElevationPicking) {
+      if (this.isElevationView && this._handler?.supportsElevationPicking) {
         this.updateWorkPlaneError(null);
         const fallback = new Point3D(
           this.cameraCtrl.cameraCenter.x,
@@ -342,8 +363,9 @@ export class CadView implements InputHost {
     return result.position.clone();
   }
 
+  /** 次のスナップ候補へ切り替える。切り替える先が無い（候補が1つ以下）場合は false。 */
   cycleSnapCandidate(direction: number = 1): boolean {
-    if (!this._snapping) return false;
+    if (!this._snapping || this.lastSnapCandidates.length < 2) return false;
     const selection = cycleObjectSnapCandidate(this.lastSnapCandidates, this.selectedSnapCandidateId, direction);
     if (!selection) return false;
     this.selectedSnapCandidateId = selection.candidate.candidateId ?? null;
@@ -358,12 +380,16 @@ export class CadView implements InputHost {
    * 2Dは専用screen-space判定、3Dは実描画geometryへのRaycaster交点を深度順に返す。
    * worldPosだけを渡す従来呼出しも、投影してscreen位置を復元する。
    */
-  hitTest(worldPos: Point3D, predicate: (data: DocumentData) => boolean = () => true): DocumentData | null {
+  hitTest(
+    worldPos: Point3D,
+    predicate: (data: DocumentData) => boolean = () => true,
+    options: { /** 計測など読み取り専用の操作で、ロック中の階の要素も対象にする。 */ includeLocked?: boolean } = {},
+  ): DocumentData | null {
+    const includeLocked = options.includeLocked === true;
     const rect = this.canvas.getBoundingClientRect();
     const screen = this.activeScreenPoint ?? this.cameraCtrl.worldToScreen(worldPos, rect);
     if (!screen) return null;
     if (!this.show3D) {
-      const elevationView = this.cameraCtrl.standardView === 'front' || this.cameraCtrl.standardView === 'right';
       return this.cadRenderer.hitTest2D(
         screen.x,
         screen.y,
@@ -371,7 +397,8 @@ export class CadView implements InputHost {
         rect,
         CAD.HIT_TOLERANCE_PX,
         predicate,
-        elevationView,
+        this.isElevationView,
+        includeLocked,
       );
     }
 
@@ -384,7 +411,7 @@ export class CadView implements InputHost {
 
     const candidates = this.cadRenderer.raycast(raycaster).filter(({ data, intersection }) => {
       if (!predicate(data)) return false;
-      if (Document.instance.isDataLocked(data)) return false;
+      if (!includeLocked && Document.instance.isDataLocked(data)) return false;
       if (intersection.object instanceof THREE.Mesh) return true;
       const projected = this.cameraCtrl.worldToScreen(intersection.point, rect);
       return !!projected && projected.distanceTo(screen) <= CAD.HIT_TOLERANCE_PX;
@@ -533,9 +560,9 @@ export class CadView implements InputHost {
     this.onMouseMove = null;
     this.onSelectionChanged = null;
     this.onOperationStatusChanged = null;
+    this.onMeasurementChanged = null;
     this.onSnapChanged = null;
     this.onWorkPlaneUnavailable = null;
-    this.canvas.title = this.originalCanvasTitle;
     delete this.canvas.dataset.snapKind;
     delete this.canvas.dataset.workPlaneError;
     delete this.canvas.dataset.selectedCount;
@@ -553,21 +580,45 @@ export class CadView implements InputHost {
     this.rafId = requestAnimationFrame(() => {
       this.rafId = 0;
       if (!this.renderable || this.disposed) return;
-      const context = this.createRenderContext();
+      this.renderFrame();
+    });
+  }
 
-      if ((this.dirtyFlags & DirtyFlag.Grid) !== 0) this.cadRenderer.rebuildGrid(context);
-      if ((this.dirtyFlags & DirtyFlag.Elements) !== 0) {
-        this.cadRenderer.rebuildElements(context);
-        this.dirtyFlags &= ~DirtyFlag.Selection;
-      } else if ((this.dirtyFlags & DirtyFlag.Selection) !== 0) {
-        this.cadRenderer.updateSelection(context);
-      }
+  /** dirtyな部分だけを更新して1フレーム描画する。 */
+  private renderFrame(): void {
+    const context = this.createRenderContext();
 
-      this.dirtyFlags = 0;
-      this.renderer.render(this.scene, this.cameraCtrl.camera);
-      this.renderLabels();
-      // snap glyphはDOM overlayなので、カメラ操作・標準ビュー切替・resizeでも再投影する。
-      this.updateSnapGlyph(this._currentSnapResult);
+    if ((this.dirtyFlags & DirtyFlag.Grid) !== 0) this.cadRenderer.rebuildGrid(context);
+    if ((this.dirtyFlags & DirtyFlag.Elements) !== 0) {
+      this.cadRenderer.rebuildElements(context);
+      this.dirtyFlags &= ~DirtyFlag.Selection;
+    } else if ((this.dirtyFlags & DirtyFlag.Selection) !== 0) {
+      this.cadRenderer.updateSelection(context);
+    }
+
+    this.dirtyFlags = 0;
+    this.renderer.render(this.scene, this.cameraCtrl.camera);
+    this.renderLabels();
+    // snap glyphはDOM overlayなので、カメラ操作・標準ビュー切替・resizeでも再投影する。
+    this.updateSnapGlyph(this._currentSnapResult);
+  }
+
+  /**
+   * 現在の表示をPNGとして取り出す。WebGLの描画バッファは次のフレームで破棄されるため、
+   * 同期的に再描画してから別canvasへ複写し、DOM overlayのラベルも同じ位置へ描き込む。
+   */
+  captureImage(): Promise<Blob> {
+    if (!this.renderable || this.disposed) return Promise.reject(new Error('The view is not ready to be captured'));
+    this.renderFrame();
+    const output = this.canvas.ownerDocument.createElement('canvas');
+    output.width = this.canvas.width;
+    output.height = this.canvas.height;
+    const context = output.getContext('2d');
+    if (!context) return Promise.reject(new Error('2D canvas is not available'));
+    context.drawImage(this.canvas, 0, 0);
+    this.labelRenderer.drawTo(context, this.viewportWidth > 0 ? this.canvas.width / this.viewportWidth : 1);
+    return new Promise((resolve, reject) => {
+      output.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('PNG encoding failed'))), 'image/png');
     });
   }
 
@@ -584,7 +635,7 @@ export class CadView implements InputHost {
     return {
       palette: this.palette,
       show3D: this.show3D,
-      showAllLayers: this.cameraCtrl.standardView === 'front' || this.cameraCtrl.standardView === 'right',
+      showAllLayers: this.isElevationView,
       cameraDistance: this.cameraCtrl.cameraDistance,
       cameraCenter: this.cameraCtrl.cameraCenter,
       layerZ: this.layerZ,
@@ -604,8 +655,7 @@ export class CadView implements InputHost {
     const document = Document.instance;
     const visible = document.allDataList.filter((data) => {
       if (!this.displayFilter.allows(data) || !document.isDataVisible(data)) return false;
-      const elevationView = this.cameraCtrl.standardView === 'front' || this.cameraCtrl.standardView === 'right';
-      return this.show3D || elevationView || !document.shownLayer || data.existsOn(document.shownLayer);
+      return this.show3D || this.isElevationView || !document.shownLayer || data.existsOn(document.shownLayer);
     });
     const descriptors = createDisplayLabelDescriptors(
       visible,
@@ -649,15 +699,9 @@ export class CadView implements InputHost {
   private updateWorkPlaneError(error: WorkPlaneIntersectionError | null): void {
     if (this.lastWorkPlaneError === error) return;
     this.lastWorkPlaneError = error;
-    const message = workPlaneErrorMessage(error);
-    if (message) {
-      this.canvas.dataset.workPlaneError = message;
-      this.canvas.title = message;
-    } else {
-      delete this.canvas.dataset.workPlaneError;
-      this.canvas.title = this.originalCanvasTitle;
-    }
-    this.onWorkPlaneUnavailable?.(message);
+    if (error) this.canvas.dataset.workPlaneError = error;
+    else delete this.canvas.dataset.workPlaneError;
+    this.onWorkPlaneUnavailable?.(error);
   }
 
   private updateCurrentSnap(result: ObjectSnapResult): void {
@@ -707,6 +751,10 @@ export class CadView implements InputHost {
     return Math.min(Math.max(1, ratio || 1), CAD.MAX_PIXEL_RATIO);
   }
 
+  private get isElevationView(): boolean {
+    return !this.show3D && (this.cameraCtrl.standardView === 'front' || this.cameraCtrl.standardView === 'right');
+  }
+
   private get layerZ(): number {
     return Document.instance.shownLayer?.posZ ?? 0;
   }
@@ -744,19 +792,6 @@ function hitPriority(data: DocumentData): number {
   if (data.kind === 'node') return 2;
   if (data.kind === 'beam' || data.kind === 'pillar' || data.kind === 'truss' || data.kind === 'spring') return 3;
   return 4;
-}
-
-function workPlaneErrorMessage(error: WorkPlaneIntersectionError | null): string | null {
-  switch (error) {
-    case 'viewport-unavailable':
-      return '表示領域のサイズが0のため操作できません';
-    case 'parallel':
-      return '視線が現在レイヤーの作業平面と平行なため配置できません';
-    case 'behind':
-      return '現在レイヤーの作業平面がカメラ後方にあるため配置できません';
-    default:
-      return null;
-  }
 }
 
 function toVector3(point: Point3D): THREE.Vector3 {

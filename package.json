@@ -1,6 +1,6 @@
 {
   "name": "framemodeler-web",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "本プロジェクトは、C# WinFormsで作られた建築構造フレームモデリングCADツール「Ebi_FrameModeler」を、GitHub Pagesで動作するWebアプリケーションに変換するものである。",
   "type": "module",
   "engines": {
@@ -26,21 +26,21 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@playwright/test": "^1.55.0",
-    "@types/node": "^22.20.1",
-    "@types/three": "^0.182.0",
-    "@vitest/coverage-v8": "^4.1.10",
-    "eslint": "^10.7.0",
-    "globals": "^16.5.0",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^22.20.4",
+    "@types/three": "^0.186.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "eslint": "^10.11.0",
+    "globals": "^17.13.0",
     "jsdom": "^29.1.1",
-    "prettier": "^3.9.5",
+    "prettier": "^3.9.9",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.64.0",
+    "typescript-eslint": "^8.71.0",
     "vite": "^7.3.6",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "dependencies": {
-    "three": "^0.182.0",
-    "yaml": "^2.9.0"
+    "three": "^0.186.1",
+    "yaml": "^2.9.1"
   }
 }

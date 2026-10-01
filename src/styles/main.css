@@ -193,6 +193,11 @@ body {
   min-height: 24px;
 }
 
+.toolbar-popover button {
+  text-align: left;
+  white-space: nowrap;
+}
+
 /* ========== Main Content ========== */
 #main-content {
   display: flex;
@@ -489,6 +494,14 @@ body {
   font-size: 12px;
 }
 
+.modal-dialog .dialog-description {
+  max-width: 360px;
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
 .modal-dialog .button-row {
   display: flex;
   justify-content: flex-end;
@@ -539,6 +552,11 @@ body {
   border: 1px solid var(--border-color);
   text-align: left;
   vertical-align: top;
+}
+
+.import-info-content .numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .import-info-content th {

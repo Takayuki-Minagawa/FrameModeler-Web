@@ -1,6 +1,12 @@
 import { DocumentData } from './DocumentData';
 import { Node } from './Node';
 import { Point3D } from '../math/Point3D';
+import type { DataState } from './DataState';
+
+export interface PlaneState extends DataState {
+  nodes: Node[];
+  section: string;
+}
 
 /**
  * 面要素の抽象基底クラス（複数節点で構成）
@@ -70,7 +76,21 @@ export abstract class Plane extends DocumentData {
     return { bottom, top };
   }
 
-  isReferring(n: Node): boolean {
-    return this.nodes.includes(n);
+  captureState(): PlaneState {
+    return { nodes: [...this.nodes], section: this.section };
+  }
+
+  restoreState(state: DataState): void {
+    const plane = state as PlaneState;
+    this.nodes = [...plane.nodes];
+    this.section = plane.section;
+  }
+
+  override get referencedNodes(): ReadonlyArray<Node> {
+    return this.nodes;
+  }
+
+  override remapNodes(map: ReadonlyMap<Node, Node>): void {
+    this.nodes = this.nodes.map((node) => map.get(node) ?? node);
   }
 }

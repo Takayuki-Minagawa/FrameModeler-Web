@@ -4,9 +4,6 @@ import { Document } from '../../data/Document';
 import { DocumentData } from '../../data/DocumentData';
 import { Node } from '../../data/Node';
 import { Member } from '../../data/Member';
-import { Plane } from '../../data/Plane';
-import { Support } from '../../data/Support';
-import { Constraint } from '../../data/Constraint';
 import { Point3D } from '../../math/Point3D';
 import { CAD } from '../CadConfig';
 import { SelectionFilter, type SelectionSettings } from '../../selection/SelectionFilter';
@@ -151,24 +148,7 @@ function posInRect(pos: Point3D, minX: number, maxX: number, minY: number, maxY:
 }
 
 function isInsideRect(data: DocumentData, minX: number, maxX: number, minY: number, maxY: number): boolean {
-  if (data instanceof Node) {
-    return posInRect(data.pos, minX, maxX, minY, maxY);
-  }
-  if (data instanceof Member) {
-    if (!data.ok) return false;
-    return posInRect(data.posI, minX, maxX, minY, maxY) && posInRect(data.posJ, minX, maxX, minY, maxY);
-  }
-  if (data instanceof Plane) {
-    return data.nodeList.every((n) => posInRect(n.pos, minX, maxX, minY, maxY));
-  }
-  if (data instanceof Support) {
-    return data.node !== null && posInRect(data.node.pos, minX, maxX, minY, maxY);
-  }
-  if (data instanceof Constraint) {
-    const nodes = [data.slaveNode, ...data.terms.map((term) => term.node)].filter(
-      (node): node is Node => node !== null,
-    );
-    return nodes.length > 0 && nodes.every((node) => posInRect(node.pos, minX, maxX, minY, maxY));
-  }
-  return false;
+  const nodes = data instanceof Node ? [data] : data.referencedNodes;
+  if (data instanceof Member && !data.ok) return false;
+  return nodes.length > 0 && nodes.every((node) => posInRect(node.pos, minX, maxX, minY, maxY));
 }

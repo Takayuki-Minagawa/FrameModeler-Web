@@ -6,7 +6,7 @@ import { Floor, FloorDirection } from '../data/Floor';
 import { Node } from '../data/Node';
 import { Pillar } from '../data/Pillar';
 import { Spring } from '../data/Spring';
-import { STRUCTURAL_DOFS, cloneNodeMass, isStructuralDof, type DofVector6 } from '../data/StructuralDof';
+import { STRUCTURAL_DOFS, isStructuralDof, type DofVector6 } from '../data/StructuralDof';
 import { Support } from '../data/Support';
 import { Truss } from '../data/Truss';
 import { Wall } from '../data/Wall';
@@ -58,7 +58,6 @@ interface DocumentDataCodec<TData extends DocumentData = DocumentData, TRaw exte
   validate(raw: unknown, index: number, options: CodecValidationOptions): TRaw;
   serialize(data: TData): TRaw;
   deserialize(raw: TRaw, context: BuildContext): TData;
-  cloneWithNodes(data: TData, nodeMap: Map<Node, Node>): TData;
 }
 
 function codec<TData extends DocumentData, TRaw extends JsonDataRow>(
@@ -102,14 +101,6 @@ const DOCUMENT_DATA_CODEC_DEFINITIONS: readonly DocumentDataCodec[] = [
         : null;
       return node;
     },
-    cloneWithNodes: (node, nodeMap) => {
-      const existing = nodeMap.get(node);
-      if (existing) return existing;
-      const copy = new Node(node.pos);
-      copy.mass = cloneNodeMass(node.mass);
-      nodeMap.set(node, copy);
-      return copy;
-    },
   }),
   memberCodec<Beam>('beam', 'beams'),
   memberCodec<Pillar>('pillar', 'pillars'),
@@ -138,19 +129,6 @@ const DOCUMENT_DATA_CODEC_DEFINITIONS: readonly DocumentDataCodec[] = [
       truss.stressUnit = raw.stressUnit;
       return truss;
     },
-    cloneWithNodes: (truss, nodeMap) => {
-      const copy = new Truss(
-        clonedEndpoint(truss.nodeI, nodeMap, 'nodeI'),
-        clonedEndpoint(truss.nodeJ, nodeMap, 'nodeJ'),
-      );
-      copyMemberFields(copy, truss);
-      copy.material = truss.material;
-      copy.area = truss.area;
-      copy.areaUnit = truss.areaUnit;
-      copy.elasticModulus = truss.elasticModulus;
-      copy.stressUnit = truss.stressUnit;
-      return copy;
-    },
   }),
   codec<Spring, JsonSpring>({
     ...codecType<Spring>('spring'),
@@ -177,19 +155,6 @@ const DOCUMENT_DATA_CODEC_DEFINITIONS: readonly DocumentDataCodec[] = [
       spring.note = raw.note ?? '';
       return spring;
     },
-    cloneWithNodes: (spring, nodeMap) => {
-      const copy = new Spring(
-        clonedEndpoint(spring.nodeI, nodeMap, 'nodeI'),
-        clonedEndpoint(spring.nodeJ, nodeMap, 'nodeJ'),
-      );
-      copyMemberFields(copy, spring);
-      copy.components = spring.components.map((component) => ({ ...component }));
-      copy.orientX = spring.orientX?.clone() ?? null;
-      copy.orientY = spring.orientY?.clone() ?? null;
-      copy.shearDistance = spring.shearDistance ? [...spring.shearDistance] : null;
-      copy.note = spring.note;
-      return copy;
-    },
   }),
   planeCodec<BearWall>('bearWall', 'bearWalls'),
   codec<Wall, JsonWall>({
@@ -201,12 +166,6 @@ const DOCUMENT_DATA_CODEC_DEFINITIONS: readonly DocumentDataCodec[] = [
       applyPlaneFields(wall, raw);
       wall.weight = raw.weight;
       return wall;
-    },
-    cloneWithNodes: (wall, nodeMap) => {
-      const copy = new Wall(wall.nodeList.map((node) => clonedEndpoint(node, nodeMap, 'wall node')));
-      copyPlaneFields(copy, wall);
-      copy.weight = wall.weight;
-      return copy;
     },
   }),
   codec<Floor, JsonFloor>({
@@ -224,13 +183,6 @@ const DOCUMENT_DATA_CODEC_DEFINITIONS: readonly DocumentDataCodec[] = [
       floor.direction = raw.direction;
       return floor;
     },
-    cloneWithNodes: (floor, nodeMap) => {
-      const copy = new Floor(floor.nodeList.map((node) => clonedEndpoint(node, nodeMap, 'floor node')));
-      copyPlaneFields(copy, floor);
-      copy.weight = floor.weight;
-      copy.direction = floor.direction;
-      return copy;
-    },
   }),
   codec<Support, JsonSupport>({
     ...codecType<Support>('support'),
@@ -245,10 +197,6 @@ const DOCUMENT_DATA_CODEC_DEFINITIONS: readonly DocumentDataCodec[] = [
       const support = new Support(resolveNode(raw.node, context, 'supports.node'), raw.fixedDofs);
       support.number = raw.number;
       return support;
-    },
-    cloneWithNodes: (support, nodeMap) => {
-      const copy = new Support(clonedEndpoint(support.node, nodeMap, 'support node'), support.fixedDofs);
-      return copy;
     },
   }),
   codec<Constraint, JsonConstraint>({
@@ -281,19 +229,6 @@ const DOCUMENT_DATA_CODEC_DEFINITIONS: readonly DocumentDataCodec[] = [
       constraint.number = raw.number;
       constraint.constraintKind = raw.kind;
       return constraint;
-    },
-    cloneWithNodes: (constraint, nodeMap) => {
-      const copy = new Constraint(
-        clonedEndpoint(constraint.slaveNode, nodeMap, 'constraint slave'),
-        constraint.slaveDof,
-        constraint.terms.map((term) => ({
-          node: clonedEndpoint(term.node, nodeMap, 'constraint term'),
-          dof: term.dof,
-          coefficient: term.coefficient,
-        })),
-      );
-      copy.constraintKind = constraint.constraintKind;
-      return copy;
     },
   }),
 ] as readonly DocumentDataCodec[];
@@ -370,14 +305,6 @@ export function deserializeDocumentData(collections: JsonDataCollections): Docum
   return all;
 }
 
-/** Layer copy等で全登録型を同じregistryから複製する。選択状態とnumberは複製しない。 */
-export function cloneWithNodes<T extends DocumentData>(data: T, nodeMap: Map<Node, Node>): T {
-  const copy = codecForData(data).cloneWithNodes(data, nodeMap) as T;
-  copy.number = 0;
-  copy.select = false;
-  return copy;
-}
-
 function codecForData(data: DocumentData): DocumentDataCodec {
   const entry = DOCUMENT_DATA_CODECS.find(
     (candidate) => candidate.kind === data.kind && data.constructor === candidate.ctor,
@@ -420,14 +347,6 @@ function memberCodec<T extends Beam | Pillar>(
       applyMemberFields(member, raw);
       return member;
     },
-    cloneWithNodes: (member, nodeMap) => {
-      const copy = new ctor(
-        clonedEndpoint(member.nodeI, nodeMap, 'nodeI'),
-        clonedEndpoint(member.nodeJ, nodeMap, 'nodeJ'),
-      );
-      copyMemberFields(copy, member);
-      return copy;
-    },
   });
 }
 
@@ -446,11 +365,6 @@ function planeCodec<T extends BearWall | Wall | Floor>(
       const plane = new ctor(resolvePlaneNodes(raw, context, collection));
       applyPlaneFields(plane, raw);
       return plane;
-    },
-    cloneWithNodes: (plane, nodeMap) => {
-      const copy = new ctor(plane.nodeList.map((node) => clonedEndpoint(node, nodeMap, 'plane node')));
-      copyPlaneFields(copy, plane);
-      return copy;
     },
   });
 }
@@ -627,11 +541,6 @@ function applyMemberFields(member: Beam | Pillar | Truss | Spring, raw: JsonMemb
   member.isNodeReverse = raw.isNodeReverse ?? false;
 }
 
-function copyMemberFields(target: Beam | Pillar | Truss | Spring, source: Beam | Pillar | Truss | Spring): void {
-  target.section = source.section;
-  target.isNodeReverse = source.isNodeReverse;
-}
-
 function serializePlane(plane: BearWall | Wall | Floor): JsonPlane {
   return {
     number: plane.number,
@@ -643,10 +552,6 @@ function serializePlane(plane: BearWall | Wall | Floor): JsonPlane {
 function applyPlaneFields(plane: BearWall | Wall | Floor, raw: JsonPlane): void {
   plane.number = raw.number;
   plane.section = raw.section ?? plane.section;
-}
-
-function copyPlaneFields(target: BearWall | Wall | Floor, source: BearWall | Wall | Floor): void {
-  target.section = source.section;
 }
 
 function resolvePlaneNodes(raw: JsonPlane, context: BuildContext, path: string): Node[] {
@@ -662,13 +567,6 @@ function resolveNode(number: number, context: BuildContext, path: string): Node 
 function requiredNodeNumber(node: Node | null, path: string): number {
   if (!node) throw new Error(`Cannot serialize ${path}: node is missing`);
   return node.number;
-}
-
-function clonedEndpoint(node: Node | null, nodeMap: ReadonlyMap<Node, Node>, path: string): Node {
-  if (!node) throw new Error(`Cannot clone ${path}: source node is missing`);
-  const cloned = nodeMap.get(node);
-  if (!cloned) throw new Error(`Cannot clone ${path}: nodeMap has no entry for Node ${node.number}`);
-  return cloned;
 }
 
 function readDofs(value: unknown, path: string): (typeof STRUCTURAL_DOFS)[number][] {

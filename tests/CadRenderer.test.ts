@@ -371,6 +371,14 @@ describe('CadRenderer picking and grid', () => {
     expect(renderer.hitTest2D(screen.x, screen.y, camera, rect, 10, (data) => data === upperNode, true)).toBe(
       upperNode,
     );
+
+    // ロック中の階の要素は編集用のhitからは外れるが、計測など読み取り専用の用途では取得できる。
+    const upperLayer = Document.instance.layers.find((layer) => upperNode.existsOn(layer))!;
+    Document.instance.updateLayer(upperLayer, { locked: true });
+    expect(renderer.hitTest2D(screen.x, screen.y, camera, rect, 10, (data) => data === upperNode, true)).toBeNull();
+    expect(renderer.hitTest2D(screen.x, screen.y, camera, rect, 10, (data) => data === upperNode, true, true)).toBe(
+      upperNode,
+    );
     renderer.dispose();
   });
 });

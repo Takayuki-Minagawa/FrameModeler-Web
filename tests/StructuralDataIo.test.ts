@@ -14,7 +14,8 @@ import { Support } from '../src/data/Support';
 import { Truss } from '../src/data/Truss';
 import { TYPE_REGISTRY } from '../src/data/typeRegistry';
 import { Wall } from '../src/data/Wall';
-import { cloneWithNodes, DOCUMENT_DATA_CODECS, serializeDocumentData } from '../src/io/DocumentDataCodecRegistry';
+import { DOCUMENT_DATA_CODECS, serializeDocumentData } from '../src/io/DocumentDataCodecRegistry';
+import { cloneWithNodes } from '../src/data/DataClone';
 import { deserializeJson } from '../src/io/JsonDeserializer';
 import { serializeJson } from '../src/io/JsonSerializer';
 import { Point3D } from '../src/math/Point3D';
@@ -217,6 +218,10 @@ describe('structural data models and centralized JSON codecs', () => {
       get typeText(): string {
         return 'shadow';
       }
+      captureState(): Record<string, unknown> {
+        return {};
+      }
+      restoreState(): void {}
     }
 
     expect(() => serializeDocumentData([new ShadowBeam()])).toThrow(/unsupported DocumentData kind 'beam'/);

@@ -48,6 +48,35 @@ export class CadLabelRenderer {
     this.layer?.replaceChildren();
   }
 
+  /**
+   * 表示中のラベルを2D canvasへ描き込む（画像出力用）。
+   * scale は CSS pixel から出力canvasのpixelへの倍率。
+   */
+  drawTo(context: CanvasRenderingContext2D, scale: number): void {
+    if (!this.layer) return;
+    const view = this.layer.ownerDocument.defaultView;
+    context.save();
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    for (const label of this.layer.querySelectorAll<HTMLElement>('.cad-label')) {
+      const text = label.textContent ?? '';
+      if (text === '') continue;
+      const style = view?.getComputedStyle(label);
+      const fontSize = (Number.parseFloat(style?.fontSize ?? '') || 11) * scale;
+      const x = Number.parseFloat(label.style.left) * scale;
+      const y = Number.parseFloat(label.style.top) * scale;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      context.font = `${fontSize}px ${style?.fontFamily || 'monospace'}`;
+      const width = context.measureText(text).width + 6 * scale;
+      const height = fontSize * 1.2 + 2 * scale;
+      context.fillStyle = style?.backgroundColor || 'rgba(255, 255, 255, 0.82)';
+      context.fillRect(x - width / 2, y - height / 2, width, height);
+      context.fillStyle = style?.color || '#000';
+      context.fillText(text, x, y);
+    }
+    context.restore();
+  }
+
   dispose(): void {
     this.layer?.remove();
   }

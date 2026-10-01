@@ -20,7 +20,7 @@ export default defineConfig({
   ],
   build: {
     outDir: 'dist',
-    chunkSizeWarningLimit: 525,
+    chunkSizeWarningLimit: 560,
     rollupOptions: {
       output: {
         // Three.jsはアプリ更新と独立してキャッシュできるvendor chunkへ分離する。

@@ -1,5 +1,6 @@
-import { Plane } from './Plane';
+import { Plane, type PlaneState } from './Plane';
 import { Node } from './Node';
+import type { DataState } from './DataState';
 
 export enum FloorDirection {
   X = 'X',
@@ -11,6 +12,11 @@ export enum FloorDirection {
 /** 文字列を FloorDirection に変換（不正値は X にフォールバック） */
 export function parseFloorDirection(s: string): FloorDirection {
   return (Object.values(FloorDirection) as string[]).includes(s) ? (s as FloorDirection) : FloorDirection.X;
+}
+
+interface FloorState extends PlaneState {
+  weight: number;
+  direction: FloorDirection;
 }
 
 export class Floor extends Plane {
@@ -25,6 +31,17 @@ export class Floor extends Plane {
 
   get typeText(): string {
     return '床';
+  }
+
+  override captureState(): FloorState {
+    return { ...super.captureState(), weight: this.weight, direction: this.direction };
+  }
+
+  override restoreState(state: DataState): void {
+    super.restoreState(state);
+    const floor = state as FloorState;
+    this.weight = floor.weight;
+    this.direction = floor.direction;
   }
 
   get lengthAlongDirection(): number {

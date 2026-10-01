@@ -8,14 +8,8 @@ import { Layer } from './Layer';
 import { typeOrderIndex, categoryOf, CAD_ID_OFFSET, type NumberCategory } from './typeRegistry';
 import type { ImportMetadata, ImportSourceElementInfo, ImportSourceNodeInfo } from './ImportMetadata';
 import { ModelValidator } from './ModelValidator';
-import { Floor } from './Floor';
-import { Wall } from './Wall';
 import type { DocumentCommand } from '../commands/DocumentCommand';
-import { Truss } from './Truss';
-import { Spring, type SpringComponent } from './Spring';
-import { Support } from './Support';
-import { Constraint, type ConstraintTerm } from './Constraint';
-import { cloneNodeMass, type NodeMass } from './StructuralDof';
+import { stateValuesEqual, type DataState } from './DataState';
 
 export type DocumentChangeKind = 'model' | 'layers' | 'metadata' | 'reset';
 
@@ -31,35 +25,8 @@ interface DataSnapshot {
   data: DocumentData;
   number: number;
   select: boolean;
-  node?: { pos: Point3D; mass: NodeMass | null };
-  member?: {
-    nodeI: Node | null;
-    nodeJ: Node | null;
-    section: string;
-    isNodeReverse: boolean;
-    truss?: {
-      material: string;
-      area: number;
-      areaUnit: string;
-      elasticModulus: number | null;
-      stressUnit: string;
-    };
-    spring?: {
-      components: SpringComponent[];
-      orientX: Point3D | null;
-      orientY: Point3D | null;
-      shearDistance: [number, number] | null;
-      note: string;
-    };
-  };
-  plane?: { nodes: Node[]; section: string; weight?: number; direction?: Floor['direction'] };
-  support?: { node: Node | null; fixedDofs: Support['fixedDofs'] };
-  constraint?: {
-    constraintKind: Constraint['constraintKind'];
-    slaveNode: Node | null;
-    slaveDof: Constraint['slaveDof'];
-    terms: ConstraintTerm[];
-  };
+  /** 型固有の可変フィールド。各DocumentData型が自身で取得・復元する。 */
+  state: DataState;
 }
 
 interface DocumentSnapshot {
@@ -75,7 +42,9 @@ interface DocumentSnapshot {
 export class Document {
   private static _instance: Document = new Document();
 
-  private dataList: DocumentData[] = [];
+  private _dataList: DocumentData[] = [];
+  /** 型別リストのキャッシュ。dataListの置換・並べ替えのたびに破棄する。 */
+  private readonly typedListCache = new Map<unknown, ReadonlyArray<DocumentData>>();
   private _layers: Layer[] = [];
   private _shownLayer: Layer | null = null;
   private _filename: string = '';
@@ -112,24 +81,44 @@ export class Document {
 
   // ========== データリストアクセス ==========
 
+  private get dataList(): DocumentData[] {
+    return this._dataList;
+  }
+
+  private set dataList(value: DocumentData[]) {
+    this._dataList = value;
+    this.typedListCache.clear();
+  }
+
+  /** 指定型のデータを新しい配列で返す。呼出し側で並べ替えてもDocumentへ影響しない。 */
   chooseData<T extends DocumentData>(type: abstract new (...args: any[]) => T): T[] {
-    return this.dataList.filter((d): d is T => d instanceof type);
+    return [...this.typedList(type)];
   }
 
   get allDataList(): ReadonlyArray<DocumentData> {
     return this.dataList;
   }
 
-  get nodeList(): Node[] {
-    return this.chooseData<Node>(Node);
+  get nodeList(): ReadonlyArray<Node> {
+    return this.typedList<Node>(Node);
   }
 
-  get memberList(): Member[] {
-    return this.chooseData<Member>(Member);
+  get memberList(): ReadonlyArray<Member> {
+    return this.typedList<Member>(Member);
   }
 
-  get planeList(): Plane[] {
-    return this.chooseData<Plane>(Plane);
+  get planeList(): ReadonlyArray<Plane> {
+    return this.typedList<Plane>(Plane);
+  }
+
+  /** 描画・スナップ・検索が毎回全件filterしないよう、型別リストを次のモデル変更まで共有する。 */
+  private typedList<T extends DocumentData>(type: abstract new (...args: any[]) => T): ReadonlyArray<T> {
+    let list = this.typedListCache.get(type) as ReadonlyArray<T> | undefined;
+    if (!list) {
+      list = this.dataList.filter((data): data is T => data instanceof type);
+      this.typedListCache.set(type, list);
+    }
+    return list;
   }
 
   // ========== データ追加/削除 ==========
@@ -140,7 +129,8 @@ export class Document {
 
   /** Node とそれを参照する要素を同じ確定単位で追加できる。 */
   addMany(data: ReadonlyArray<DocumentData>): void {
-    const additions = data.filter((item, index) => !this.dataList.includes(item) && data.indexOf(item) === index);
+    const existing = new Set(this.dataList);
+    const additions = [...new Set(data)].filter((item) => !existing.has(item));
     if (additions.length === 0) return;
     this.commitDataCandidate([...this.dataList, ...additions]);
   }
@@ -160,11 +150,18 @@ export class Document {
 
   /** 参照要素とNodeをまとめて削除でき、途中失敗ではDocumentを変更しない。 */
   removeMany(data: ReadonlyArray<DocumentData>): void {
-    const removals = new Set(data.filter((item) => this.dataList.includes(item)));
+    const existing = new Set(this.dataList);
+    const removals = new Set(data.filter((item) => existing.has(item)));
     if (removals.size === 0) return;
+    // 削除集合の外に残る参照は1回だけ集計し、Node数に比例した再走査を避ける。
+    let retainedReferences: Set<Node> | null = null;
     for (const item of removals) {
-      const { removable, reason } = item instanceof Node ? this.checkNodeRemovable(item, removals) : item.isRemovable();
-      if (!removable) throw new Error('削除できないデータ: ' + reason);
+      let result = item.isRemovable();
+      if (result.removable && item instanceof Node) {
+        retainedReferences ??= this.nodesReferencedOutside(removals);
+        if (retainedReferences.has(item)) result = { removable: false, reason: NODE_REFERENCED_REASON };
+      }
+      if (!result.removable) throw new Error('削除できないデータ: ' + result.reason);
     }
     this.commitDataCandidate(this.dataList.filter((item) => !removals.has(item)));
   }
@@ -226,6 +223,7 @@ export class Document {
   /** ソートと番号再割当を常に一体で行う（不変条件を保証, 5-3） */
   private reindex(): void {
     this.dataList.sort((a, b) => Document.compareData(a, b));
+    this.typedListCache.clear();
     this.assignNumbers(this.dataList);
   }
 
@@ -317,58 +315,12 @@ export class Document {
   private captureSnapshot(): DocumentSnapshot {
     return {
       dataList: [...this.dataList],
-      dataStates: this.dataList.map((data): DataSnapshot => {
-        const state: DataSnapshot = { data, number: data.number, select: data.select };
-        if (data instanceof Node) state.node = { pos: data.pos.clone(), mass: cloneNodeMass(data.mass) };
-        if (data instanceof Member) {
-          state.member = {
-            nodeI: data.nodeI,
-            nodeJ: data.nodeJ,
-            section: data.section,
-            isNodeReverse: data.isNodeReverse,
-            truss:
-              data instanceof Truss
-                ? {
-                    material: data.material,
-                    area: data.area,
-                    areaUnit: data.areaUnit,
-                    elasticModulus: data.elasticModulus,
-                    stressUnit: data.stressUnit,
-                  }
-                : undefined,
-            spring:
-              data instanceof Spring
-                ? {
-                    components: data.components.map((component) => ({ ...component })),
-                    orientX: data.orientX?.clone() ?? null,
-                    orientY: data.orientY?.clone() ?? null,
-                    shearDistance: data.shearDistance ? [...data.shearDistance] : null,
-                    note: data.note,
-                  }
-                : undefined,
-          };
-        }
-        if (data instanceof Plane) {
-          state.plane = {
-            nodes: [...data.nodeList],
-            section: data.section,
-            weight: data instanceof Floor || data instanceof Wall ? data.weight : undefined,
-            direction: data instanceof Floor ? data.direction : undefined,
-          };
-        }
-        if (data instanceof Support) {
-          state.support = { node: data.node, fixedDofs: [...data.fixedDofs] };
-        }
-        if (data instanceof Constraint) {
-          state.constraint = {
-            constraintKind: data.constraintKind,
-            slaveNode: data.slaveNode,
-            slaveDof: data.slaveDof,
-            terms: data.terms.map((term) => ({ ...term })),
-          };
-        }
-        return state;
-      }),
+      dataStates: this.dataList.map((data): DataSnapshot => ({
+        data,
+        number: data.number,
+        select: data.select,
+        state: data.captureState(),
+      })),
       layers: [...this._layers],
       layerStates: this._layers.map((layer) => ({
         layer,
@@ -387,50 +339,7 @@ export class Document {
     for (const state of snapshot.dataStates) {
       state.data.number = state.number;
       state.data.select = state.select;
-      if (state.data instanceof Node && state.node) {
-        state.data.pos = state.node.pos.clone();
-        state.data.mass = cloneNodeMass(state.node.mass);
-      }
-      if (state.data instanceof Member && state.member) {
-        state.data.nodeI = state.member.nodeI;
-        state.data.nodeJ = state.member.nodeJ;
-        state.data.section = state.member.section;
-        state.data.isNodeReverse = state.member.isNodeReverse;
-        if (state.data instanceof Truss && state.member.truss) {
-          state.data.material = state.member.truss.material;
-          state.data.area = state.member.truss.area;
-          state.data.areaUnit = state.member.truss.areaUnit;
-          state.data.elasticModulus = state.member.truss.elasticModulus;
-          state.data.stressUnit = state.member.truss.stressUnit;
-        }
-        if (state.data instanceof Spring && state.member.spring) {
-          state.data.components = state.member.spring.components.map((component) => ({ ...component }));
-          state.data.orientX = state.member.spring.orientX?.clone() ?? null;
-          state.data.orientY = state.member.spring.orientY?.clone() ?? null;
-          state.data.shearDistance = state.member.spring.shearDistance ? [...state.member.spring.shearDistance] : null;
-          state.data.note = state.member.spring.note;
-        }
-      }
-      if (state.data instanceof Plane && state.plane) {
-        state.data.setNodes(state.plane.nodes);
-        state.data.section = state.plane.section;
-        if (state.data instanceof Floor) {
-          state.data.weight = state.plane.weight ?? 0;
-          if (state.plane.direction !== undefined) state.data.direction = state.plane.direction;
-        } else if (state.data instanceof Wall) {
-          state.data.weight = state.plane.weight ?? 0;
-        }
-      }
-      if (state.data instanceof Support && state.support) {
-        state.data.node = state.support.node;
-        state.data.fixedDofs = [...state.support.fixedDofs];
-      }
-      if (state.data instanceof Constraint && state.constraint) {
-        state.data.constraintKind = state.constraint.constraintKind;
-        state.data.slaveNode = state.constraint.slaveNode;
-        state.data.slaveDof = state.constraint.slaveDof;
-        state.data.terms = state.constraint.terms.map((term) => ({ ...term }));
-      }
+      state.data.restoreState(state.state);
     }
     for (const state of snapshot.layerStates) {
       state.layer.posZ = state.posZ;
@@ -739,131 +648,24 @@ export class Document {
   checkNodeRemovable(node: Node, pendingRemovals: ReadonlySet<DocumentData> = new Set()): RemovableResult {
     for (const data of this.dataList) {
       if (pendingRemovals.has(data)) continue;
-      if (
-        (data instanceof Member || data instanceof Plane || data instanceof Support || data instanceof Constraint) &&
-        data.isReferring(node)
-      ) {
-        return { removable: false, reason: '他のデータから参照されているノードは削除できません' };
-      }
+      if (data.isReferring(node)) return { removable: false, reason: NODE_REFERENCED_REASON };
     }
     return { removable: true, reason: '' };
   }
-}
 
-function dataMatchesSnapshot(state: DataSnapshot): boolean {
-  const data = state.data;
-  if (data.number !== state.number) return false;
-
-  if (data instanceof Node) {
-    return Boolean(state.node && samePoint(data.pos, state.node.pos) && sameNodeMass(data.mass, state.node.mass));
-  }
-
-  if (data instanceof Member) {
-    const member = state.member;
-    if (
-      !member ||
-      data.nodeI !== member.nodeI ||
-      data.nodeJ !== member.nodeJ ||
-      data.section !== member.section ||
-      data.isNodeReverse !== member.isNodeReverse
-    ) {
-      return false;
+  /** 指定集合に含まれない要素から参照されているNodeを返す。 */
+  private nodesReferencedOutside(excluded: ReadonlySet<DocumentData>): Set<Node> {
+    const referenced = new Set<Node>();
+    for (const data of this.dataList) {
+      if (excluded.has(data)) continue;
+      for (const node of data.referencedNodes) referenced.add(node);
     }
-    if (data instanceof Truss) {
-      return Boolean(
-        member.truss &&
-        data.material === member.truss.material &&
-        data.area === member.truss.area &&
-        data.areaUnit === member.truss.areaUnit &&
-        data.elasticModulus === member.truss.elasticModulus &&
-        data.stressUnit === member.truss.stressUnit,
-      );
-    }
-    if (data instanceof Spring) {
-      return Boolean(
-        member.spring &&
-        sameSpringComponents(data.components, member.spring.components) &&
-        sameOptionalPoint(data.orientX, member.spring.orientX) &&
-        sameOptionalPoint(data.orientY, member.spring.orientY) &&
-        sameOptionalPair(data.shearDistance, member.spring.shearDistance) &&
-        data.note === member.spring.note,
-      );
-    }
-    return true;
+    return referenced;
   }
-
-  if (data instanceof Plane) {
-    const plane = state.plane;
-    if (
-      !plane ||
-      data.section !== plane.section ||
-      data.nodeList.length !== plane.nodes.length ||
-      data.nodeList.some((node, index) => node !== plane.nodes[index])
-    ) {
-      return false;
-    }
-    if (data instanceof Floor) {
-      return data.weight === plane.weight && data.direction === plane.direction;
-    }
-    if (data instanceof Wall) return data.weight === plane.weight;
-    return true;
-  }
-
-  if (data instanceof Support) {
-    return Boolean(
-      state.support && data.node === state.support.node && sameArray(data.fixedDofs, state.support.fixedDofs),
-    );
-  }
-
-  if (data instanceof Constraint) {
-    return Boolean(
-      state.constraint &&
-      data.constraintKind === state.constraint.constraintKind &&
-      data.slaveNode === state.constraint.slaveNode &&
-      data.slaveDof === state.constraint.slaveDof &&
-      data.terms.length === state.constraint.terms.length &&
-      data.terms.every((term, index) => {
-        const expected = state.constraint!.terms[index];
-        return term.node === expected.node && term.dof === expected.dof && term.coefficient === expected.coefficient;
-      }),
-    );
-  }
-
-  return true;
 }
 
-function samePoint(first: Point3D, second: Point3D): boolean {
-  return first.x === second.x && first.y === second.y && first.z === second.z;
-}
+const NODE_REFERENCED_REASON = '他のデータから参照されているノードは削除できません';
 
-function sameOptionalPoint(first: Point3D | null, second: Point3D | null): boolean {
-  return first === null || second === null ? first === second : samePoint(first, second);
-}
-
-function sameNodeMass(first: NodeMass | null, second: NodeMass | null): boolean {
-  return first === null || second === null
-    ? first === second
-    : sameArray(first.values, second.values) &&
-        first.translationalUnit === second.translationalUnit &&
-        first.rotationalUnit === second.rotationalUnit;
-}
-
-function sameSpringComponents(first: ReadonlyArray<SpringComponent>, second: ReadonlyArray<SpringComponent>): boolean {
-  return (
-    first.length === second.length &&
-    first.every((component, index) => {
-      const expected = second[index];
-      return (
-        component.dof === expected.dof && component.stiffness === expected.stiffness && component.unit === expected.unit
-      );
-    })
-  );
-}
-
-function sameOptionalPair(first: readonly [number, number] | null, second: readonly [number, number] | null): boolean {
-  return first === null || second === null ? first === second : first[0] === second[0] && first[1] === second[1];
-}
-
-function sameArray<T>(first: ReadonlyArray<T>, second: ReadonlyArray<T>): boolean {
-  return first.length === second.length && first.every((value, index) => value === second[index]);
+function dataMatchesSnapshot(snapshot: DataSnapshot): boolean {
+  return snapshot.data.number === snapshot.number && stateValuesEqual(snapshot.data.captureState(), snapshot.state);
 }

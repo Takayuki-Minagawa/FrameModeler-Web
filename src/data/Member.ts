@@ -1,6 +1,14 @@
 import { DocumentData } from './DocumentData';
 import { Node } from './Node';
 import { Point3D } from '../math/Point3D';
+import type { DataState } from './DataState';
+
+export interface MemberState extends DataState {
+  nodeI: Node | null;
+  nodeJ: Node | null;
+  section: string;
+  isNodeReverse: boolean;
+}
 
 /**
  * 部材の抽象基底クラス（2節点間の線要素）
@@ -56,8 +64,24 @@ export abstract class Member extends DocumentData {
     };
   }
 
-  /** 指定Nodeを参照しているか */
-  isReferring(n: Node): boolean {
-    return n === this.nodeI || n === this.nodeJ;
+  captureState(): MemberState {
+    return { nodeI: this.nodeI, nodeJ: this.nodeJ, section: this.section, isNodeReverse: this.isNodeReverse };
+  }
+
+  restoreState(state: DataState): void {
+    const member = state as MemberState;
+    this.nodeI = member.nodeI;
+    this.nodeJ = member.nodeJ;
+    this.section = member.section;
+    this.isNodeReverse = member.isNodeReverse;
+  }
+
+  override get referencedNodes(): ReadonlyArray<Node> {
+    return [this.nodeI, this.nodeJ].filter((node): node is Node => node !== null);
+  }
+
+  override remapNodes(map: ReadonlyMap<Node, Node>): void {
+    if (this.nodeI) this.nodeI = map.get(this.nodeI) ?? this.nodeI;
+    if (this.nodeJ) this.nodeJ = map.get(this.nodeJ) ?? this.nodeJ;
   }
 }

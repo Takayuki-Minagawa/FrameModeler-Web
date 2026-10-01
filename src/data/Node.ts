@@ -1,7 +1,13 @@
 import { DocumentData } from './DocumentData';
 import { Point3D } from '../math/Point3D';
 import { compareNumbers } from '../math/compare';
-import type { NodeMass } from './StructuralDof';
+import { cloneNodeMass, type NodeMass } from './StructuralDof';
+import type { DataState } from './DataState';
+
+interface NodeState extends DataState {
+  pos: Point3D;
+  mass: NodeMass | null;
+}
 
 export class Node extends DocumentData {
   readonly kind = 'node' as const;
@@ -16,6 +22,16 @@ export class Node extends DocumentData {
 
   get typeText(): string {
     return 'ノード';
+  }
+
+  captureState(): NodeState {
+    return { pos: this.pos.clone(), mass: cloneNodeMass(this.mass) };
+  }
+
+  restoreState(state: DataState): void {
+    const { pos, mass } = state as NodeState;
+    this.pos = pos.clone();
+    this.mass = cloneNodeMass(mass);
   }
 
   /** 点なのでZ範囲は単一高さ */
