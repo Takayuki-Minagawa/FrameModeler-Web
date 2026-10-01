@@ -1,6 +1,6 @@
 import type { ModelSummary, QuantityRow } from '../../data/ModelSummary';
 import { toMeters, toSquareMeters } from '../../io/CsvExporter';
-import { kindLabel, t } from '../../i18n';
+import { getLocale, kindLabel, t } from '../../i18n';
 import { createDialogBox, createModalOverlay, showModal } from './DialogUtil';
 
 /** 種別・断面ごとの数量を表示する。onExportCsv は「CSVを保存」ボタンで呼ばれる。 */
@@ -94,8 +94,12 @@ function totalCells(rows: ReadonlyArray<QuantityRow>, quantity: string): string[
   return [t('summary.total'), '', String(rows.reduce((sum, row) => sum + row.count, 0)), quantity];
 }
 
+/** ブラウザの設定ではなくアプリの表示言語で桁区切りを決め、どの環境でも同じ表記にする。 */
 function formatQuantity(value: number): string {
-  return value.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  return value.toLocaleString(getLocale() === 'ja' ? 'ja-JP' : 'en-US', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  });
 }
 
 function addTitle(container: HTMLElement, text: string): void {

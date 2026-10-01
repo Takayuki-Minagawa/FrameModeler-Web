@@ -150,6 +150,16 @@ describe('exportDxf', () => {
     expect(entities.find((entity) => entity.type === 'CIRCLE')!.values.get(40)).toEqual(['80']);
   });
 
+  it('keeps text free of control sequences and encodes astral characters as surrogate pairs', () => {
+    const a = node(0, 0);
+    const b = node(1000, 0);
+    const beam = new Beam(a, b);
+    beam.section = '𠮷%%uA^J 50%\n';
+    doc.addMany([a, b, beam]);
+    const text = parseEntities(exportDxf(doc, { layer: null })).find((entity) => entity.type === 'TEXT')!;
+    expect(text.values.get(1)).toEqual(['\\U+D842\\U+DFB7%uA^ J 50%']);
+  });
+
   it('formats fractional coordinates with at most six decimals and omits empty labels', () => {
     const a = node(0.1 + 0.2, 1 / 3);
     const b = node(1000, 0);

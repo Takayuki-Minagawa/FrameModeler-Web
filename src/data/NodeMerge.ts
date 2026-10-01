@@ -1,7 +1,10 @@
+import { cloneWithNodes } from './DataClone';
 import { stateValuesEqual } from './DataState';
 import type { Document } from './Document';
-import type { DocumentData } from './DocumentData';
+import type { DocumentData, DocumentDataKind } from './DocumentData';
+import { ModelValidator } from './ModelValidator';
 import { Node } from './Node';
+import { Plane } from './Plane';
 import { cloneNodeMass } from './StructuralDof';
 
 export interface NodeMergePlan {
@@ -11,15 +14,29 @@ export interface NodeMergePlan {
   redundantElements: DocumentData[];
 }
 
+/** Nodeがレイヤーの高さにあるとみなす許容差 (mm)。 */
+const LAYER_ELEVATION_TOLERANCE = 1e-6;
+
+/**
+ * 結合で同一になったとき、1つだけ残してよい種別。
+ * ばね・トラス・支点・拘束は並列に置くこと自体に意味があり得る（剛性が加算される）ため、削除しない。
+ */
+const REDUNDANT_REMOVAL_KINDS: ReadonlySet<DocumentDataKind> = new Set(['beam', 'pillar', 'floor', 'wall', 'bearWall']);
+
 /**
  * 許容距離以内にあるNodeを結合する計画を作る。Documentは変更しない。
  *
  * 次のNodeは結合しない。
+ * - 同じ要素から参照され、互いに許容距離以内にある（零長ばねの両端、同位置を結ぶ拘束など、
+ *   意図して重ねてあるNode）。これらは他のNodeとも結合しない
  * - 同じ要素が両方を参照している（結合すると零長部材・退化面・自己拘束になる）
+ * - 結合すると、参照する要素がモデルの不変条件（部材長、面の平面性など）を満たさなくなる
  * - 双方に質量が設定されている
  * - ロック中のレイヤーに属する、またはロック中の要素から参照されている
  *
- * 残すNodeは Document の並び順（Z, Y, X 昇順）で先に現れる方とする。
+ * 残すNodeは、レイヤーの高さにあるNode、面材から参照されているNodeを優先し、
+ * 同条件なら Document の並び順（Z, Y, X 昇順）で先に現れる方とする。
+ * これにより、わずかにずれたNodeが階の上のNodeを吸収して部材が階から外れることを避ける。
  */
 export function planNodeMerge(document: Document, tolerance: number): NodeMergePlan {
   if (!Number.isFinite(tolerance) || tolerance < 0) {
@@ -34,6 +51,23 @@ export function planNodeMerge(document: Document, tolerance: number): NodeMergeP
       else referencing.set(node, new Set([data]));
     }
   }
+  const elementsOf = (node: Node): Set<DocumentData> => referencing.get(node) ?? EMPTY_ELEMENTS;
+
+  const coincidentByDesign = intentionallyCoincidentNodes(document, tolerance);
+  const candidates = document.nodeList.filter(
+    (node) =>
+      !coincidentByDesign.has(node) &&
+      !document.isDataLocked(node) &&
+      ![...elementsOf(node)].some((element) => document.isDataLocked(element)),
+  );
+  const priorityOf = (node: Node): number => {
+    const onLayer = document.layers.some((layer) => Math.abs(layer.posZ - node.pos.z) <= LAYER_ELEVATION_TOLERANCE);
+    const onPlane = [...elementsOf(node)].some((element) => element instanceof Plane);
+    return (onLayer ? 0 : 2) + (onPlane ? 0 : 1);
+  };
+  const priorities = new Map(candidates.map((node) => [node, priorityOf(node)] as const));
+  // Array.prototype.sort は安定なので、同じ優先度では Document の並び順が保たれる。
+  const ordered = [...candidates].sort((a, b) => priorities.get(a)! - priorities.get(b)!);
 
   const cellSize = Math.max(tolerance, 1e-9);
   const cells = new Map<string, Node[]>();
@@ -42,36 +76,51 @@ export function planNodeMerge(document: Document, tolerance: number): NodeMergeP
   const groupHasMass = new Map<Node, boolean>();
   const replacements = new Map<Node, Node>();
 
-  for (const node of document.nodeList) {
-    const elements = referencing.get(node) ?? new Set<DocumentData>();
-    if (document.isDataLocked(node) || [...elements].some((element) => document.isDataLocked(element))) continue;
+  /** node を target へ付け替えても、node を参照する要素が不変条件を満たすか。 */
+  const staysValid = (node: Node, target: Node): boolean => {
+    const resolve = (item: Node): Node => (item === node ? target : (replacements.get(item) ?? item));
+    for (const element of elementsOf(node)) {
+      const nodeMap = new Map(element.referencedNodes.map((item) => [item, resolve(item)] as const));
+      try {
+        const resolved = cloneWithNodes(element, nodeMap);
+        ModelValidator.validateModel([...new Set(nodeMap.values()), resolved], [], { validateNumbers: false });
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  };
 
+  for (const node of ordered) {
+    const elements = elementsOf(node);
     const cx = Math.floor(node.pos.x / cellSize);
     const cy = Math.floor(node.pos.y / cellSize);
     const cz = Math.floor(node.pos.z / cellSize);
-    let target: Node | null = null;
-    let targetDistance = Number.POSITIVE_INFINITY;
+    const nearby: Array<{ target: Node; distance: number }> = [];
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
         for (let dz = -1; dz <= 1; dz++) {
-          for (const candidate of cells.get(`${cx + dx},${cy + dy},${cz + dz}`) ?? []) {
-            const distance = candidate.pos.sub(node.pos).length;
-            if (distance > tolerance || distance >= targetDistance) continue;
-            if (node.mass && groupHasMass.get(candidate)) continue;
-            const shared = groupElements.get(candidate)!;
-            if ([...elements].some((element) => shared.has(element))) continue;
-            target = candidate;
-            targetDistance = distance;
+          for (const target of cells.get(`${cx + dx},${cy + dy},${cz + dz}`) ?? []) {
+            const distance = target.pos.sub(node.pos).length;
+            if (distance <= tolerance) nearby.push({ target, distance });
           }
         }
       }
     }
+    nearby.sort((a, b) => a.distance - b.distance);
 
-    if (target) {
-      replacements.set(node, target);
+    const match = nearby.find(({ target }) => {
+      if (node.mass && groupHasMass.get(target)) return false;
       const shared = groupElements.get(target)!;
+      if ([...elements].some((element) => shared.has(element))) return false;
+      return staysValid(node, target);
+    });
+
+    if (match) {
+      replacements.set(node, match.target);
+      const shared = groupElements.get(match.target)!;
       for (const element of elements) shared.add(element);
-      if (node.mass) groupHasMass.set(target, true);
+      if (node.mass) groupHasMass.set(match.target, true);
       continue;
     }
 
@@ -86,7 +135,29 @@ export function planNodeMerge(document: Document, tolerance: number): NodeMergeP
   return { replacements, redundantElements: findRedundantElements(document, replacements) };
 }
 
-/** 参照を付け替えた後に、他の要素と種別・参照Node・属性がすべて一致する要素を列挙する。 */
+const EMPTY_ELEMENTS: Set<DocumentData> = new Set();
+
+/**
+ * 1つの要素から参照され、互いに許容距離以内にあるNode。
+ * 零長ばねの両端や同位置を結ぶ拘束のように、別Nodeであること自体がモデルの意味を持つ。
+ */
+function intentionallyCoincidentNodes(document: Document, tolerance: number): Set<Node> {
+  const result = new Set<Node>();
+  for (const data of document.allDataList) {
+    const nodes = [...new Set(data.referencedNodes)];
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        if (nodes[i].pos.sub(nodes[j].pos).length <= tolerance) {
+          result.add(nodes[i]);
+          result.add(nodes[j]);
+        }
+      }
+    }
+  }
+  return result;
+}
+
+/** 参照を付け替えた後に、他の要素と種別・参照Node・属性がすべて一致する梁・柱・面材を列挙する。 */
 function findRedundantElements(document: Document, replacements: ReadonlyMap<Node, Node>): DocumentData[] {
   if (replacements.size === 0) return [];
   const resolve = (node: Node): Node => replacements.get(node) ?? node;
@@ -102,7 +173,7 @@ function findRedundantElements(document: Document, replacements: ReadonlyMap<Nod
   };
   let touched = false;
   for (const data of document.allDataList) {
-    if (data instanceof Node) continue;
+    if (!REDUNDANT_REMOVAL_KINDS.has(data.kind)) continue;
     if (data.referencedNodes.some((node) => replacements.has(node))) touched = true;
     const key = `${data.kind}:${data.referencedNodes.map((node) => idOf(resolve(node))).join(',')}`;
     const group = groups.get(key);

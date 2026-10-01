@@ -15,7 +15,8 @@ function press(init: KeyboardEventInit, target: EventTarget = document.body): Ke
 
 beforeEach(() => {
   document.body.innerHTML =
-    '<canvas id="canvas" tabindex="0"></canvas><input id="text" /><button id="button"></button>';
+    '<canvas id="canvas" tabindex="0"></canvas><input id="text" /><button id="button"></button>' +
+    '<input id="check" type="checkbox" /><select id="select"><option>a</option></select>';
   canvas = document.querySelector('canvas')!;
   actions = {
     save: vi.fn(),
@@ -29,7 +30,7 @@ beforeEach(() => {
     arrayCopy: vi.fn(),
     fit: vi.fn(),
     activateTool: vi.fn((index: number) => index <= 3),
-    cycleSnap: vi.fn(),
+    cycleSnap: vi.fn(() => true),
   };
   controller = new ShortcutController({ actions: actions as unknown as ShortcutActions, canvas, root: document });
   controller.connect();
@@ -106,6 +107,36 @@ describe('ShortcutController', () => {
     expect(actions.cancel).not.toHaveBeenCalled();
   });
 
+  it('keeps working after a checkbox or button was clicked, but not inside a select', () => {
+    const check = document.querySelector<HTMLInputElement>('#check')!;
+    check.focus();
+    expect(press({ key: 'a', ctrlKey: true }, check).defaultPrevented).toBe(true);
+    expect(actions.selectAll).toHaveBeenCalledOnce();
+    press({ key: '3' }, check);
+    expect(actions.activateTool).toHaveBeenLastCalledWith(3);
+
+    press({ key: 'Delete' }, document.querySelector('#button')!);
+    expect(actions.deleteSelection).toHaveBeenCalledOnce();
+
+    // select は矢印キーや文字キーを自分で使う。
+    press({ key: '1' }, document.querySelector('#select')!);
+    expect(actions.activateTool).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves Shift combinations to the browser except redo', () => {
+    for (const key of ['a', 'i', 'd', 's', 'o', 'y']) {
+      expect(press({ key, ctrlKey: true, shiftKey: true }).defaultPrevented, key).toBe(false);
+    }
+    expect(actions.selectAll).not.toHaveBeenCalled();
+    expect(actions.invertSelection).not.toHaveBeenCalled();
+    expect(actions.arrayCopy).not.toHaveBeenCalled();
+    expect(actions.save).not.toHaveBeenCalled();
+    expect(actions.redo).not.toHaveBeenCalled();
+
+    expect(press({ key: 'Z', ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true);
+    expect(actions.redo).toHaveBeenCalledOnce();
+  });
+
   it('cycles snap candidates with Tab only while the canvas has focus', () => {
     const button = document.querySelector<HTMLButtonElement>('#button')!;
     button.focus();
@@ -117,6 +148,10 @@ describe('ShortcutController', () => {
     expect(actions.cycleSnap).toHaveBeenLastCalledWith(1);
     press({ key: 'Tab', shiftKey: true }, canvas);
     expect(actions.cycleSnap).toHaveBeenLastCalledWith(-1);
+
+    // 切り替える候補が無いときは、Tabを通常のフォーカス移動として通す。
+    actions.cycleSnap.mockReturnValueOnce(false);
+    expect(press({ key: 'Tab' }, canvas).defaultPrevented).toBe(false);
   });
 
   it('skips events another handler already consumed and stops after dispose', () => {

@@ -234,6 +234,15 @@ test('数字キーでツールを切り替え、全選択と選択反転を行�
   await page.locator('#btn-invert-selection').click();
   await expect(canvas).toHaveAttribute('data-selected-count', '31');
   await expect(page.locator('#edit-menu')).not.toHaveAttribute('open');
+
+  // 選択対象のチェックボックスを操作した直後でも、ショートカットは有効なままにする。
+  await page.locator('#selection-filter-menu > summary').click();
+  await page.locator('[data-selection-kind="pillar"]').uncheck();
+  await expect(canvas).toHaveAttribute('data-selected-count', '22');
+  await page.keyboard.press('Control+i');
+  await expect(canvas).toHaveAttribute('data-selected-count', '0');
+  await page.keyboard.press('Control+a');
+  await expect(canvas).toHaveAttribute('data-selected-count', '22');
 });
 
 test('配列複写で梁を繰り返し複写し、1回のUndoで戻す', async ({ page }) => {
@@ -290,6 +299,22 @@ test('計測ツールで距離と各軸の差分を表示する', async ({ page 
 
   await page.keyboard.press('Escape');
   await expect(status).not.toContainText('Distance');
+
+  // 数値入力した点は、近くに節点があっても入力値のまま使う。
+  await addNode(page, 0, 0, 0);
+  await page.keyboard.press('Home');
+  await page.locator('#btn-measure').click();
+  await enterCoordinate(page, 1, 0, 0);
+  await enterCoordinate(page, 1, 0, 3000);
+  await expect(status).toContainText('Distance 3000.0 mm (ΔX 0.0 / ΔY 0.0 / ΔZ 3000.0)');
+
+  // 計測は立面表示でも使えるため、正面へ切り替えても選択ツールへ戻さない。
+  await page.locator('#btn-view-front').click();
+  await expect(page.locator('#btn-measure')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#btn-view-top').click();
+  await page.locator('#btn-add-beam').click();
+  await page.locator('#btn-view-front').click();
+  await expect(page.locator('#btn-select')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('重複節点を結合し、孤立節点を削除する', async ({ page }) => {
@@ -386,6 +411,19 @@ test('レイヤー操作の文言を言語切替へ追随させ、メニュー�
   await expect(page.locator('#export-menu')).toHaveAttribute('open', '');
   await page.locator('#cad-canvas').click({ position: { x: 5, y: 5 } });
   await expect(page.locator('#export-menu')).not.toHaveAttribute('open');
+
+  // メニューを閉じるEscは、作図中の1点目を取り消さない。
+  const canvas = page.locator('#cad-canvas');
+  await page.locator('#btn-add-beam').click();
+  await enterCoordinate(page, 0, 0, 0);
+  await expect(canvas).toHaveAttribute('data-operation-status', 'firstPointSelected');
+  await page.locator('#edit-menu > summary').click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#edit-menu')).not.toHaveAttribute('open');
+  await expect(page.locator('#edit-menu > summary')).toBeFocused();
+  await expect(canvas).toHaveAttribute('data-operation-status', 'firstPointSelected');
+  await page.keyboard.press('Escape');
+  await expect(canvas).not.toHaveAttribute('data-operation-status');
 });
 
 async function loadSample(page: Page, file: string, expectedCounts: string): Promise<void> {

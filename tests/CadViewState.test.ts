@@ -68,6 +68,27 @@ describe('CadView view mode', () => {
   });
 });
 
+describe('CadView pointer context', () => {
+  it('tells handlers whether a click carries a screen position', () => {
+    const { view } = createView();
+    const seen: boolean[] = [];
+    const handler = {
+      onClick: () => seen.push(view.hasPointerPosition),
+      onDoubleClick() {},
+      onMouseMove() {},
+      draw() {},
+    };
+    view.handler = handler;
+
+    expect(view.hasPointerPosition).toBe(false);
+    view.handleClick({ clientX: 500, clientY: 500, altKey: false } as MouseEvent);
+    // 座標の数値入力は、CadViewを経由せずハンドラを直接呼ぶ。
+    handler.onClick();
+    expect(seen).toEqual([true, false]);
+    expect(view.hasPointerPosition).toBe(false);
+  });
+});
+
 describe('CadView measurement', () => {
   it('publishes an independent copy and suppresses redundant clears', () => {
     const { view } = createView();

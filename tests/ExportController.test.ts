@@ -52,7 +52,7 @@ function createHarness(): Harness {
     document: doc,
     cadView,
     cancelOperation: () => events.push('cancel'),
-    notify: (message) => notices.push(message),
+    notify: (message) => notices.push(message()),
     root: document,
   }).connect();
   return {
@@ -97,6 +97,11 @@ afterEach(() => {
 });
 
 describe('ExportController', () => {
+  it('uses a real byte order mark so spreadsheets detect UTF-8', () => {
+    expect(CSV_BOM).toHaveLength(1);
+    expect(CSV_BOM.charCodeAt(0)).toBe(0xfeff);
+  });
+
   it('saves node and element CSV files with a BOM, named after the model', async () => {
     buildModel();
     const harness = createHarness();

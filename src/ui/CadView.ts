@@ -216,6 +216,14 @@ export class CadView implements InputHost {
     this.onMeasurementChanged?.(this._measurement);
   }
 
+  /**
+   * 処理中の操作がポインタの画面位置を伴うか。座標の数値入力から呼ばれたクリックでは false になり、
+   * ハンドラは入力値をそのまま使うべきかを判断できる。
+   */
+  get hasPointerPosition(): boolean {
+    return this.activeScreenPoint !== null;
+  }
+
   get viewMode(): CadViewMode {
     if (this.show3D) return '3d';
     return this.isElevationView ? 'elevation' : 'plan';
@@ -371,7 +379,12 @@ export class CadView implements InputHost {
    * 2Dは専用screen-space判定、3Dは実描画geometryへのRaycaster交点を深度順に返す。
    * worldPosだけを渡す従来呼出しも、投影してscreen位置を復元する。
    */
-  hitTest(worldPos: Point3D, predicate: (data: DocumentData) => boolean = () => true): DocumentData | null {
+  hitTest(
+    worldPos: Point3D,
+    predicate: (data: DocumentData) => boolean = () => true,
+    options: { /** 計測など読み取り専用の操作で、ロック中の階の要素も対象にする。 */ includeLocked?: boolean } = {},
+  ): DocumentData | null {
+    const includeLocked = options.includeLocked === true;
     const rect = this.canvas.getBoundingClientRect();
     const screen = this.activeScreenPoint ?? this.cameraCtrl.worldToScreen(worldPos, rect);
     if (!screen) return null;
@@ -384,6 +397,7 @@ export class CadView implements InputHost {
         CAD.HIT_TOLERANCE_PX,
         predicate,
         this.isElevationView,
+        includeLocked,
       );
     }
 
@@ -396,7 +410,7 @@ export class CadView implements InputHost {
 
     const candidates = this.cadRenderer.raycast(raycaster).filter(({ data, intersection }) => {
       if (!predicate(data)) return false;
-      if (Document.instance.isDataLocked(data)) return false;
+      if (!includeLocked && Document.instance.isDataLocked(data)) return false;
       if (intersection.object instanceof THREE.Mesh) return true;
       const projected = this.cameraCtrl.worldToScreen(intersection.point, rect);
       return !!projected && projected.distanceTo(screen) <= CAD.HIT_TOLERANCE_PX;

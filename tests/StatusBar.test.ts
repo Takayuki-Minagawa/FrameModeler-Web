@@ -71,15 +71,24 @@ describe('StatusBar', () => {
 
   it('shows a notice first and clears it after a while, restarting the timer for a newer notice', () => {
     vi.useFakeTimers();
-    bar.showNotice('first');
+    bar.showNotice(() => 'first');
     expect(info.textContent).toBe('N:0 M:0 P:0 S:0 — first');
 
     vi.advanceTimersByTime(7000);
-    bar.showNotice('second');
+    bar.showNotice(() => 'second');
     vi.advanceTimersByTime(7000);
     expect(info.textContent).toBe('N:0 M:0 P:0 S:0 — second');
     vi.advanceTimersByTime(1000);
     expect(info.textContent).toBe('N:0 M:0 P:0 S:0');
+  });
+
+  it('re-translates a visible notice when the language changes', () => {
+    vi.useFakeTimers();
+    bar.showNotice(() => t('msg.noOrphans'));
+    expect(info.textContent).toBe('N:0 M:0 P:0 S:0 — 孤立節点はありません');
+    setLocale('en');
+    bar.refresh();
+    expect(info.textContent).toBe('N:0 M:0 P:0 S:0 — There are no orphan nodes');
   });
 
   it('formats signed deltas without negative zero', () => {

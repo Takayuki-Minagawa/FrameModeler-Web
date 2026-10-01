@@ -8,7 +8,7 @@ import { Plane } from '../data/Plane';
 export type CsvCell = string | number | null | undefined;
 
 /** Excelが UTF-8 と認識するための BOM。ダウンロード時に先頭へ付ける。 */
-export const CSV_BOM = '﻿';
+export const CSV_BOM = '\uFEFF';
 
 /**
  * RFC 4180 形式のCSV文字列を作る。

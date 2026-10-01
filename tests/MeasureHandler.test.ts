@@ -15,8 +15,11 @@ interface FakeView {
   statuses: Array<string | null>;
   lines: Array<[Point3D, Point3D]>;
   points: Point3D[];
+  hitOptions: Array<{ includeLocked?: boolean } | undefined>;
   setMode(mode: CadViewMode): void;
   setHit(node: Node | null): void;
+  /** false にすると、座標の数値入力から呼ばれたクリックを再現する。 */
+  setPointer(hasPointer: boolean): void;
 }
 
 function fakeView(): FakeView {
@@ -26,12 +29,20 @@ function fakeView(): FakeView {
   let points: Point3D[] = [];
   let mode: CadViewMode = 'plan';
   let hit: Node | null = null;
+  let hasPointer = true;
+  const hitOptions: Array<{ includeLocked?: boolean } | undefined> = [];
   const view = {
     previewColor: 0xff0000,
     get viewMode() {
       return mode;
     },
-    hitTest: (_pos: Point3D, predicate: (data: DocumentData) => boolean) => (hit && predicate(hit) ? hit : null),
+    get hasPointerPosition() {
+      return hasPointer;
+    },
+    hitTest: (_pos: Point3D, predicate: (data: DocumentData) => boolean, options?: { includeLocked?: boolean }) => {
+      hitOptions.push(options);
+      return hit && predicate(hit) ? hit : null;
+    },
     setMeasurement: (measurement: CadMeasurement | null) => measurements.push(measurement),
     setOperationStatus: (status: string | null) => statuses.push(status),
     clearPreview: () => {
@@ -46,6 +57,7 @@ function fakeView(): FakeView {
     view,
     measurements,
     statuses,
+    hitOptions,
     get lines() {
       return lines;
     },
@@ -57,6 +69,9 @@ function fakeView(): FakeView {
     },
     setHit: (node) => {
       hit = node;
+    },
+    setPointer: (value) => {
+      hasPointer = value;
     },
   };
 }
@@ -111,6 +126,30 @@ describe('MeasureHandler', () => {
     expect(result.from).toEqual(base.pos);
     expect(result.to).toEqual(top.pos);
     expect(result.from).not.toBe(base.pos);
+    // 計測は読み取り専用なので、ロック中の階の節点も対象にする。
+    expect(fake.hitOptions).toEqual([{ includeLocked: true }, { includeLocked: true }]);
+  });
+
+  it('uses typed coordinates verbatim instead of snapping to a nearby node', () => {
+    const fake = fakeView();
+    const handler = new MeasureHandler();
+    fake.setHit(new Node(new Point3D(0, 0, 0)));
+    fake.setPointer(false);
+
+    handler.onClick(fake.view, new Point3D(50, 0, 0), click);
+    handler.onClick(fake.view, new Point3D(0, 0, 3000), click);
+    expect(fake.measurements.at(-1)).toEqual({
+      from: new Point3D(50, 0, 0),
+      to: new Point3D(0, 0, 3000),
+      final: true,
+    });
+    expect(fake.hitOptions).toEqual([]);
+
+    // 立面表示でも、数値入力した点は節点上でなくても受け付ける。
+    fake.setMode('elevation');
+    fake.setHit(null);
+    handler.onClick(fake.view, new Point3D(1, 2, 3), click);
+    expect(fake.statuses.at(-1)).toBe('firstPointSelected');
   });
 
   it('only accepts nodes in elevation views and shows no live preview there', () => {

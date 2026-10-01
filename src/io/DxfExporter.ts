@@ -267,13 +267,21 @@ function formatNumber(value: number): string {
   return text === '-0' ? '0' : text;
 }
 
-/** R12 は文字コードを宣言できないため、非ASCII文字を \U+XXXX 形式へ置き換え、改行と制御文字を除く。 */
+/**
+ * TEXT の値を R12 で安全な ASCII にする。
+ * - R12 は文字コードを宣言できないため、非ASCII文字は UTF-16 単位ごとに `\U+XXXX`（4桁固定）へ置き換える
+ * - 改行と制御文字は除く
+ * - `%%`（%%u などの書式コード）と `^`（^J などの制御文字）が特殊な意味で解釈されないようにする
+ */
 function escapeText(value: string): string {
   let result = '';
-  for (const char of value.trim()) {
-    const code = char.codePointAt(0)!;
+  const text = value.trim().replace(/%{2,}/g, '%');
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
     if (code < 0x20 || code === 0x7f) continue;
-    result += code < 0x80 ? char : `\\U+${code.toString(16).toUpperCase().padStart(4, '0')}`;
+    if (code === 0x5e) result += '^ ';
+    else if (code < 0x80) result += text[index];
+    else result += `\\U+${code.toString(16).toUpperCase().padStart(4, '0')}`;
   }
   return result;
 }

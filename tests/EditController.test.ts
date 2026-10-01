@@ -56,7 +56,7 @@ function createHarness(): Harness {
     },
     cancelOperation: () => events.push('cancel'),
     refreshDocument: () => events.push('refresh'),
-    notify: (message) => notices.push(message),
+    notify: (message) => notices.push(message()),
     root: document,
   });
   controller.connect();

@@ -47,7 +47,7 @@ const statusBar = new StatusBar(
   doc,
   APP_VERSION,
 );
-const notify = (message: string): void => statusBar.showNotice(message);
+const notify = (message: () => string): void => statusBar.showNotice(message);
 
 // ========== ツールと変更履歴 ==========
 
@@ -111,7 +111,10 @@ const viewOptionsController = new ViewOptionsController({
   document: doc,
   cadView,
   cancelOperation,
-  activateSelectTool: () => toolController.activate('btn-select'),
+  // 選択・計測は立面でも使える。作図ツールの場合だけ選択ツールへ戻す。
+  ensureElevationTool: () => {
+    if (!cadView.handler?.supportsElevationPicking) toolController.activate('btn-select');
+  },
 });
 viewOptionsController.connect();
 
@@ -220,7 +223,7 @@ new ShortcutController({
     arrayCopy: () => void editController.arrayCopy(),
     fit: () => cadView.fitToScene(),
     activateTool: (index) => toolController.activateByIndex(index),
-    cycleSnap: (direction) => void cadView.cycleSnapCandidate(direction),
+    cycleSnap: (direction) => cadView.cycleSnapCandidate(direction),
   },
 }).connect();
 

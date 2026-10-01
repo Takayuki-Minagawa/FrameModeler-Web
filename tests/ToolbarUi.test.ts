@@ -77,26 +77,47 @@ describe('installToolbarMenus', () => {
     check.click();
     expect(first.open).toBe(true);
 
-    document.querySelector<HTMLButtonElement>('#action')!.click();
+    // 実行したボタンは閉じたメニューの中で非表示になるため、フォーカスを見出しへ戻す。
+    const action = document.querySelector<HTMLButtonElement>('#action')!;
+    action.focus();
+    action.click();
     expect(first.open).toBe(false);
+    expect(document.activeElement).toBe(first.querySelector('summary'));
 
     open(first);
     document.querySelector('#outside')!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     expect(first.open).toBe(false);
   });
 
+  it('does not steal focus from a dialog that a menu button opened', () => {
+    open(first);
+    const action = document.querySelector<HTMLButtonElement>('#action')!;
+    const dialogInput = document.createElement('input');
+    document.body.appendChild(dialogInput);
+    action.addEventListener('click', () => dialogInput.focus(), { once: true });
+    action.focus();
+    action.click();
+    expect(first.open).toBe(false);
+    expect(document.activeElement).toBe(dialogInput);
+  });
+
   it('closes the focused menu with Escape and returns focus to its summary', () => {
     open(first);
     document.querySelector<HTMLButtonElement>('#action')!.focus();
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    document.dispatchEvent(escape);
     expect(first.open).toBe(false);
     expect(document.activeElement).toBe(first.querySelector('summary'));
+    // メニューを閉じたEscは消費済みにし、作図中の操作の取消へ伝えない。
+    expect(escape.defaultPrevented).toBe(true);
 
     // フォーカスがメニュー外にあるときのEscは、開いているメニューに触れない。
     open(second);
     document.querySelector<HTMLButtonElement>('#outside')!.focus();
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    const unrelated = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    document.dispatchEvent(unrelated);
     expect(second.open).toBe(true);
+    expect(unrelated.defaultPrevented).toBe(false);
   });
 
   it('stops managing menus after dispose', () => {

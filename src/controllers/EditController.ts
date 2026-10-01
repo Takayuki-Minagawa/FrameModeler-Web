@@ -24,7 +24,7 @@ export interface EditControllerOptions {
   cancelOperation: () => void;
   refreshDocument: (fit: boolean) => void;
   /** 操作結果の短い通知（ステータスバーなど）。 */
-  notify: (message: string) => void;
+  notify: (message: () => string) => void;
   root?: globalThis.Document;
 }
 
@@ -136,7 +136,7 @@ export class EditController {
       );
       refreshDocument(false);
       const nodes = additions.filter((data) => data instanceof Node).length;
-      notify(
+      notify(() =>
         additions.length > 0
           ? t('msg.copyResult', { nodes, elements: additions.length - nodes })
           : t('msg.copyNothing'),
@@ -157,11 +157,9 @@ export class EditController {
     try {
       const plan = await trackChange('history.mergeNodes', () => doc.execute(new MergeNodesCommand(tolerance)));
       refreshDocument(false);
-      notify(
-        plan.replacements.size > 0
-          ? t('msg.mergeResult', { nodes: plan.replacements.size, elements: plan.redundantElements.length })
-          : t('msg.mergeNothing'),
-      );
+      const merged = plan.replacements.size;
+      const removed = plan.redundantElements.length;
+      notify(() => (merged > 0 ? t('msg.mergeResult', { nodes: merged, elements: removed }) : t('msg.mergeNothing')));
     } catch (error) {
       alert(t('msg.mergeFailed', { message: (error as Error).message }));
     }
@@ -173,7 +171,7 @@ export class EditController {
     cancelOperation();
     const count = findOrphanNodes(doc).length;
     if (count === 0) {
-      notify(t('msg.noOrphans'));
+      notify(() => t('msg.noOrphans'));
       return;
     }
     if (!confirm(t('msg.confirmRemoveOrphans', { count }))) return;
@@ -181,7 +179,7 @@ export class EditController {
     try {
       const removed = await trackChange('history.removeOrphanNodes', () => doc.execute(new RemoveOrphanNodesCommand()));
       refreshDocument(false);
-      notify(t('msg.orphansRemoved', { count: removed.length }));
+      notify(() => t('msg.orphansRemoved', { count: removed.length }));
     } catch (error) {
       alert(t('msg.deleteFailed', { message: (error as Error).message }));
     }

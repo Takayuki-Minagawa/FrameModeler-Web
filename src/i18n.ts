@@ -183,6 +183,8 @@ const messages = {
   'aria.displayActions': { ja: '表示要素', en: 'Element display' },
   'aria.appSettings': { ja: 'ヘルプと表示設定', en: 'Help and display settings' },
   'aria.layers': { ja: 'レイヤー一覧', en: 'Layer list' },
+  'aria.selectionFilter': { ja: '選択対象', en: 'Selectable types' },
+  'aria.displayLabels': { ja: '表示ラベル', en: 'Displayed labels' },
   'aria.cadCanvas': { ja: '構造フレーム作図領域', en: 'Structural frame drawing area' },
   'coordinate.x': { ja: 'X座標', en: 'X coordinate' },
   'coordinate.y': { ja: 'Y座標', en: 'Y coordinate' },
@@ -220,8 +222,8 @@ const messages = {
   'arrayCopy.dz': { ja: 'ΔZ (mm)', en: 'ΔZ (mm)' },
   'arrayCopy.count': { ja: '個数', en: 'Copies' },
   'mergeNodes.description': {
-    ja: '指定した距離以内にある節点を1つにまとめ、部材・面材・支点・拘束の参照を付け替えます。同じ要素が両方を参照している節点（零長ばねの両端など）、双方に質量がある節点、ロック中の階の節点は結合しません。',
-    en: 'Merges nodes within the given distance and re-points members, planes, supports and constraints. Nodes referenced by the same element (such as both ends of a zero-length spring), nodes that both carry mass, and nodes on locked layers are left as they are.',
+    ja: '指定した距離以内にある節点を1つにまとめ、部材・面材・支点・拘束の参照を付け替えます。零長ばねや拘束で互いに結ばれた節点、双方に質量がある節点、ロック中の階の節点、結合すると部材長が0になる・面が平面でなくなる節点は結合しません。',
+    en: 'Merges nodes within the given distance and re-points members, planes, supports and constraints. Nodes joined to each other by a zero-length spring or a constraint, nodes that both carry mass, nodes on locked layers, and nodes whose merge would collapse a member or bend a plane are left as they are.',
   },
   'mergeNodes.tolerance': { ja: '許容距離 (mm)', en: 'Tolerance (mm)' },
   'summary.counts': { ja: '要素数', en: 'Element counts' },
@@ -455,8 +457,8 @@ const messages = {
   },
   'help.mergeNodes.name': { ja: '重複節点の結合', en: 'Merge nodes' },
   'help.mergeNodes.desc': {
-    ja: '許容距離以内の節点を1つにまとめる\n結合で完全に同じになった要素は1つだけ残す',
-    en: 'Merge nodes within a tolerance\nElements that become identical are kept only once',
+    ja: '許容距離以内の節点を1つにまとめる\n結合で完全に同じになった梁・柱・面材は1つだけ残す',
+    en: 'Merge nodes within a tolerance\nBeams, pillars and planes that become identical are kept only once',
   },
   'help.removeOrphans.name': { ja: '孤立節点の削除', en: 'Remove orphan nodes' },
   'help.removeOrphans.desc': {

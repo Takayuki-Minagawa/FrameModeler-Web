@@ -9,8 +9,8 @@ export interface ViewOptionsControllerOptions {
   document: Document;
   cadView: CadView;
   cancelOperation: () => void;
-  /** 立面表示は作図できないため、正面・側面へ切り替える前に選択ツールへ戻す。 */
-  activateSelectTool: () => void;
+  /** 立面表示では作図できないため、正面・側面へ切り替える前に立面で使えるツールへ切り替える。 */
+  ensureElevationTool: () => void;
   root?: globalThis.Document;
 }
 
@@ -85,7 +85,7 @@ export class ViewOptionsController {
 
   setStandardView(view: StandardView): void {
     this.options.cancelOperation();
-    if (view === 'front' || view === 'right') this.options.activateSelectTool();
+    if (view === 'front' || view === 'right') this.options.ensureElevationTool();
     this.options.cadView.setStandardView(view);
     this.chk3D.checked = this.options.cadView.show3D;
   }

@@ -7,8 +7,9 @@ import type { Point3D } from '../../math/Point3D';
  * 計測ハンドラ: 2点間の距離と ΔX / ΔY / ΔZ を表示する。モデルは変更しない。
  *
  * - 節点上をクリックした場合は、作業平面の高さに関係なくその節点の座標を使う。
- *   これにより3D・立面表示でも階をまたぐ距離を測れる。
+ *   これにより3D・立面表示でも階をまたぐ距離を測れる。ロック中の階の節点も対象にする。
  * - それ以外は作業平面上のスナップ位置を使う。立面表示では作業平面が無いため節点だけを対象にする。
+ * - 座標の数値入力は、近くに節点があっても入力値をそのまま使う。
  * - 2点目の確定後は結果を保持し、次のクリックで新しい計測を始める。
  */
 export class MeasureHandler implements ICadMouseHandler {
@@ -60,7 +61,8 @@ export class MeasureHandler implements ICadMouseHandler {
   }
 
   private pick(view: CadView, pos: Point3D): Point3D | null {
-    const hit = view.hitTest(pos, (data) => data instanceof Node);
+    if (!view.hasPointerPosition) return pos.clone();
+    const hit = view.hitTest(pos, (data) => data instanceof Node, { includeLocked: true });
     if (hit instanceof Node) return hit.pos.clone();
     return view.viewMode === 'elevation' ? null : pos.clone();
   }

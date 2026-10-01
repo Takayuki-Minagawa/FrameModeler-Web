@@ -32,7 +32,8 @@ export class StatusBar {
   private measurement: Readonly<CadMeasurement> | null = null;
   private selectedCount = 0;
   private dirty = false;
-  private notice = '';
+  /** 表示中に言語を切り替えても追随できるよう、文言ではなく生成関数を保持する。 */
+  private notice: (() => string) | null = null;
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
@@ -76,12 +77,12 @@ export class StatusBar {
   }
 
   /** 操作結果などの短い通知を一定時間だけ表示する。 */
-  showNotice(message: string): void {
+  showNotice(message: () => string): void {
     if (this.noticeTimer !== null) clearTimeout(this.noticeTimer);
     this.notice = message;
     this.noticeTimer = setTimeout(() => {
       this.noticeTimer = null;
-      this.notice = '';
+      this.notice = null;
       this.refresh();
     }, NOTICE_DURATION_MS);
     this.refresh();
@@ -96,7 +97,7 @@ export class StatusBar {
     this.setDirty(this.dirty);
     const { nodeList, memberList, planeList } = this.document;
     const details = [
-      this.notice,
+      this.notice?.() ?? '',
       this.operationStatus ? t(OPERATION_STATUS_KEYS[this.operationStatus]) : '',
       this.measurement ? formatMeasurement(this.measurement) : '',
       this.workPlaneMessage,

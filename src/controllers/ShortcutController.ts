@@ -11,8 +11,8 @@ export interface ShortcutActions {
   fit(): void;
   /** 1始まりのツール番号。対応するツールが無ければ false を返す。 */
   activateTool(index: number): boolean;
-  /** canvasにフォーカスがあるときのTab。direction は +1 / -1。 */
-  cycleSnap(direction: number): void;
+  /** canvasにフォーカスがあるときのTab。direction は +1 / -1。切り替える候補が無ければ false を返す。 */
+  cycleSnap(direction: number): boolean;
 }
 
 export interface ShortcutControllerOptions {
@@ -44,10 +44,8 @@ export class ShortcutController {
   private handle(event: KeyboardEvent): void {
     if (event.defaultPrevented || event.isComposing) return;
     if (this.root.querySelector('.modal-overlay')) return;
-    const target = event.target as HTMLElement | null;
-    const editingText = target?.matches?.('input, textarea, select, [contenteditable="true"]') ?? false;
     // 数値入力の途中でも、Escによる作図の取消だけは受け付ける。
-    if (editingText && event.key !== 'Escape') return;
+    if (isEditingControl(event.target) && event.key !== 'Escape') return;
 
     const action = this.resolve(event);
     if (!action) return;
@@ -61,6 +59,8 @@ export class ShortcutController {
     const command = event.ctrlKey || event.metaKey;
 
     if (command && !event.altKey) {
+      // Shift付きはブラウザや開発者ツールのショートカット（Ctrl+Shift+I など）に譲る。やり直しのZだけ例外。
+      if (event.shiftKey && key !== 'z') return null;
       switch (key) {
         case 's':
           return () => actions.save();
@@ -91,8 +91,19 @@ export class ShortcutController {
     }
     if (key === 'Delete') return () => actions.deleteSelection();
     if (key === 'Home' || key === 'f') return () => actions.fit();
+    // 候補を切り替えられなかったTabは通常のフォーカス移動として扱い、canvasにフォーカスを閉じ込めない。
     if (key === 'Tab' && this.root.activeElement === canvas) return () => actions.cycleSnap(event.shiftKey ? -1 : 1);
     if (/^[1-9]$/.test(key) && !event.shiftKey) return () => actions.activateTool(Number(key));
     return null;
   }
+}
+
+/** キー入力を自分で消費するコントロール。チェックボックスやボタンはショートカットを妨げない。 */
+const NON_TEXT_INPUT_TYPES = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'color', 'file']);
+
+function isEditingControl(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  if (!element?.matches) return false;
+  if (element.matches('textarea, select, [contenteditable="true"]')) return true;
+  return element.matches('input') && !NON_TEXT_INPUT_TYPES.has((element as HTMLInputElement).type);
 }

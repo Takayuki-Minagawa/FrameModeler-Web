@@ -11,7 +11,7 @@ export interface ExportControllerOptions {
   document: Document;
   cadView: CadView;
   cancelOperation: () => void;
-  notify: (message: string) => void;
+  notify: (message: () => string) => void;
   root?: globalThis.Document;
 }
 
@@ -57,7 +57,7 @@ export class ExportController {
     const blob = await this.options.cadView.captureImage();
     const name = this.filename('', 'png');
     downloadBlob(name, blob);
-    this.options.notify(t('msg.exported', { name }));
+    this.options.notify(() => t('msg.exported', { name }));
   }
 
   /** 平面表示では現在の階の伏図、3D・立面表示ではモデル全体を出力する。 */
@@ -92,7 +92,7 @@ export class ExportController {
 
   private saveText(name: string, content: string, mimeType: string): void {
     downloadText(name, content, mimeType);
-    this.options.notify(t('msg.exported', { name }));
+    this.options.notify(() => t('msg.exported', { name }));
   }
 
   private filename(suffix: string, extension: string): string {
