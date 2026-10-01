@@ -336,7 +336,7 @@ scripts/                    # bundle size budget
 ## 品質基準
 
 - Vitest: 48 ファイル・415 テスト
-- coverage 閾値: statements / functions / lines 75%、branches 60%（実測 80.66% / 81.94% / 83.08% / 71.41%）
+- coverage 閾値: statements / functions / lines 75%、branches 60%（実測 80.64% / 81.94% / 83.06% / 71.38%）
 - Playwright: sample 読込、dirty New / Open、Undo / Redo、2D / 3D 選択、操作状態・選択数同期、resize / theme、WebGL screenshot、ショートカットと選択操作、配列複写、計測、節点結合・孤立節点削除、数量集計と各出力、言語切替とメニューの 14 テスト
 - bundle budget: Three.js vendor chunk 560 KiB 以下、アプリ JavaScript（遅延読込 chunk を含む）合計 440 KiB 以下
 - 現在の本番 build: app 291.06 kB + 97.42 kB、Three.js 536.90 kB

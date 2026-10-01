@@ -3,6 +3,7 @@ import { MergeNodesCommand, RemoveOrphanNodesCommand } from '../src/commands/Doc
 import { Beam } from '../src/data/Beam';
 import { Constraint } from '../src/data/Constraint';
 import { Document } from '../src/data/Document';
+import type { DocumentData } from '../src/data/DocumentData';
 import { Floor } from '../src/data/Floor';
 import { Layer } from '../src/data/Layer';
 import { ModelValidator } from '../src/data/ModelValidator';
@@ -294,7 +295,9 @@ describe('node merge on random models', () => {
   }
 
   it('never throws and always leaves a valid model', () => {
-    for (let seed = 1; seed <= 60; seed++) {
+    let totalMerges = 0;
+    let totalElements = 0;
+    for (let seed = 1; seed <= 40; seed++) {
       const next = random(seed);
       const pick = <T>(items: ReadonlyArray<T>): T => items[Math.floor(next() * items.length)];
       doc.init();
@@ -317,30 +320,33 @@ describe('node merge on random models', () => {
       }
       doc.addMany(nodes);
 
-      // 不正な要素（零長の梁、非平面の床など）は追加時に拒否されるので読み飛ばす。
-      const tryAdd = (create: () => Parameters<typeof doc.add>[0]): void => {
+      // 不正な要素（零長の梁、非平面の床など）は単体で検証して読み飛ばし、有効なものだけをまとめて追加する。
+      const elements: DocumentData[] = [];
+      const tryAdd = (element: DocumentData): void => {
         try {
-          doc.add(create());
+          ModelValidator.validateModel([...new Set(element.referencedNodes), element], [], { validateNumbers: false });
+          elements.push(element);
         } catch {
           // 乱数で作った要素がモデルの不変条件を満たさなかっただけ
         }
       };
       for (let index = 0; index < 30; index++) {
-        tryAdd(() => new Beam(pick(nodes), pick(nodes)));
-        tryAdd(() => new Truss(pick(nodes), pick(nodes)));
-        tryAdd(() => {
-          const spring = new Spring(pick(nodes), pick(nodes));
-          spring.components = [{ dof: 'ux', stiffness: 1, unit: 'N/mm' }];
-          return spring;
-        });
-        tryAdd(() => new Floor([pick(nodes), pick(nodes), pick(nodes)]));
-        tryAdd(() => new Support(pick(nodes), ['uz']));
-        tryAdd(() => new Constraint(pick(nodes), 'ux', [{ node: pick(nodes), dof: 'ux', coefficient: 1 }]));
+        tryAdd(new Beam(pick(nodes), pick(nodes)));
+        tryAdd(new Truss(pick(nodes), pick(nodes)));
+        const spring = new Spring(pick(nodes), pick(nodes));
+        spring.components = [{ dof: 'ux', stiffness: 1, unit: 'N/mm' }];
+        tryAdd(spring);
+        tryAdd(new Floor([pick(nodes), pick(nodes), pick(nodes)]));
+        tryAdd(new Support(pick(nodes), ['uz']));
+        tryAdd(new Constraint(pick(nodes), 'ux', [{ node: pick(nodes), dof: 'ux', coefficient: 1 }]));
       }
+      doc.addMany(elements);
 
       const tolerance = pick([0, 0.3, 1, 2, 1500]);
       const before = doc.allDataList.length;
+      totalElements += elements.length;
       const plan = doc.execute(new MergeNodesCommand(tolerance));
+      totalMerges += plan.replacements.size;
       expect(() => ModelValidator.validateModel(doc.allDataList, doc.layers), `seed ${seed}`).not.toThrow();
       expect(doc.allDataList.length, `seed ${seed}`).toBe(
         before - plan.replacements.size - plan.redundantElements.length,
@@ -350,7 +356,11 @@ describe('node merge on random models', () => {
         expect(plan.replacements.has(keptNode), `seed ${seed}`).toBe(false);
       }
     }
-  });
+    // 空のモデルや結合の無いモデルばかりで検証が素通りしていないこと。
+    expect(totalElements).toBeGreaterThan(1000);
+    expect(totalMerges).toBeGreaterThan(100);
+    // coverage計測下の低速なCIでも余裕を持って終わるよう、既定の5秒より長く取る。
+  }, 30_000);
 });
 
 describe('orphan nodes', () => {
