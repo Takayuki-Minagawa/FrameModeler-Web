@@ -18,12 +18,8 @@ import {
 } from './ObjectSnapEngine';
 import { DisplayFilter } from '../display/DisplayFilter';
 import { createDisplayLabelDescriptors, DisplayLabelOptions, type DisplayLabelOption } from '../display/DisplayLabels';
-import { Member } from '../data/Member';
 import { Node } from '../data/Node';
-import { Plane } from '../data/Plane';
 import { CadLabelRenderer } from './CadLabelRenderer';
-import { Support } from '../data/Support';
-import { Constraint } from '../data/Constraint';
 
 const enum DirtyFlag {
   Camera = 1 << 0,
@@ -241,18 +237,8 @@ export class CadView implements InputHost {
   fitToData(data: ReadonlyArray<DocumentData>): void {
     const bounds = new THREE.Box3();
     for (const item of data) {
-      if (item instanceof Node) bounds.expandByPoint(toVector3(item.pos));
-      else if (item instanceof Member && item.ok) {
-        bounds.expandByPoint(toVector3(item.posI));
-        bounds.expandByPoint(toVector3(item.posJ));
-      } else if (item instanceof Plane) {
-        for (const node of item.nodeList) bounds.expandByPoint(toVector3(node.pos));
-      } else if (item instanceof Support && item.node) {
-        bounds.expandByPoint(toVector3(item.node.pos));
-      } else if (item instanceof Constraint) {
-        if (item.slaveNode) bounds.expandByPoint(toVector3(item.slaveNode.pos));
-        for (const term of item.terms) bounds.expandByPoint(toVector3(term.node.pos));
-      }
+      const nodes = item instanceof Node ? [item] : item.referencedNodes;
+      for (const node of nodes) bounds.expandByPoint(toVector3(node.pos));
     }
     if (bounds.isEmpty()) return;
     this.cameraCtrl.fitToBounds(bounds);

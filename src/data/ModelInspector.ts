@@ -6,7 +6,6 @@ import { collectModelErrors, ModelValidator } from './ModelValidator';
 import { Node } from './Node';
 import { Plane } from './Plane';
 import { Support } from './Support';
-import { Constraint } from './Constraint';
 
 export type ModelIssueSeverity = 'error' | 'warning';
 
@@ -39,20 +38,7 @@ export function inspectModel(doc: Document): ModelIssue[] {
   const members = allData.filter((data): data is Member => data instanceof Member);
   const planes = allData.filter((data): data is Plane => data instanceof Plane);
   const supports = allData.filter((data): data is Support => data instanceof Support);
-  const constraints = allData.filter((data): data is Constraint => data instanceof Constraint);
-  const referencedNodes = new Set<Node>();
-  members.forEach((member) => {
-    if (member.nodeI) referencedNodes.add(member.nodeI);
-    if (member.nodeJ) referencedNodes.add(member.nodeJ);
-  });
-  planes.forEach((plane) => plane.nodeList.forEach((node) => referencedNodes.add(node)));
-  supports.forEach((support) => {
-    if (support.node) referencedNodes.add(support.node);
-  });
-  constraints.forEach((constraint) => {
-    if (constraint.slaveNode) referencedNodes.add(constraint.slaveNode);
-    constraint.terms.forEach((term) => referencedNodes.add(term.node));
-  });
+  const referencedNodes = new Set<Node>(allData.flatMap((data) => [...data.referencedNodes]));
 
   const orphanNodes = nodes.filter((node) => !referencedNodes.has(node));
   if (orphanNodes.length > 0) {

@@ -121,11 +121,6 @@ function assertUnlocked(document: Document, elements: ReadonlyArray<DocumentData
 function affectedByNodeChanges(document: Document, nodes: ReadonlyArray<Node>): DocumentData[] {
   const nodeSet = new Set(nodes);
   return document.allDataList.filter(
-    (element) => nodeSet.has(element as Node) || nodes.some((node) => refersToNode(element, node)),
+    (element) => nodeSet.has(element as Node) || element.referencedNodes.some((node) => nodeSet.has(node)),
   );
-}
-
-function refersToNode(element: DocumentData, node: Node): boolean {
-  const candidate = element as DocumentData & { isReferring?: (target: Node) => boolean };
-  return typeof candidate.isReferring === 'function' && candidate.isReferring(node);
 }

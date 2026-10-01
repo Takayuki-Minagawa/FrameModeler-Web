@@ -1,5 +1,10 @@
-import { Plane } from './Plane';
+import { Plane, type PlaneState } from './Plane';
 import { Node } from './Node';
+import type { DataState } from './DataState';
+
+interface WallState extends PlaneState {
+  weight: number;
+}
 
 export class Wall extends Plane {
   readonly kind = 'wall' as const;
@@ -11,6 +16,15 @@ export class Wall extends Plane {
 
   get typeText(): string {
     return '壁';
+  }
+
+  override captureState(): WallState {
+    return { ...super.captureState(), weight: this.weight };
+  }
+
+  override restoreState(state: DataState): void {
+    super.restoreState(state);
+    this.weight = (state as WallState).weight;
   }
 
   get wallLength(): number {
