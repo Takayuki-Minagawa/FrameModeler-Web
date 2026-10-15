@@ -703,7 +703,7 @@ export class Document {
 
 const NODE_REFERENCED_REASON = '他のデータから参照されているノードは削除できません';
 /** レイヤー高さと節点高さを同一とみなす許容差 (mm)。 */
-const LAYER_Z_TOLERANCE = 1e-6;
+export const LAYER_Z_TOLERANCE = 1e-6;
 
 function dataMatchesSnapshot(snapshot: DataSnapshot): boolean {
   return snapshot.data.number === snapshot.number && stateValuesEqual(snapshot.data.captureState(), snapshot.state);

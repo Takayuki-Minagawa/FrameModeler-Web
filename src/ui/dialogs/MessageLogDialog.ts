@@ -1,6 +1,6 @@
 import { getLocale, t } from '../../i18n';
 import { messageLog, type MessageLog } from '../MessageLog';
-import { addCloseButtonRow, createDialogBox, createModalOverlay, showModal } from './DialogUtil';
+import { createDialogBox, createModalOverlay, showModal } from './DialogUtil';
 
 /** 直近のステータス通知・エラー・警告を一覧する。ステータスバーの通知は次の操作で消えるため、後から読み返せるようにする。 */
 export function showMessageLogDialog(log: MessageLog = messageLog): Promise<boolean> {
@@ -43,9 +43,12 @@ export function showMessageLogDialog(log: MessageLog = messageLog): Promise<bool
   clearBtn.type = 'button';
   clearBtn.textContent = t('messageLog.clear');
   clearBtn.disabled = entries.length === 0;
-  row.appendChild(clearBtn);
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.textContent = t('close');
+  closeBtn.className = 'primary';
+  row.append(clearBtn, closeBtn);
   box.appendChild(row);
-  const closeBtn = addCloseButtonRow(box);
   overlay.appendChild(box);
 
   const promise = showModal(overlay, closeBtn);

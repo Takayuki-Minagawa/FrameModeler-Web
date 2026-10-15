@@ -26,7 +26,10 @@ export class SettingsStore {
   }
 
   initializeTheme(): void {
-    if (this.storage.getItem(THEME_KEY) === 'dark') this.root.documentElement.dataset.theme = 'dark';
+    // setTheme(..., { persist: false }) で先に適用済みの表示は保存値で上書きしない。
+    if (!this.root.documentElement.dataset.theme && this.storage.getItem(THEME_KEY) === 'dark') {
+      this.root.documentElement.dataset.theme = 'dark';
+    }
     this.updateThemeButton();
   }
 
@@ -35,13 +38,13 @@ export class SettingsStore {
     return this.isDark;
   }
 
-  setTheme(dark: boolean): void {
-    if (dark) {
-      this.root.documentElement.dataset.theme = 'dark';
-      this.storage.setItem(THEME_KEY, 'dark');
-    } else {
-      delete this.root.documentElement.dataset.theme;
-      this.storage.removeItem(THEME_KEY);
+  /** persist=false のときは今回の表示にだけ適用し、保存済みの設定は変えない（URL パラメータ用）。 */
+  setTheme(dark: boolean, options: { persist?: boolean } = {}): void {
+    if (dark) this.root.documentElement.dataset.theme = 'dark';
+    else delete this.root.documentElement.dataset.theme;
+    if (options.persist !== false) {
+      if (dark) this.storage.setItem(THEME_KEY, 'dark');
+      else this.storage.removeItem(THEME_KEY);
     }
     this.updateThemeButton();
   }

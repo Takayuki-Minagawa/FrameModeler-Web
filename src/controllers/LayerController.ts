@@ -1,5 +1,5 @@
 import { AddLayerCommand, UpdateLayersCommand } from '../commands/DocumentCommands';
-import type { Document } from '../data/Document';
+import { LAYER_Z_TOLERANCE, type Document } from '../data/Document';
 import { Layer } from '../data/Layer';
 import type { CadView } from '../ui/CadView';
 import { showLayerDialog } from '../ui/dialogs/LayerDialog';
@@ -21,7 +21,7 @@ export interface LayerControllerOptions {
 
 /** 階高の既定値 (mm)。隣接レイヤーから求められないときに使う。 */
 export const DEFAULT_STORY_HEIGHT = 3000;
-const Z_TOLERANCE = 1e-6;
+const Z_TOLERANCE = LAYER_Z_TOLERANCE;
 
 type LayerDeleteChoice = 'withElements' | 'keepElements';
 
@@ -71,7 +71,6 @@ export class LayerController {
    * 作成できたら true。利用者が取り消したら false。
    */
   async requestLayerAbove(currentZ: number): Promise<boolean> {
-    const layers = this.options.document.layers;
     const suggestion = new Layer(currentZ + this.typicalStoryHeight(), this.nextLayerName());
     const layer = await showLayerDialog(suggestion, {
       mode: 'add',
@@ -79,17 +78,15 @@ export class LayerController {
       description: t('layer.aboveDescription', { z: currentZ }),
     });
     if (!layer) return false;
-    if (layer.posZ <= currentZ) {
+    if (layer.posZ <= currentZ + Z_TOLERANCE) {
       await showMessageDialog(t('msg.layerAboveMustBeHigher', { z: currentZ }), { level: 'error' });
       return false;
     }
-    const shown = this.options.document.shownLayer;
     // 柱・壁の配置をこの後に続けるため、run() と違って作図中の操作は取り消さない。
-    // 作業階も変えないので、既存の anchor / preview はそのまま有効。
+    // addLayer は作業階を変えないので、既存の anchor / preview はそのまま有効。
     try {
       await this.options.trackChange('history.addLayer', () => {
         if (!this.options.document.execute(new AddLayerCommand(layer))) throw new Error(t('msg.duplicateLayer'));
-        if (shown && layers.includes(shown)) this.options.document.shownLayer = shown;
       });
       this.render();
       this.options.cadView.renderElements();

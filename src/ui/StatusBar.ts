@@ -10,11 +10,14 @@ export interface StatusBarElements {
   version: HTMLElement;
   coordinate: HTMLElement;
   info: HTMLElement;
+  /** 現在ツール名。live region の info とは分け、件数更新のたびに読み上げられないようにする。 */
+  tool?: HTMLElement;
 }
 
 const OPERATION_STATUS_KEYS: Record<CadOperationStatus, MessageKey> = {
   firstPointSelected: 'operation.firstPointSelected',
   noPointAbove: 'operation.noPointAbove',
+  layerLocked: 'operation.layerLocked',
   coincidentPoints: 'operation.coincidentPoints',
   duplicateElement: 'operation.duplicateElement',
 };
@@ -111,8 +114,10 @@ export class StatusBar {
   refresh(): void {
     this.setDirty(this.dirty);
     const { nodeList, memberList, planeList } = this.document;
+    const toolText = this.toolLabelKey ? `${t('status.tool')}: ${t(this.toolLabelKey)}` : '';
+    if (this.elements.tool) this.elements.tool.textContent = toolText;
     const details = [
-      this.toolLabelKey ? `${t('status.tool')}: ${t(this.toolLabelKey)}` : '',
+      this.elements.tool ? '' : toolText,
       this.notice?.() ?? '',
       this.operationStatus ? t(OPERATION_STATUS_KEYS[this.operationStatus]) : '',
       this.measurement ? formatMeasurement(this.measurement) : '',

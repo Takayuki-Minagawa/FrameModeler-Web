@@ -11,6 +11,7 @@ const draftStoreMocks = vi.hoisted(() => ({
   clearDraftFamily: vi.fn(),
   loadDraft: vi.fn(),
   saveDraft: vi.fn(),
+  rotateDraftIdentity: vi.fn(() => 'rotated-tab'),
 }));
 
 vi.mock('../src/history/DraftStore', () => draftStoreMocks);
@@ -54,6 +55,7 @@ describe('AppController draft recovery', () => {
     expect(draftStoreMocks.clearDraftFamily).toHaveBeenCalledOnce();
     expect(draftStoreMocks.clearDraftFamily).toHaveBeenCalledWith('crashed-tab');
     expect(draftStoreMocks.clearDraft).not.toHaveBeenCalled();
+    expect(draftStoreMocks.rotateDraftIdentity).not.toHaveBeenCalled();
     expect(refreshDocument).toHaveBeenCalledTimes(accepted ? 1 : 0);
   });
 
@@ -76,6 +78,8 @@ describe('AppController draft recovery', () => {
 
     expect(draftStoreMocks.clearDraftFamily).not.toHaveBeenCalled();
     expect(draftStoreMocks.clearDraft).not.toHaveBeenCalled();
+    // 以後の自動保存が保留した draft を上書きしないよう、writer ID を別 family へ切り替える。
+    expect(draftStoreMocks.rotateDraftIdentity).toHaveBeenCalledOnce();
     expect(refreshDocument).not.toHaveBeenCalled();
   });
 

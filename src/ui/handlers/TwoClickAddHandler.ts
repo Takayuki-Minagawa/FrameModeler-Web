@@ -1,5 +1,6 @@
 import type { ICadMouseHandler, LayerAboveRequest } from './ICadMouseHandler';
 import type { CadView } from '../CadView';
+import { Document } from '../../data/Document';
 import type { DocumentData, DocumentDataKind } from '../../data/DocumentData';
 import { Point3D } from '../../math/Point3D';
 import { reportModelError } from './errors';
@@ -42,7 +43,7 @@ export abstract class TwoClickAddHandler<A> implements ICadMouseHandler {
   /** 1点目保持中のプレビュー描画 */
   protected abstract drawPreview(view: CadView, anchor: A, pos: Point3D): void;
 
-  onClick(view: CadView, pos: Point3D, event: MouseEvent): void {
+  onClick(view: CadView, pos: Point3D, _event: MouseEvent): void {
     if (this.anchor === null) {
       const a = this.acquireAnchor(view, pos);
       if (a !== null) {
@@ -65,7 +66,6 @@ export abstract class TwoClickAddHandler<A> implements ICadMouseHandler {
       view.renderElements();
       view.renderPreview();
     }
-    void event;
   }
 
   onDoubleClick(_view: CadView, _pos: Point3D, _event: MouseEvent): void {}
@@ -99,12 +99,20 @@ export abstract class TwoClickAddHandler<A> implements ICadMouseHandler {
 
   /**
    * 上階レイヤーが無く直上位置を決められないとき、レイヤー作成を求めてから同じ点で操作をやり直す。
-   * ツールが切り替わっていたり既に1点目が入っていれば、やり直さない。
+   * ロック中の階では作成できても確定できないため求めない。ツールが切り替わっていたり、
+   * 依頼時と anchor の状態が変わっていれば、やり直さない。
    */
   protected retryAfterLayerAbove(view: CadView, pos: Point3D): void {
     if (!this.layerAboveRequest) return;
+    if (Document.instance.shownLayer?.locked) {
+      view.setOperationStatus('layerLocked');
+      return;
+    }
+    const anchorAtRequest = this.anchor;
     void this.layerAboveRequest(pos.z).then((created) => {
-      if (created && view.handler === this && this.anchor === null) this.onClick(view, pos, new MouseEvent('click'));
+      if (created && view.handler === this && this.anchor === anchorAtRequest) {
+        this.onClick(view, pos, new MouseEvent('click'));
+      }
     });
   }
 }

@@ -11,6 +11,7 @@ vi.mock('../src/ui/dialogs/MessageDialog', () => ({
 import { Document } from '../src/data/Document';
 import { showMessageDialog } from '../src/ui/dialogs/MessageDialog';
 import { Floor, FloorDirection } from '../src/data/Floor';
+import { Layer } from '../src/data/Layer';
 import { Node } from '../src/data/Node';
 import { Point3D } from '../src/math/Point3D';
 import type { CadView } from '../src/ui/CadView';
@@ -86,6 +87,43 @@ describe('drawing handler atomic commits', () => {
     new AddWallHandler().onClick(view({ setOperationStatus: wallStatus }), new Point3D(0, 0, 0), event);
     expect(wallStatus).toHaveBeenLastCalledWith('noPointAbove');
     expect(doc.allDataList).toHaveLength(0);
+  });
+
+  it('does not ask for a layer above while the shown layer is locked', () => {
+    const layer = new Layer(0, '1F');
+    doc.addLayer(layer);
+    doc.shownLayer = layer;
+    doc.updateLayer(layer, { locked: true });
+    const request = vi.fn(async () => true);
+    const pillarStatus = vi.fn();
+    const pillar = new AddPillarHandler();
+    pillar.setLayerAboveRequest(request);
+    pillar.onClick(view({ setOperationStatus: pillarStatus }), new Point3D(0, 0, 0), event);
+    expect(pillarStatus).toHaveBeenLastCalledWith('layerLocked');
+
+    const wallStatus = vi.fn();
+    const wall = new AddWallHandler();
+    wall.setLayerAboveRequest(request);
+    wall.onClick(view({ setOperationStatus: wallStatus }), new Point3D(0, 0, 0), event);
+    expect(wallStatus).toHaveBeenLastCalledWith('layerLocked');
+    expect(request).not.toHaveBeenCalled();
+    expect(doc.allDataList).toHaveLength(0);
+  });
+
+  it('asks for a layer above and retries the pillar at the same point once it exists', async () => {
+    const layer = new Layer(0, '1F');
+    doc.addLayer(layer);
+    doc.shownLayer = layer;
+    const cadView = view();
+    const pillar = new AddPillarHandler();
+    (cadView as { handler: unknown }).handler = pillar;
+    pillar.setLayerAboveRequest(async () => {
+      doc.addLayer(new Layer(3500, '2F'));
+      return true;
+    });
+    pillar.onClick(cadView, new Point3D(100, 200, 0), event);
+    await vi.waitFor(() => expect(doc.memberList).toHaveLength(1));
+    expect(doc.memberList[0].posJ).toEqual(new Point3D(100, 200, 3500));
   });
 
   it('reports coincident points instead of silently discarding a two-click operation', () => {

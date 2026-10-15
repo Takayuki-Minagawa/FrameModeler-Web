@@ -151,6 +151,10 @@ const messages = {
     ja: '直上に節点・部材・上階レイヤーが見つかりません',
     en: 'No node, member or layer was found directly above',
   },
+  'operation.layerLocked': {
+    ja: '現在のレイヤーはロックされています',
+    en: 'The current layer is locked',
+  },
   'operation.coincidentPoints': { ja: '異なる2点を指定してください', en: 'Specify two different points' },
   'operation.duplicateElement': { ja: '同じ位置の要素が既に存在します', en: 'An element already exists here' },
 
@@ -320,7 +324,7 @@ const messages = {
     ja: 'Enter で確定。空欄なら現在レイヤーの高さを使う',
     en: 'Press Enter to apply. Empty uses the current layer elevation',
   },
-  'coordinate.zPlaceholder': { ja: 'レイヤー高さ', en: 'layer Z' },
+  'coordinate.zPlaceholder': { ja: 'レイヤー高さ', en: 'Layer Z' },
   'layer.deleteWithElements': { ja: '要素も削除', en: 'Delete elements too' },
   'layer.deleteKeepElements': { ja: '要素は残す', en: 'Keep elements' },
   'layer.aboveDescription': {
@@ -331,7 +335,7 @@ const messages = {
     ja: '上階レイヤーの高さは {z} より大きい値にしてください。',
     en: 'The layer above must be higher than {z}.',
   },
-  'msg.confirmDeleteEmptyLayer': { ja: 'レイヤー「{name}」を削除しますか？', en: "Delete layer '{name}'?" },
+  'msg.confirmDeleteEmptyLayer': { ja: 'レイヤー「{name}」を削除しますか？', en: 'Delete layer "{name}"?' },
   'msg.layerDeleteLockedElements': {
     ja: 'ロック中のレイヤーに属する要素が含まれるため、要素と一緒には削除できません。',
     en: 'Some related elements belong to a locked layer, so they cannot be deleted with the layer.',
@@ -367,10 +371,6 @@ const messages = {
     en: 'A layer at the same Z position already exists',
   },
   'msg.defaultLayerName': { ja: '新規レイヤー', en: 'New Layer' },
-  'msg.memberExists': { ja: '既に接続されたメンバーが存在します', en: 'A connected member already exists' },
-  'msg.floorExists': { ja: '既に同一の床が存在します', en: 'The same floor already exists' },
-  'msg.wallExists': { ja: '既に同一の壁が存在します', en: 'The same wall already exists' },
-  'msg.bearwallExists': { ja: '既に同一の耐力壁が存在します', en: 'The same bearing wall already exists' },
   'msg.nothingSelected': { ja: '要素が選択されていません。', en: 'No elements are selected.' },
   'msg.copyResult': {
     ja: '{nodes}節点、{elements}要素を追加しました',
@@ -428,7 +428,7 @@ const messages = {
   'msg.layerLockedDelete': { ja: 'ロック中のレイヤーは削除できません。', en: 'A locked layer cannot be deleted.' },
   'msg.confirmDeleteLayer': {
     ja: 'レイヤー「{name}」を削除します。この高さの節点とそれを参照する要素が {count} 件あります。\n「要素は残す」を選ぶと、要素はどの階からも見えない状態で残ります。',
-    en: "Delete layer '{name}'. {count} node(s) at this elevation and element(s) referencing them exist.\nIf you keep them, they remain in the model but are not shown on any layer.",
+    en: 'Delete layer "{name}". {count} node(s) at this elevation and element(s) referencing them exist.\nIf you keep them, they remain in the model but are not shown on any layer.',
   },
   'msg.noAdjacentLayer': { ja: 'コピー先の隣接レイヤーがありません。', en: 'There is no adjacent target layer.' },
   'msg.targetLayerLocked': { ja: 'コピー先レイヤーはロックされています。', en: 'The target layer is locked.' },
@@ -700,9 +700,9 @@ export function getLocale(): Locale {
   return currentLocale;
 }
 
-export function setLocale(locale: Locale): void {
+export function setLocale(locale: Locale, options: { persist?: boolean } = {}): void {
   currentLocale = locale;
-  storage?.setItem(STORAGE_KEY, locale);
+  if (options.persist !== false) storage?.setItem(STORAGE_KEY, locale);
   if (typeof document !== 'undefined') updateDom();
   legacyLocaleChanged?.();
   for (const listener of [...localeChangeListeners]) listener(locale);

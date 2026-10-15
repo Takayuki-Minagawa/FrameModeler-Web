@@ -39,7 +39,10 @@ export abstract class AddQuadPlaneHandler extends TwoClickAddHandler<Point3D> {
     const { points, aboveExists } = createQuadPoints(pos, anchor);
 
     if (!aboveExists) {
+      // 2点目の直上だけ無い場合は1点目を保持したまま上階レイヤーの作成を求め、作成後に同じ2点目で確定する。
+      this.anchor = anchor;
       view.setOperationStatus('noPointAbove');
+      this.retryAfterLayerAbove(view, pos);
       return;
     }
     const { nodes, additions } = planNodes(points);

@@ -7,6 +7,7 @@ vi.mock('../src/history/DraftStore', () => ({
   clearDraftFamily: vi.fn(async () => undefined),
   loadDraft: vi.fn(async () => null),
   saveDraft: vi.fn(async () => undefined),
+  rotateDraftIdentity: vi.fn(() => 'tab'),
 }));
 vi.mock('../src/io/download', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/io/download')>()),
@@ -224,6 +225,27 @@ describe('FileMenuController', () => {
     expect(written).toHaveLength(2);
     expect(saveFilenameDialog).not.toHaveBeenCalled();
     expect(harness.app.isDirty).toBe(true);
+  });
+
+  it('opens a model from a URL and reports fetch failures through the dialog', async () => {
+    addBeam();
+    const json = serializeJson();
+    doc.init();
+    const harness = createHarness();
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(json, { status: 200 }))
+      .mockResolvedValueOnce(new Response('missing', { status: 404, statusText: 'Not Found' }));
+
+    await harness.controller.openFromUrl('https://example.test/models/frame%20v2.json');
+    expect(fetchMock).toHaveBeenCalledWith('https://example.test/models/frame%20v2.json');
+    expect(doc.memberList).toHaveLength(1);
+    expect(doc.filename).toBe('frame v2.json');
+    expect(harness.app.isDirty).toBe(false);
+
+    await harness.controller.openFromUrl('https://example.test/missing.json');
+    expect(messageDialog.mock.calls[0][0]).toContain('404 Not Found');
+    expect(doc.memberList).toHaveLength(1);
   });
 
   it('shows the validation dialog from the Validate button', async () => {

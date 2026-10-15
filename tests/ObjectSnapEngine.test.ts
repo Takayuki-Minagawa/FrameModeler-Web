@@ -229,6 +229,14 @@ describe('ObjectSnapEngine', () => {
     expect(orthogonal.position.x).toBeCloseTo(10 / Math.SQRT2);
     expect(orthogonal.position.y).toBeCloseTo(-10 / Math.SQRT2);
 
+    // anchor に潰れる（零長になる）候補は作らず、グリッドへフォールバックする。
+    const collapsed = resolve({
+      pointer: { x: 3, y: -2 },
+      position: new Point3D(3, -2, 0),
+      constraints: { anchor, kinds: ['orthogonal'], orthogonalTo: new Point3D(1, 1, 0) },
+    });
+    expect(getObjectSnapCandidateKind(collapsed)).toBe('grid');
+
     // スナップ幅が無効なら丸めない。
     const unrounded = resolve({
       pointer: { x: 0.4, y: 836.6 },

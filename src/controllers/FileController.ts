@@ -52,7 +52,9 @@ export class FileController {
 
   /** JSON をダウンロードする。name を省略すると読み込んだファイル名（無ければ model.json）を使う。 */
   save(name?: string): string {
-    const filename = toJsonFilename(name ?? (this.document.hasFileName ? this.document.filename : 'model.json'));
+    const filename = name
+      ? ensureJsonExtension(name)
+      : toJsonFilename(this.document.hasFileName ? this.document.filename : 'model.json');
     downloadJson(filename);
     this.document.filename = filename;
     return filename;
@@ -68,6 +70,12 @@ export function isJsonFile(name: string, content: string): boolean {
 
 export function isYamlFile(name: string, content: string): boolean {
   return /\.ya?ml$/i.test(name) || /^[\s\r\n]*schema_version\s*:/i.test(content);
+}
+
+/** 末尾が .json でなければ付け足す。利用者が入力した名前の「.」はそのまま残す。 */
+export function ensureJsonExtension(name: string): string {
+  const trimmed = name.trim();
+  return /\.json$/i.test(trimmed) ? trimmed : `${trimmed || 'model'}.json`;
 }
 
 /** 任意の拡張子を.jsonへ置換する。 */

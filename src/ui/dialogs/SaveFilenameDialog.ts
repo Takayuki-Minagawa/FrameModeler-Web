@@ -1,5 +1,5 @@
 import { t } from '../../i18n';
-import { toJsonFilename } from '../../controllers/FileController';
+import { ensureJsonExtension } from '../../controllers/FileController';
 import { addButtonRow, addFormRow, createDialogBox, createModalOverlay, setFieldError, wireDialog } from './DialogUtil';
 
 /** ダウンロード保存するファイル名を確認する。キャンセル時は null。拡張子は .json に揃える。 */
@@ -24,7 +24,7 @@ export async function showSaveFilenameDialog(suggested: string): Promise<string 
       setFieldError(inputName, t('validation.filename'));
       return false;
     }
-    result = toJsonFilename(name);
+    result = ensureJsonExtension(name);
     return true;
   });
   return result;

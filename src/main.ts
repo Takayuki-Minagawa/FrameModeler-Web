@@ -40,11 +40,12 @@ const startupParams = new URLSearchParams(window.location.search);
 const canvas = byId<HTMLCanvasElement>('cad-canvas');
 const canvasTitle = canvas.title;
 
-// URL パラメータ ?lang=en&theme=dark は保存済み設定より優先し、検証・デモ・自動テストの初期状態を固定できる。
+// URL パラメータ ?lang=en&theme=dark はこの起動だけ保存済み設定より優先する（保存値は上書きしない）。
+// 検証・デモ・自動テストの初期状態を固定するための入口。
 const langParam = startupParams.get('lang');
-if (langParam === 'ja' || langParam === 'en') setLocale(langParam);
+if (langParam === 'ja' || langParam === 'en') setLocale(langParam, { persist: false });
 const themeParam = startupParams.get('theme');
-if (themeParam === 'dark' || themeParam === 'light') settingsStore.setTheme(themeParam === 'dark');
+if (themeParam === 'dark' || themeParam === 'light') settingsStore.setTheme(themeParam === 'dark', { persist: false });
 
 // テーマは CadView 生成より先に適用する（保存済みダークテーマの初期背景色を
 // CadView コンストラクタの setClearColor に反映させるため）
@@ -53,7 +54,12 @@ const cadView = new CadView(canvas);
 initI18n();
 
 const statusBar = new StatusBar(
-  { version: byId('status-version'), coordinate: byId('status-coord'), info: byId('status-info') },
+  {
+    version: byId('status-version'),
+    coordinate: byId('status-coord'),
+    tool: byId('status-tool'),
+    info: byId('status-info'),
+  },
   doc,
   APP_VERSION,
 );

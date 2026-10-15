@@ -1,5 +1,5 @@
 import type { Document } from '../data/Document';
-import { clearDraft, clearDraftFamily, loadDraft, saveDraft } from '../history/DraftStore';
+import { clearDraft, clearDraftFamily, loadDraft, rotateDraftIdentity, saveDraft } from '../history/DraftStore';
 import { DocumentHistory, type DocumentSnapshot, type HistoryState } from '../history/DocumentHistory';
 import { exportDocumentSnapshot, importDocumentSnapshot } from '../io/DocumentSnapshotCodec';
 
@@ -168,7 +168,13 @@ export class AppController {
       this.scheduleDraftUpdate();
       return true;
     }
-    if (choice === 'discard') await clearDraftFamily(draft.tabId);
+    if (choice === 'discard') {
+      await clearDraftFamily(draft.tabId);
+    } else {
+      // 保留した draft と同じ family に居続けると、次の自動保存や clearDraft で上書き・削除されてしまう。
+      // 新しい family へ移り、保留した draft は次回起動時の全 family 走査で再提示する。
+      rotateDraftIdentity();
+    }
     return false;
   }
 }

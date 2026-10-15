@@ -42,7 +42,9 @@ export function showMessageDialog(message: string, options: MessageDialogOptions
   const overlay = createModalOverlay();
   const box = createDialogBox(options.title ?? t(level === 'error' ? 'dialog.error' : 'dialog.message'));
   box.classList.add('message-dialog', `message-${level}`);
-  box.appendChild(createMessageBody(message));
+  const body = createMessageBody(message);
+  box.setAttribute('aria-describedby', body.id);
+  box.appendChild(body);
   const row = document.createElement('div');
   row.className = 'button-row';
   const closeBtn = createButton(options.closeLabel ?? t('close'), 'primary');
@@ -79,7 +81,9 @@ export function showChoiceDialog<T>(
   const overlay = createModalOverlay();
   const box = createDialogBox(options.title ?? t('dialog.confirm'));
   box.classList.add('message-dialog', `message-${level}`);
-  box.appendChild(createMessageBody(message));
+  const body = createMessageBody(message);
+  box.setAttribute('aria-describedby', body.id);
+  box.appendChild(body);
   const row = document.createElement('div');
   row.className = 'button-row';
   const buttons = choices.map((choice) => {
@@ -109,9 +113,12 @@ export function showChoiceDialog<T>(
   return promise;
 }
 
+let messageId = 0;
+
 function createMessageBody(message: string): HTMLParagraphElement {
   const body = document.createElement('p');
   body.className = 'dialog-message';
+  body.id = `dialog-message-${++messageId}`;
   body.textContent = message;
   return body;
 }

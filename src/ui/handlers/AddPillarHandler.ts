@@ -35,6 +35,11 @@ export class AddPillarHandler implements ICadMouseHandler {
 
     const above = doc.getPosAbove(pos);
     if (!above) {
+      // ロック中の階では作成しても確定できないため、レイヤー作成は求めない。
+      if (doc.shownLayer?.locked) {
+        view.setOperationStatus('layerLocked');
+        return;
+      }
       view.setOperationStatus('noPointAbove');
       if (this.layerAboveRequest) {
         void this.layerAboveRequest(pos.z).then((created) => {

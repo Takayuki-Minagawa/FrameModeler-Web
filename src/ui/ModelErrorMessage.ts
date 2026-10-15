@@ -30,8 +30,9 @@ export function describeModelError(error: unknown, doc: Document): ModelErrorDes
   if (!(error instanceof ModelValidationError)) {
     return { message: error instanceof Error ? error.message : String(error), targets: [] };
   }
+  // 追加時の検証は候補リストに対して行われ index が Document の並びとずれるため、要素そのものを優先する。
   const match = /^data\[(\d+)\]/.exec(error.path);
-  const target = match ? doc.allDataList[Number(match[1])] : undefined;
+  const target = error.target ?? (match ? doc.allDataList[Number(match[1])] : undefined);
   const reasonKey = REASON_KEYS.find(([test]) => test(error.detail))?.[1];
   if (target) {
     const subject = `${kindLabel(target.kind)} ${target.number}`;

@@ -144,11 +144,11 @@ test('作図anchor・失敗理由を表示し、取消時にoperation statusを�
 test('上階レイヤーを作成して柱を立て、Backspace と設定で削除の挙動を変える', async ({ page }) => {
   const status = page.locator('#status-info');
   const canvas = page.locator('#cad-canvas');
-  await expect(status).toContainText('ツール: 選択');
+  await expect(page.locator('#status-tool')).toHaveText('ツール: 選択');
 
   // 直上に何も無い柱: 階高を指定して上階レイヤーを作ると、同じ位置に柱が立つ。
   await page.locator('#btn-add-pillar').click();
-  await expect(status).toContainText('ツール: 柱');
+  await expect(page.locator('#status-tool')).toHaveText('ツール: 柱');
   await enterCoordinate(page, 0, 0, 0);
   const layerDialog = page.getByRole('dialog', { name: '上階レイヤーを作成' });
   await expect(layerDialog.getByLabel('名前')).toHaveValue('2F');
@@ -229,7 +229,8 @@ test('要素を持つレイヤーの削除は要素の扱いを選べる', async
   await page.locator('#btn-remove-layer').click();
   await page.getByRole('dialog', { name: 'レイヤー削除' }).getByRole('button', { name: '要素も削除' }).click();
   await expect(page.locator('#layer-list > li')).toHaveCount(1);
-  await expect(status).not.toContainText('N:19 M:12');
+  // Z=200 の 8 節点と、それを参照する梁・柱 9 本が消える。
+  await expect(status).toContainText('N:11 M:3 P:0');
   await expect(page.locator('#btn-undo')).toHaveAttribute('title', '元に戻す: レイヤー削除');
   await page.locator('#btn-undo').click();
   await expect(status).toContainText('N:19 M:12 P:0');
@@ -239,8 +240,8 @@ test('要素を持つレイヤーの削除は要素の扱いを選べる', async
 test('未保存データの復旧は復旧・破棄・あとでの3択で、あとでは次回も提示する', async ({ page }) => {
   await addNode(page, 100, 200, 0);
   await expect(page.locator('#status-info')).toContainText('N:1 M:0 P:0');
-  // draft は 750ms 後に IndexedDB へ保存される。
-  await page.waitForTimeout(1200);
+  // draft は操作の少し後に IndexedDB へ保存される。固定待ちではなく保存を確認する。
+  await expect.poll(() => countStoredDrafts(page), { timeout: 10_000 }).toBeGreaterThan(0);
 
   await page.reload();
   const dialog = page.getByRole('dialog', { name: '未保存データの復旧' });
@@ -255,6 +256,32 @@ test('未保存データの復旧は復旧・破棄・あとでの3択で、あ�
   await dialog.getByRole('button', { name: '復旧' }).click();
   await expect(page.locator('#status-info')).toContainText('N:1 M:0 P:0');
   await expect(page.locator('#status-version')).toContainText('*');
+});
+
+test('?file= でモデルを読み込み、狭い画面ではツールバーを折りたたむ', async ({ page }) => {
+  const json = await readFile(PILLAR_SAMPLE, 'utf8');
+  // glob はクエリ文字列にも一致してページ自体を置き換えてしまうため、パス名で判定する。
+  await page.route(
+    (url) => url.pathname === '/remote/pillar_test.json',
+    (route) => route.fulfill({ contentType: 'application/json', body: json }),
+  );
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/?file=/remote/pillar_test.json');
+  await expect(page.locator('#app')).not.toHaveAttribute('inert', '');
+  await expect(page.locator('#status-info')).toContainText('N:19 M:12 P:0');
+  await expect(page.locator('#layer-list > li')).toHaveCount(2);
+  await expect(page.locator('#status-version')).not.toContainText('*');
+
+  const toggle = page.locator('#btn-toolbar-toggle');
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#btn-add-pillar')).toBeVisible();
+  await expect(page.locator('#btn-undo')).toBeHidden();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#btn-undo')).toBeVisible();
+  await toggle.click();
+  await expect(page.locator('#btn-undo')).toBeHidden();
 });
 
 test('URL パラメータで言語とテーマを指定し、保存はファイル名を確認してダウンロードする', async ({ page }) => {
@@ -613,6 +640,34 @@ async function saveDownload(page: Page, trigger: () => Promise<void>): Promise<{
   const [download] = await Promise.all([page.waitForEvent('download') as Promise<Download>, trigger()]);
   const path = await download.path();
   return { name: download.suggestedFilename(), content: await readFile(path) };
+}
+
+/** IndexedDB に保存された draft 件数。 */
+function countStoredDrafts(page: Page): Promise<number> {
+  return page.evaluate(
+    () =>
+      new Promise<number>((resolve) => {
+        const request = indexedDB.open('framemodeler-web');
+        request.onerror = () => resolve(0);
+        request.onsuccess = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains('drafts')) {
+            db.close();
+            resolve(0);
+            return;
+          }
+          const count = db.transaction('drafts', 'readonly').objectStore('drafts').count();
+          count.onsuccess = () => {
+            db.close();
+            resolve(count.result);
+          };
+          count.onerror = () => {
+            db.close();
+            resolve(0);
+          };
+        };
+      }),
+  );
 }
 
 /** アプリ内の確認ダイアログを待ち、指定ボタンで答えてから本文を返す。 */

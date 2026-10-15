@@ -15,6 +15,8 @@ import { pointFromDistanceAndAngle } from '../src/math/PlanInput';
 import { Point3D } from '../src/math/Point3D';
 import { roundCoordinate, roundToStep } from '../src/math/round';
 import { describeModelError } from '../src/ui/ModelErrorMessage';
+import { rotateDraftIdentity } from '../src/history/DraftStore';
+import { ModelValidator } from '../src/data/ModelValidator';
 
 const doc = Document.instance;
 
@@ -218,6 +220,35 @@ describe('user-facing model errors', () => {
       message: 'The model would have zero length',
       targets: [],
     });
+  });
+});
+
+describe('draft identity rotation', () => {
+  it('moves the writer to a fresh family each time', () => {
+    const first = rotateDraftIdentity();
+    const second = rotateDraftIdentity();
+    expect(first).not.toBe('');
+    expect(second).not.toBe(first);
+  });
+});
+
+describe('validation error target', () => {
+  it('attaches the offending element so a candidate-list index is not needed', () => {
+    const a = node(0, 0);
+    const b = node(1000, 0);
+    const c = node(1000, 0, 3000);
+    const d = node(0, 500, 3000);
+    const wall = new Wall([a, b, c, d]);
+    doc.addMany([a, b, c, d]);
+    let caught: unknown = null;
+    try {
+      ModelValidator.validateModel([...doc.allDataList, wall], doc.layers, { validateNumbers: false });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(ModelValidationError);
+    expect((caught as ModelValidationError).target).toBe(wall);
+    expect(describeModelError(caught, doc)).toEqual({ message: '壁 0 が平面でなくなります', targets: [wall] });
   });
 });
 

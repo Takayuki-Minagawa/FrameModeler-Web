@@ -24,6 +24,9 @@
   --link-color: #4477cc;
   --focus-ring: #175cd3;
   --error-text: #b42318;
+  --warning-text: #9a5b00;
+  --danger-btn-bg: #b42318;
+  --danger-btn-text: #fff;
 }
 
 [data-theme='dark'] {
@@ -51,6 +54,9 @@
   --link-color: #6699dd;
   --focus-ring: #8bb7ff;
   --error-text: #ffb4ab;
+  --warning-text: #ffc879;
+  --danger-btn-bg: #8c1d18;
+  --danger-btn-text: #fff;
 }
 
 /* ========== Reset ========== */
@@ -762,9 +768,9 @@ body {
 }
 
 .modal-dialog button.danger {
-  background: var(--error-text);
-  color: #fff;
-  border-color: var(--error-text);
+  background: var(--danger-btn-bg);
+  color: var(--danger-btn-text);
+  border-color: var(--danger-btn-bg);
 }
 
 .message-log-list {
@@ -801,7 +807,7 @@ body {
 }
 
 .message-log-item.level-warning .message-log-level {
-  color: #b26a00;
+  color: var(--warning-text);
 }
 
 .message-log-text {

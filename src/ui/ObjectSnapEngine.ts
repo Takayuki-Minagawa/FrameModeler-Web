@@ -322,6 +322,7 @@ function addConstraintCandidates(candidates: SnapCandidate[], request: ObjectSna
     if (!enabled.has(kind) || !position || !isFinitePoint(position)) return;
     // 拘束で決まらない自由な成分は生のカーソル位置のままにせず、グリッドスナップと同じ幅へ丸める。
     const normalized = quantizeConstraintPosition(kind, anchor, position, grid);
+    if (!normalized) return;
     normalized.z = request.workPlaneZ;
     const equivalent = candidates.find(
       (candidate) =>
@@ -378,13 +379,14 @@ function addConstraintCandidates(candidates: SnapCandidate[], request: ObjectSna
 /**
  * 拘束線上の点をスナップ幅へ丸める。X/Y軸拘束は自由な座標を絶対グリッドへ、
  * 画面水平・鉛直と直交拘束は anchor からの距離を丸めて拘束線上に留める。
+ * 丸めた結果が anchor と一致する（零長部材になる）候補は null を返して除外する。
  */
 function quantizeConstraintPosition(
   kind: ObjectSnapConstraintKind,
   anchor: Point3D,
   position: Point3D,
   gridSpacing: number,
-): Point3D {
+): Point3D | null {
   const result = position.clone();
   if (!Number.isFinite(gridSpacing) || gridSpacing <= 0) return result;
   if (kind === 'axis-x') {
@@ -400,6 +402,7 @@ function quantizeConstraintPosition(
   const length = Math.hypot(dx, dy);
   if (length <= INTERSECTION_EPSILON) return result;
   const snappedLength = roundToStep(length, gridSpacing);
+  if (snappedLength <= INTERSECTION_EPSILON) return null;
   result.x = roundCoordinate(anchor.x + (dx / length) * snappedLength);
   result.y = roundCoordinate(anchor.y + (dy / length) * snappedLength);
   return result;

@@ -103,8 +103,8 @@ describe('i18n parameters', () => {
     expect(t('msg.nodeReferenced', { node: 1, type: '梁' })).toBe('節点 1 は 梁 {number} から参照されています');
     expect(t('msg.confirmDelete')).toBe('選択した{count}要素を削除しますか？');
     setLocale('en');
-    expect(t('msg.confirmDeleteEmptyLayer', { name: 'RF' })).toBe("Delete layer 'RF'?");
-    expect(t('msg.confirmDeleteLayer', { name: 'RF', count: 2 })).toContain("Delete layer 'RF'. 2 node(s)");
+    expect(t('msg.confirmDeleteEmptyLayer', { name: 'RF' })).toBe('Delete layer "RF"?');
+    expect(t('msg.confirmDeleteLayer', { name: 'RF', count: 2 })).toContain('Delete layer "RF". 2 node(s)');
   });
 
   it('translates every model kind', () => {
