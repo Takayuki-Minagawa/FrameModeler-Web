@@ -4,6 +4,7 @@ import { Document } from '../../data/Document';
 import type { Point3D } from '../../math/Point3D';
 import { AddElementsCommand } from '../../commands/DocumentCommands';
 import { planNodes } from './geometry';
+import { reportModelError } from './errors';
 
 /** 節点追加ハンドラ */
 export class AddNodeHandler implements ICadMouseHandler {
@@ -13,7 +14,7 @@ export class AddNodeHandler implements ICadMouseHandler {
       try {
         Document.instance.execute(new AddElementsCommand(additions, '節点追加'));
       } catch (error) {
-        alert((error as Error).message);
+        reportModelError(error, view);
       }
     }
     view.renderElements();

@@ -259,6 +259,27 @@ export function applyNodeMerge(document: Document, plan: NodeMergePlan): void {
 }
 
 /** どの要素からも参照されていない、ロックされていないNodeを返す。 */
+/**
+ * 指定要素を削除したときに、どの要素からも参照されなくなる節点を返す。
+ * 元から孤立していた節点や、削除対象に含まれる節点は含めない。
+ */
+export function findNodesOrphanedBy(document: Document, removals: ReadonlyArray<DocumentData>): Node[] {
+  const removing = new Set(removals);
+  const releasedNodes = new Set<Node>();
+  for (const data of removals) {
+    if (data instanceof Node) continue;
+    for (const node of data.referencedNodes) releasedNodes.add(node);
+  }
+  if (releasedNodes.size === 0) return [];
+  for (const data of document.allDataList) {
+    if (removing.has(data) || data instanceof Node) continue;
+    for (const node of data.referencedNodes) releasedNodes.delete(node);
+  }
+  return document.nodeList.filter(
+    (node) => releasedNodes.has(node) && !removing.has(node) && !document.isDataLocked(node),
+  );
+}
+
 export function findOrphanNodes(document: Document): Node[] {
   const referenced = new Set<Node>();
   for (const data of document.allDataList) {

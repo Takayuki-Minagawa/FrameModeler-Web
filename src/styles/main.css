@@ -24,6 +24,9 @@
   --link-color: #4477cc;
   --focus-ring: #175cd3;
   --error-text: #b42318;
+  --warning-text: #9a5b00;
+  --danger-btn-bg: #b42318;
+  --danger-btn-text: #fff;
 }
 
 [data-theme='dark'] {
@@ -51,6 +54,9 @@
   --link-color: #6699dd;
   --focus-ring: #8bb7ff;
   --error-text: #ffb4ab;
+  --warning-text: #ffc879;
+  --danger-btn-bg: #8c1d18;
+  --danger-btn-text: #fff;
 }
 
 /* ========== Reset ========== */
@@ -653,6 +659,10 @@ body {
     overflow-y: auto;
   }
 
+  #layer-list li {
+    min-height: 32px;
+  }
+
   #main-content {
     flex-direction: column;
   }
@@ -728,5 +738,113 @@ body {
   #layer-list li.active,
   #layer-list li[aria-selected='true'] {
     outline: 2px solid Highlight;
+  }
+}
+
+/* ========== Toolbar toggle (narrow screens) ========== */
+.toolbar-toggle {
+  display: none;
+}
+
+/* ========== Layer list columns ========== */
+.layer-height {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ========== Message dialogs ========== */
+.modal-dialog .dialog-message {
+  max-width: 420px;
+  margin: 0 0 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.modal-dialog.message-error h3 {
+  color: var(--error-text);
+}
+
+.modal-dialog button.danger {
+  background: var(--danger-btn-bg);
+  color: var(--danger-btn-text);
+  border-color: var(--danger-btn-bg);
+}
+
+.message-log-list {
+  display: grid;
+  gap: 4px;
+  max-height: min(55vh, 520px);
+  margin: 0 0 8px;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  font-size: 12px;
+}
+
+.message-log-item {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.message-log-item time {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.message-log-level {
+  font-weight: 600;
+}
+
+.message-log-item.level-error .message-log-level {
+  color: var(--error-text);
+}
+
+.message-log-item.level-warning .message-log-level {
+  color: var(--warning-text);
+}
+
+.message-log-text {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+#status-bar #btn-message-log {
+  margin-left: auto;
+  padding: 0 8px;
+  border: 1px solid var(--btn-border);
+  border-radius: 3px;
+  background: var(--btn-bg);
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+#status-bar #btn-message-log[data-count]:not([data-count='0'])::after {
+  content: ' (' attr(data-count) ')';
+}
+
+/* ========== Narrow screens: collapse the toolbar to the essential groups ========== */
+@media (max-width: 720px) {
+  .toolbar-toggle {
+    display: inline-block;
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  #toolbar:not(.expanded) > .toolbar-group:not([data-essential]),
+  #toolbar:not(.expanded) > .toolbar-separator {
+    display: none;
+  }
+
+  #toolbar.expanded {
+    max-height: 60vh;
   }
 }

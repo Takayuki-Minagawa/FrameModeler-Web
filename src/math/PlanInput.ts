@@ -1,4 +1,5 @@
 import { Point3D } from './Point3D';
+import { roundCoordinate } from './round';
 
 export type PlanInputErrorCode =
   | 'non-finite-anchor'
@@ -69,9 +70,10 @@ export function pointFromDistanceAndAngle(input: DistanceAngleInput): DistanceAn
 
   const distance = input.distance === 0 ? 0 : input.distance;
   const angleRadians = (angleDegrees * Math.PI) / 180;
+  // cos(90°) などの三角関数誤差 (1e-13 程度) をそのまま座標に残さない。
   const position = new Point3D(
-    anchor.x + distance * Math.cos(angleRadians),
-    anchor.y + distance * Math.sin(angleRadians),
+    roundCoordinate(anchor.x + distance * Math.cos(angleRadians)),
+    roundCoordinate(anchor.y + distance * Math.sin(angleRadians)),
     workPlaneZ,
   );
   if (![position.x, position.y, position.z].every(Number.isFinite)) {

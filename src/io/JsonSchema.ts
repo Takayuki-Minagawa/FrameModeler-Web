@@ -202,8 +202,35 @@ export function migrateJsonSchema(validated: ValidatedJsonDocument): JsonDocumen
   return {
     schemaVersion: JSON_SCHEMA_VERSION,
     ...validated.model,
-    layers: migrateLayers(validated.model.layers),
+    layers: migrateLayers(validated.model.layers, validated.sourceVersion),
   };
+}
+
+const LEGACY_DEFAULT_LAYER_NAMES = new Set(['', '新規レイヤー', 'New Layer']);
+
+/**
+ * v0/v1 では全レイヤーが既定名「新規レイヤー」で保存されていることが多い。
+ * 空または既定名が重複している場合だけ、高さ順に 1F, 2F … と命名し直す。
+ */
+function assignLegacyLayerNames(layers: ReadonlyArray<JsonLayer>): JsonLayer[] {
+  const counts = new Map<string, number>();
+  for (const layer of layers) counts.set(layer.name, (counts.get(layer.name) ?? 0) + 1);
+  const needsName = (layer: JsonLayer): boolean =>
+    layer.name === '' || (LEGACY_DEFAULT_LAYER_NAMES.has(layer.name) && (counts.get(layer.name) ?? 0) > 1);
+  if (!layers.some(needsName)) return [...layers];
+
+  const used = new Set(layers.filter((layer) => !needsName(layer)).map((layer) => layer.name));
+  const byElevation = [...layers].sort((a, b) => a.posZ - b.posZ);
+  const renamed = new Map<JsonLayer, string>();
+  byElevation.forEach((layer, index) => {
+    if (!needsName(layer)) return;
+    let name = `${index + 1}F`;
+    let suffix = 2;
+    while (used.has(name)) name = `${index + 1}F (${suffix++})`;
+    used.add(name);
+    renamed.set(layer, name);
+  });
+  return layers.map((layer) => (renamed.has(layer) ? { ...layer, name: renamed.get(layer)! } : layer));
 }
 
 export function parseJsonDocument(jsonString: string): JsonDocument {
@@ -239,9 +266,10 @@ function validateLayer(raw: unknown, index: number, strictV2: boolean): JsonLaye
   };
 }
 
-function migrateLayers(layers: ReadonlyArray<JsonLayer>): JsonLayer[] {
-  const usedIds = new Set(layers.flatMap((layer) => (layer.id ? [layer.id] : [])));
-  return layers.map((layer, index) => {
+function migrateLayers(layers: ReadonlyArray<JsonLayer>, sourceVersion: JsonSchemaSourceVersion): JsonLayer[] {
+  const named = sourceVersion === JSON_SCHEMA_VERSION ? [...layers] : assignLegacyLayerNames(layers);
+  const usedIds = new Set(named.flatMap((layer) => (layer.id ? [layer.id] : [])));
+  return named.map((layer, index) => {
     let id = layer.id;
     if (!id) {
       id = `layer-migrated-${index}`;

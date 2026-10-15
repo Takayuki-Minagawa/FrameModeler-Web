@@ -1,7 +1,7 @@
 import { UpdatePropertiesCommand } from '../commands/DocumentCommands';
 import { Constraint } from '../data/Constraint';
 import type { Document } from '../data/Document';
-import type { DocumentData } from '../data/DocumentData';
+import type { DocumentData, DocumentDataKind } from '../data/DocumentData';
 import { Floor } from '../data/Floor';
 import { Member } from '../data/Member';
 import { Node } from '../data/Node';
@@ -14,6 +14,7 @@ import { Wall } from '../data/Wall';
 import { t, type HistoryMessageKey } from '../i18n';
 import { showConstraintDialog } from '../ui/dialogs/ConstraintDialog';
 import { showMemberDialog } from '../ui/dialogs/MemberDialog';
+import { showMessageDialog } from '../ui/dialogs/MessageDialog';
 import { showNodeDialog } from '../ui/dialogs/NodeDialog';
 import { showPlaneDialog } from '../ui/dialogs/PlaneDialog';
 import { showSupportDialog } from '../ui/dialogs/SupportDialog';
@@ -29,16 +30,28 @@ export interface PropertyEditControllerOptions {
 
 /** 要素種別に応じたプロパティダイアログを開き、確定内容を1 Commandとして適用する。 */
 export class PropertyEditController {
+  /** 種別ごとに直前に確定した断面名。新規要素の既定値として使う。 */
+  private readonly lastSections = new Map<DocumentDataKind, string>();
+
   constructor(private readonly options: PropertyEditControllerOptions) {}
 
   edit = async (data: DocumentData): Promise<void> => {
     try {
       await this.options.trackChange('history.propertyEdit', () => this.showDialogAndApply(data));
     } catch (error) {
-      alert(t('msg.applyChangeFailed', { message: (error as Error).message }));
+      await showMessageDialog(t('msg.applyChangeFailed', { message: (error as Error).message }), { level: 'error' });
     }
     this.options.onFinished();
   };
+
+  /** 種別ごとに直前に使った断面名。無ければ空文字。 */
+  defaultSectionFor(kind: DocumentDataKind): string {
+    return this.lastSections.get(kind) ?? '';
+  }
+
+  private rememberSection(kind: DocumentDataKind, section: string): void {
+    if (section.trim() !== '') this.lastSections.set(kind, section);
+  }
 
   private async showDialogAndApply(data: DocumentData): Promise<void> {
     const doc = this.options.document;
@@ -54,6 +67,7 @@ export class PropertyEditController {
     } else if (data instanceof Member) {
       const changes = await showMemberDialog(data);
       if (!changes) return;
+      this.rememberSection(data.kind, changes.section);
       doc.execute(
         new UpdatePropertiesCommand('部材プロパティ編集', data, (member) => {
           member.section = changes.section;
@@ -75,6 +89,7 @@ export class PropertyEditController {
     } else if (data instanceof Plane) {
       const changes = await showPlaneDialog(data);
       if (!changes) return;
+      this.rememberSection(data.kind, changes.section);
       doc.execute(
         new UpdatePropertiesCommand('面プロパティ編集', data, (plane) => {
           plane.section = changes.section;

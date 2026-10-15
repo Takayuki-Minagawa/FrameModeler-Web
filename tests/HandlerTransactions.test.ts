@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../src/ui/dialogs/MessageDialog', () => ({
+  showMessageDialog: vi.fn(async () => undefined),
+  showConfirmDialog: vi.fn(async () => true),
+  showChoiceDialog: vi.fn(async () => null),
+}));
+
 import { Document } from '../src/data/Document';
+import { showMessageDialog } from '../src/ui/dialogs/MessageDialog';
 import { Floor, FloorDirection } from '../src/data/Floor';
+import { Layer } from '../src/data/Layer';
 import { Node } from '../src/data/Node';
 import { Point3D } from '../src/math/Point3D';
 import type { CadView } from '../src/ui/CadView';
@@ -80,6 +89,43 @@ describe('drawing handler atomic commits', () => {
     expect(doc.allDataList).toHaveLength(0);
   });
 
+  it('does not ask for a layer above while the shown layer is locked', () => {
+    const layer = new Layer(0, '1F');
+    doc.addLayer(layer);
+    doc.shownLayer = layer;
+    doc.updateLayer(layer, { locked: true });
+    const request = vi.fn(async () => true);
+    const pillarStatus = vi.fn();
+    const pillar = new AddPillarHandler();
+    pillar.setLayerAboveRequest(request);
+    pillar.onClick(view({ setOperationStatus: pillarStatus }), new Point3D(0, 0, 0), event);
+    expect(pillarStatus).toHaveBeenLastCalledWith('layerLocked');
+
+    const wallStatus = vi.fn();
+    const wall = new AddWallHandler();
+    wall.setLayerAboveRequest(request);
+    wall.onClick(view({ setOperationStatus: wallStatus }), new Point3D(0, 0, 0), event);
+    expect(wallStatus).toHaveBeenLastCalledWith('layerLocked');
+    expect(request).not.toHaveBeenCalled();
+    expect(doc.allDataList).toHaveLength(0);
+  });
+
+  it('asks for a layer above and retries the pillar at the same point once it exists', async () => {
+    const layer = new Layer(0, '1F');
+    doc.addLayer(layer);
+    doc.shownLayer = layer;
+    const cadView = view();
+    const pillar = new AddPillarHandler();
+    (cadView as { handler: unknown }).handler = pillar;
+    pillar.setLayerAboveRequest(async () => {
+      doc.addLayer(new Layer(3500, '2F'));
+      return true;
+    });
+    pillar.onClick(cadView, new Point3D(100, 200, 0), event);
+    await vi.waitFor(() => expect(doc.memberList).toHaveLength(1));
+    expect(doc.memberList[0].posJ).toEqual(new Point3D(100, 200, 3500));
+  });
+
   it('reports coincident points instead of silently discarding a two-click operation', () => {
     const status = vi.fn();
     const handler = new AddBeamHandler();
@@ -93,7 +139,8 @@ describe('drawing handler atomic commits', () => {
   });
 
   it('reports a degenerate floor without leaving planned nodes behind', () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const dialog = vi.mocked(showMessageDialog);
+    dialog.mockClear();
     const handler = new AddFloorHandler();
     const cadView = view();
 
@@ -101,8 +148,8 @@ describe('drawing handler atomic commits', () => {
     handler.onClick(cadView, new Point3D(1000, 0, 0), event);
 
     expect(doc.allDataList).toHaveLength(0);
-    expect(alertSpy).toHaveBeenCalledOnce();
-    alertSpy.mockRestore();
+    expect(dialog).toHaveBeenCalledOnce();
+    expect(dialog.mock.calls[0][1]).toEqual({ level: 'error' });
   });
 
   it('confirms a direct floor-direction mutation through Document.update', () => {

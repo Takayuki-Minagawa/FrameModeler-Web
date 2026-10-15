@@ -444,6 +444,15 @@ export function createDraftRuntimeIdentity(
   return { tabId, inheritedTabId };
 }
 
+/**
+ * 「あとで」と答えた draft を次回も提示できるよう、このページの writer ID を新しい family へ切り替える。
+ * 以後の保存・clearDraft は新 family にだけ作用し、保留した draft は触らない。
+ */
+export function rotateDraftIdentity(): string {
+  runtimeIdentity = null;
+  return currentTabId();
+}
+
 function currentTabId(): string {
   if (runtimeIdentity) return runtimeIdentity.tabId;
   let storage: DraftIdentityStorage | null = null;

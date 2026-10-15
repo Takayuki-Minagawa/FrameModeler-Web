@@ -148,8 +148,12 @@ const messages = {
   // CAD operation status
   'operation.firstPointSelected': { ja: '1点目選択済み', en: 'First point selected' },
   'operation.noPointAbove': {
-    ja: '直上の節点または部材が見つかりません',
-    en: 'No node or member was found directly above',
+    ja: '直上に節点・部材・上階レイヤーが見つかりません',
+    en: 'No node, member or layer was found directly above',
+  },
+  'operation.layerLocked': {
+    ja: '現在のレイヤーはロックされています',
+    en: 'The current layer is locked',
   },
   'operation.coincidentPoints': { ja: '異なる2点を指定してください', en: 'Specify two different points' },
   'operation.duplicateElement': { ja: '同じ位置の要素が既に存在します', en: 'An element already exists here' },
@@ -278,6 +282,87 @@ const messages = {
   'structural.coefficient': { ja: '係数', en: 'Coefficient' },
 
   // Messages
+  'dialog.message': { ja: 'お知らせ', en: 'Notice' },
+  'dialog.restoreDraft': { ja: '未保存データの復旧', en: 'Recover unsaved data' },
+  'dialog.saveAs': { ja: '名前を付けて保存', en: 'Save as' },
+  'dialog.messageLog': { ja: 'メッセージ履歴', en: 'Message history' },
+  'dialog.layerAbove': { ja: '上階レイヤーを作成', en: 'Create the layer above' },
+  'dialog.layerDuplicate': { ja: 'レイヤー複製', en: 'Duplicate layer' },
+  'draft.restore': { ja: '復旧', en: 'Restore' },
+  'draft.discard': { ja: '破棄', en: 'Discard' },
+  'draft.later': { ja: 'あとで', en: 'Later' },
+  'saveAs.description': {
+    ja: 'ブラウザのダウンロードフォルダへ保存します。拡張子は .json になります。',
+    en: 'The file is saved to the browser download folder with a .json extension.',
+  },
+  'saveAs.filename': { ja: 'ファイル名', en: 'File name' },
+  'validation.filename': {
+    ja: '使用できないファイル名です（\\ / : * ? " < > | を含まない名前を入力してください）',
+    en: 'Enter a file name without \\ / : * ? " < > | characters.',
+  },
+  'messageLog.button': { ja: '履歴', en: 'Log' },
+  'messageLog.empty': { ja: 'まだメッセージはありません。', en: 'No messages yet.' },
+  'messageLog.clear': { ja: '履歴を消去', en: 'Clear history' },
+  'messageLog.info': { ja: '情報', en: 'Info' },
+  'messageLog.warning': { ja: '警告', en: 'Warning' },
+  'messageLog.error': { ja: 'エラー', en: 'Error' },
+  'status.tool': { ja: 'ツール', en: 'Tool' },
+  'settings.menu': { ja: '設定', en: 'Settings' },
+  'settings.openPropertiesOnCreate': { ja: '作成時にプロパティを開く', en: 'Open properties after creating' },
+  'settings.confirmDelete': { ja: '削除前に確認する', en: 'Confirm before deleting' },
+  'settings.removeOrphansOnDelete': {
+    ja: '削除時に孤立する節点も削除',
+    en: 'Also delete nodes orphaned by a delete',
+  },
+  'settings.fitOnViewChange': { ja: 'ビュー切替時に全体表示', en: 'Fit the model after changing the view' },
+  'view.fit': { ja: '全体表示', en: 'Fit' },
+  'title.fit': { ja: 'モデル全体を表示 (Home / F)', en: 'Fit the whole model (Home / F)' },
+  'title.toolbarToggle': { ja: 'ツールバーの表示切替', en: 'Show or hide the toolbar' },
+  'title.messageLog': { ja: 'ステータス通知・エラーの履歴を表示', en: 'Show the history of notices and errors' },
+  'title.coordinateEnter': { ja: 'Enter で確定', en: 'Press Enter to apply' },
+  'title.coordinateZ': {
+    ja: 'Enter で確定。空欄なら現在レイヤーの高さを使う',
+    en: 'Press Enter to apply. Empty uses the current layer elevation',
+  },
+  'coordinate.zPlaceholder': { ja: 'レイヤー高さ', en: 'Layer Z' },
+  'layer.deleteWithElements': { ja: '要素も削除', en: 'Delete elements too' },
+  'layer.deleteKeepElements': { ja: '要素は残す', en: 'Keep elements' },
+  'layer.aboveDescription': {
+    ja: '高さ {z} の直上に節点・部材・レイヤーがありません。柱・壁の上端を置く上階レイヤーを作成します。',
+    en: 'Nothing exists above elevation {z}. Create the layer that will hold the top of the pillar or wall.',
+  },
+  'msg.layerAboveMustBeHigher': {
+    ja: '上階レイヤーの高さは {z} より大きい値にしてください。',
+    en: 'The layer above must be higher than {z}.',
+  },
+  'msg.confirmDeleteEmptyLayer': { ja: 'レイヤー「{name}」を削除しますか？', en: 'Delete layer "{name}"?' },
+  'msg.layerDeleteLockedElements': {
+    ja: 'ロック中のレイヤーに属する要素が含まれるため、要素と一緒には削除できません。',
+    en: 'Some related elements belong to a locked layer, so they cannot be deleted with the layer.',
+  },
+  'msg.confirmDeleteOrphans': {
+    ja: '削除で孤立する節点 {count} 個も同時に削除します。',
+    en: '{count} node(s) left without any element will also be deleted.',
+  },
+  'msg.deleted': { ja: '{count}要素を削除しました', en: 'Deleted {count} element(s)' },
+  'msg.deletedWithOrphans': {
+    ja: '{count}要素と孤立した節点{orphans}個を削除しました',
+    en: 'Deleted {count} element(s) and {orphans} orphan node(s)',
+  },
+  'msg.moveFailed': { ja: '移動できません: {detail}', en: 'Cannot move: {detail}' },
+  'modelError.model': { ja: 'モデル', en: 'The model' },
+  'modelError.generic': { ja: '{element}: {detail}', en: '{element}: {detail}' },
+  'modelError.nonPlanar': { ja: '{element} が平面でなくなります', en: '{element} would no longer be planar' },
+  'modelError.selfIntersecting': { ja: '{element} の辺が交差します', en: '{element} would have crossing edges' },
+  'modelError.degeneratePlane': { ja: '{element} の面積が 0 になります', en: '{element} would have zero area' },
+  'modelError.collinear': {
+    ja: '{element} の頂点が一直線に並びます',
+    en: '{element} would have collinear vertices',
+  },
+  'modelError.duplicateVertex': { ja: '{element} の頂点が重なります', en: '{element} would have coincident vertices' },
+  'modelError.zeroLength': { ja: '{element} の長さが 0 になります', en: '{element} would have zero length' },
+  'dialog.error': { ja: 'エラー', en: 'Error' },
+  'dialog.confirm': { ja: '確認', en: 'Confirm' },
   'msg.confirmNew': { ja: '現在のデータを破棄して新規作成しますか？', en: 'Discard current data and create new?' },
   'msg.fileError': { ja: 'ファイル読込エラー: ', en: 'File load error: ' },
   'msg.unsupportedFileType': { ja: '未対応のファイル形式です', en: 'Unsupported file type' },
@@ -286,10 +371,6 @@ const messages = {
     en: 'A layer at the same Z position already exists',
   },
   'msg.defaultLayerName': { ja: '新規レイヤー', en: 'New Layer' },
-  'msg.memberExists': { ja: '既に接続されたメンバーが存在します', en: 'A connected member already exists' },
-  'msg.floorExists': { ja: '既に同一の床が存在します', en: 'The same floor already exists' },
-  'msg.wallExists': { ja: '既に同一の壁が存在します', en: 'The same wall already exists' },
-  'msg.bearwallExists': { ja: '既に同一の耐力壁が存在します', en: 'The same bearing wall already exists' },
   'msg.nothingSelected': { ja: '要素が選択されていません。', en: 'No elements are selected.' },
   'msg.copyResult': {
     ja: '{nodes}節点、{elements}要素を追加しました',
@@ -346,8 +427,8 @@ const messages = {
   'msg.layerLockedEdit': { ja: 'ロック中のレイヤーは編集できません。', en: 'A locked layer cannot be edited.' },
   'msg.layerLockedDelete': { ja: 'ロック中のレイヤーは削除できません。', en: 'A locked layer cannot be deleted.' },
   'msg.confirmDeleteLayer': {
-    ja: 'レイヤー「{name}」を削除しますか？（関連要素: {count}）',
-    en: 'Delete layer "{name}"? ({count} related elements)',
+    ja: 'レイヤー「{name}」を削除します。この高さの節点とそれを参照する要素が {count} 件あります。\n「要素は残す」を選ぶと、要素はどの階からも見えない状態で残ります。',
+    en: 'Delete layer "{name}". {count} node(s) at this elevation and element(s) referencing them exist.\nIf you keep them, they remain in the model but are not shown on any layer.',
   },
   'msg.noAdjacentLayer': { ja: 'コピー先の隣接レイヤーがありません。', en: 'There is no adjacent target layer.' },
   'msg.targetLayerLocked': { ja: 'コピー先レイヤーはロックされています。', en: 'The target layer is locked.' },
@@ -492,12 +573,18 @@ const messages = {
   'help.shortcut.selection.desc': { ja: '全選択 / 選択反転', en: 'Select all / Invert selection' },
   'help.shortcut.copy': { ja: 'Ctrl/Cmd + D', en: 'Ctrl/Cmd + D' },
   'help.shortcut.copy.desc': { ja: '配列複写', en: 'Array copy' },
-  'help.shortcut.delete': { ja: 'Delete', en: 'Delete' },
-  'help.shortcut.delete.desc': { ja: '選択要素を削除', en: 'Delete the selection' },
+  'help.shortcut.delete': { ja: 'Delete / Backspace', en: 'Delete / Backspace' },
+  'help.shortcut.delete.desc': {
+    ja: '選択要素を削除（設定で確認を省略・孤立節点の同時削除を切替）',
+    en: 'Delete the selection (settings: skip confirmation, delete orphaned nodes too)',
+  },
   'help.shortcut.escape': { ja: 'Esc', en: 'Esc' },
   'help.shortcut.escape.desc': { ja: '途中の操作を取り消す', en: 'Cancel the operation in progress' },
   'help.shortcut.fit': { ja: 'Home / F', en: 'Home / F' },
-  'help.shortcut.fit.desc': { ja: 'モデル全体を表示', en: 'Fit the model to the view' },
+  'help.shortcut.fit.desc': {
+    ja: 'モデル全体を表示（ツールバーの「全体表示」でも可）',
+    en: 'Fit the model to the view (also the Fit button)',
+  },
   'help.shortcut.snap': { ja: 'Tab / Alt', en: 'Tab / Alt' },
   'help.shortcut.snap.desc': {
     ja: 'スナップ候補の切替 / 押している間スナップ無効',
@@ -509,13 +596,16 @@ const messages = {
   'help.addBeam.desc': { ja: '2つの節点をクリックして梁を作成', en: 'Click two nodes to create a beam' },
   'help.addPillar.name': { ja: '柱追加', en: 'Add Pillar' },
   'help.addPillar.desc': {
-    ja: 'クリック位置に柱を追加（現レイヤー→上レイヤー）',
-    en: 'Click to add a pillar (current layer to upper layer)',
+    ja: 'クリック位置に柱を追加（現レイヤー→直上の節点・部材、無ければ上階レイヤーの高さ）\n上階レイヤーが無ければ階高を指定して作成できる',
+    en: 'Click to add a pillar from the current layer to the node or member above, or to the next layer elevation\nIf there is no layer above, you can create it with a storey height',
   },
   'help.addFloor.name': { ja: '床追加', en: 'Add Floor' },
   'help.addFloor.desc': { ja: '2点クリックで矩形の床を作成', en: 'Click two points to create a rectangular floor' },
   'help.addWall.name': { ja: '壁追加', en: 'Add Wall' },
-  'help.addWall.desc': { ja: '2点クリックで壁を作成', en: 'Click two points to create a wall' },
+  'help.addWall.desc': {
+    ja: '2点クリックで壁を作成（上端は柱と同じ規則で決まる）',
+    en: 'Click two points to create a wall (the top follows the same rule as pillars)',
+  },
   'help.addBearWall.name': { ja: '耐力壁追加', en: 'Add BearWall' },
   'help.addBearWall.desc': { ja: '2点クリックで耐力壁を作成', en: 'Click two points to create a bearing wall' },
 
@@ -610,9 +700,9 @@ export function getLocale(): Locale {
   return currentLocale;
 }
 
-export function setLocale(locale: Locale): void {
+export function setLocale(locale: Locale, options: { persist?: boolean } = {}): void {
   currentLocale = locale;
-  storage?.setItem(STORAGE_KEY, locale);
+  if (options.persist !== false) storage?.setItem(STORAGE_KEY, locale);
   if (typeof document !== 'undefined') updateDom();
   legacyLocaleChanged?.();
   for (const listener of [...localeChangeListeners]) listener(locale);
@@ -653,6 +743,12 @@ const domUpdateRules: { attr: string; apply: (el: Element, text: string) => void
     attr: 'data-i18n-aria-label',
     apply: (el, text) => {
       el.setAttribute('aria-label', text);
+    },
+  },
+  {
+    attr: 'data-i18n-placeholder',
+    apply: (el, text) => {
+      el.setAttribute('placeholder', text);
     },
   },
   {

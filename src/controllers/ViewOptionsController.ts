@@ -11,6 +11,8 @@ export interface ViewOptionsControllerOptions {
   cancelOperation: () => void;
   /** 立面表示では作図できないため、正面・側面へ切り替える前に立面で使えるツールへ切り替える。 */
   ensureElevationTool: () => void;
+  /** 標準ビュー切替後にモデル全体を表示するか。省略時は常に表示する。 */
+  fitOnViewChange?: () => boolean;
   root?: globalThis.Document;
 }
 
@@ -73,6 +75,7 @@ export class ViewOptionsController {
     bindDisplay('btn-hide-selected', () => cadView.displayFilter.hideSelected(doc.allDataList));
     bindDisplay('btn-isolate-selected', () => cadView.displayFilter.isolateSelected(doc.allDataList));
     bindDisplay('btn-show-all', () => cadView.displayFilter.showAll());
+    this.root.getElementById('btn-fit')?.addEventListener('click', () => cadView.fitToScene());
 
     const views: Array<[string, StandardView]> = [
       ['btn-view-top', 'top'],
@@ -88,6 +91,8 @@ export class ViewOptionsController {
     if (view === 'front' || view === 'right') this.options.ensureElevationTool();
     this.options.cadView.setStandardView(view);
     this.chk3D.checked = this.options.cadView.show3D;
+    // 切替直後にモデルが画面外や端に寄らないよう、既定では全体表示する。
+    if (this.options.fitOnViewChange?.() ?? true) this.options.cadView.fitToScene();
   }
 }
 

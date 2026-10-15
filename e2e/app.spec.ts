@@ -18,8 +18,8 @@ test('サンプルJSONを読み込み、モデル件数とレイヤーを反映�
   await loadSample(page, PILLAR_SAMPLE, 'N:19 M:12 P:0');
 
   await expect(page.locator('#layer-list > li')).toHaveCount(2);
-  await expect(page.locator('#status-version')).toHaveText('Ver.1.1.0');
-  await expect(page).toHaveTitle('FrameModeler Web v1.1.0');
+  await expect(page.locator('#status-version')).toHaveText('Ver.1.2.0');
+  await expect(page).toHaveTitle('FrameModeler Web v1.2.0');
 });
 
 test('dirtyモデルのNew/Openを確認し、拒否時はモデルを保持する', async ({ page }) => {
@@ -28,17 +28,19 @@ test('dirtyモデルのNew/Openを確認し、拒否時はモデルを保持す�
   await expect(page.locator('#status-info')).toContainText('N:20');
   await expect(page.locator('#status-version')).toContainText('*');
 
-  const rejectedNew = handleNextConfirm(page, false);
+  // 確認はブラウザ標準の confirm ではなく、アプリ内の role=dialog で行う。
   await page.locator('#btn-new').click();
-  await expect(rejectedNew).resolves.toMatch(/破棄|未保存/);
+  await expect(answerConfirm(page, 'キャンセル')).resolves.toMatch(/破棄|未保存/);
   await expect(page.locator('#status-info')).toContainText('N:20');
 
-  const acceptedNew = handleNextConfirm(page, true);
   await page.locator('#btn-new').click();
-  await expect(acceptedNew).resolves.toMatch(/破棄|未保存/);
+  await expect(answerConfirm(page, '新規')).resolves.toMatch(/破棄|未保存/);
   await expect(page.locator('#status-info')).toContainText('N:0 M:0 P:0');
   await expect(page.locator('#cad-canvas')).toHaveAttribute('data-selected-count', '0');
   await expect(page.locator('#status-version')).not.toContainText('*');
+  // 新規作成後は既定レイヤー 1F : 0 だけになる。
+  await expect(page.locator('#layer-list > li')).toHaveCount(1);
+  await expect(page.locator('#layer-list > li .layer-label')).toHaveText('1F');
 
   await page.evaluate(() => {
     const input = document.querySelector<HTMLInputElement>('#file-input');
@@ -49,16 +51,14 @@ test('dirtyモデルのNew/Openを確認し、拒否時はモデルを保持す�
   });
   await addNode(page, 400, 0, 0);
 
-  const rejectedOpen = handleNextConfirm(page, false);
   await page.locator('#btn-open').click();
-  await expect(rejectedOpen).resolves.toContain('未保存');
+  await expect(answerConfirm(page, 'キャンセル')).resolves.toContain('未保存');
   await expect(page.locator('html')).not.toHaveAttribute('data-open-invocations', '1');
   await expect(page.locator('#status-info')).toContainText('N:1');
 
   const chooserPromise = page.waitForEvent('filechooser');
-  const acceptedOpen = handleNextConfirm(page, true);
   await page.locator('#btn-open').click();
-  await expect(acceptedOpen).resolves.toContain('未保存');
+  await expect(answerConfirm(page, '開く')).resolves.toContain('未保存');
   const chooser = await chooserPromise;
   await chooser.setFiles(PILLAR_SAMPLE);
   await expect(page.locator('#status-info')).toContainText('N:19 M:12 P:0');
@@ -127,12 +127,190 @@ test('作図anchor・失敗理由を表示し、取消時にoperation statusを�
   await page.locator('#btn-add-pillar').click();
   await page.locator('#btn-coordinate-commit').click();
   await expect(canvas).toHaveAttribute('data-operation-status', 'noPointAbove');
-  await expect(status).toContainText('直上の節点または部材が見つかりません');
+  await expect(status).toContainText('直上に節点・部材・上階レイヤーが見つかりません');
+  // 上階レイヤーが無いので作成ダイアログが開く。ここでは取り消す。
+  const layerDialog = page.getByRole('dialog', { name: '上階レイヤーを作成' });
+  await expect(layerDialog).toBeVisible();
+  await layerDialog.getByRole('button', { name: 'キャンセル' }).click();
+  await expect(layerDialog).toBeHidden();
+  await expect(canvas).toHaveAttribute('data-operation-status', 'noPointAbove');
 
   await page.locator('#btn-lang').click();
-  await expect(status).toContainText('No node or member was found directly above');
+  await expect(status).toContainText('No node, member or layer was found directly above');
   await page.keyboard.press('Escape');
   await expect(canvas).not.toHaveAttribute('data-operation-status');
+});
+
+test('上階レイヤーを作成して柱を立て、Backspace と設定で削除の挙動を変える', async ({ page }) => {
+  const status = page.locator('#status-info');
+  const canvas = page.locator('#cad-canvas');
+  await expect(page.locator('#status-tool')).toHaveText('ツール: 選択');
+
+  // 直上に何も無い柱: 階高を指定して上階レイヤーを作ると、同じ位置に柱が立つ。
+  await page.locator('#btn-add-pillar').click();
+  await expect(page.locator('#status-tool')).toHaveText('ツール: 柱');
+  await enterCoordinate(page, 0, 0, 0);
+  const layerDialog = page.getByRole('dialog', { name: '上階レイヤーを作成' });
+  await expect(layerDialog.getByLabel('名前')).toHaveValue('2F');
+  await expect(layerDialog.getByLabel('Z位置')).toHaveValue('3000');
+  await layerDialog.getByLabel('Z位置').fill('3500');
+  await layerDialog.getByRole('button', { name: 'OK' }).click();
+  const props = page.getByRole('dialog', { name: '柱プロパティ' });
+  await expect(props).toBeVisible();
+  // 断面欄は初期フォーカスで全選択され、Ctrl/Cmd+A も入力欄の全選択として働く。
+  const section = props.getByLabel('断面');
+  await expect(section).toBeFocused();
+  await section.pressSequentially('C1');
+  await page.keyboard.press('ControlOrMeta+a');
+  await section.pressSequentially('C2');
+  await expect(section).toHaveValue('C2');
+  await props.getByRole('button', { name: 'OK' }).click();
+  await expect(status).toContainText('N:2 M:1 P:0');
+  await expect(page.locator('#layer-list > li .layer-height')).toHaveText(['0', '3500']);
+
+  // 2本目は上階レイヤーの高さへ自動で節点を作り、直前の断面名を既定値にする。
+  await enterCoordinate(page, 6000, 0, 0);
+  const second = page.getByRole('dialog', { name: '柱プロパティ' });
+  await expect(second.getByLabel('断面')).toHaveValue('C2');
+  await second.getByRole('button', { name: 'キャンセル' }).click();
+  await expect(status).toContainText('N:4 M:2 P:0');
+
+  // 床を削除すると、孤立する頂点節点も一緒に消える（既定 ON）。Backspace でも削除できる。
+  await page.locator('#btn-add-floor').click();
+  await enterCoordinate(page, 0, 0, 0);
+  await enterCoordinate(page, 6000, 4000, 0);
+  await page.getByRole('dialog', { name: '床プロパティ' }).getByRole('button', { name: 'キャンセル' }).click();
+  await expect(status).toContainText('N:6 M:2 P:1');
+  await page.locator('#btn-select').click();
+  await page.locator('#selection-filter-menu > summary').click();
+  for (const kind of ['node', 'pillar']) await page.locator(`[data-selection-kind="${kind}"]`).uncheck();
+  await canvas.click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Control+a');
+  await expect(canvas).toHaveAttribute('data-selected-count', '1');
+  await page.keyboard.press('Backspace');
+  const confirm = page.getByRole('dialog', { name: '確認' });
+  await expect(confirm).toContainText('削除で孤立する節点 2 個も同時に削除します');
+  await confirm.getByRole('button', { name: '削除' }).click();
+  await expect(status).toContainText('N:4 M:2 P:0');
+  await expect(status).toContainText('1要素と孤立した節点2個を削除しました');
+
+  // 設定で確認を省くと、ダイアログ無しで削除する。設定は再読み込み後も残る。
+  await page.locator('#settings-menu > summary').click();
+  await page.locator('[data-app-flag="confirmDelete"]').uncheck();
+  // メニューは同時に 1 つだけ開くため、選択対象メニューを開き直す。
+  await page.locator('#selection-filter-menu > summary').click();
+  await page.locator('[data-selection-kind="pillar"]').check();
+  await canvas.click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Control+a');
+  await expect(canvas).toHaveAttribute('data-selected-count', '2');
+  await page.keyboard.press('Delete');
+  await expect(status).toContainText('N:0 M:0 P:0');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('#app')).not.toHaveAttribute('inert', '');
+  await page.locator('#settings-menu > summary').click();
+  await expect(page.locator('[data-app-flag="confirmDelete"]')).not.toBeChecked();
+});
+
+test('要素を持つレイヤーの削除は要素の扱いを選べる', async ({ page }) => {
+  await loadSample(page, PILLAR_SAMPLE, 'N:19 M:12 P:0');
+  const status = page.locator('#status-info');
+  await page.locator('#layer-list > li').nth(1).click();
+  await page.locator('#btn-remove-layer').click();
+  const dialog = page.getByRole('dialog', { name: 'レイヤー削除' });
+  await expect(dialog).toContainText('この高さの節点とそれを参照する要素が');
+  await dialog.getByRole('button', { name: '要素は残す' }).click();
+  await expect(page.locator('#layer-list > li')).toHaveCount(1);
+  await expect(status).toContainText('N:19 M:12 P:0');
+  await page.locator('#btn-undo').click();
+  await expect(page.locator('#layer-list > li')).toHaveCount(2);
+
+  await page.locator('#layer-list > li').nth(1).click();
+  await page.locator('#btn-remove-layer').click();
+  await page.getByRole('dialog', { name: 'レイヤー削除' }).getByRole('button', { name: '要素も削除' }).click();
+  await expect(page.locator('#layer-list > li')).toHaveCount(1);
+  // Z=200 の 8 節点と、それを参照する梁・柱 9 本が消える。
+  await expect(status).toContainText('N:11 M:3 P:0');
+  await expect(page.locator('#btn-undo')).toHaveAttribute('title', '元に戻す: レイヤー削除');
+  await page.locator('#btn-undo').click();
+  await expect(status).toContainText('N:19 M:12 P:0');
+  await expect(page.locator('#layer-list > li')).toHaveCount(2);
+});
+
+test('未保存データの復旧は復旧・破棄・あとでの3択で、あとでは次回も提示する', async ({ page }) => {
+  await addNode(page, 100, 200, 0);
+  await expect(page.locator('#status-info')).toContainText('N:1 M:0 P:0');
+  // draft は操作の少し後に IndexedDB へ保存される。固定待ちではなく保存を確認する。
+  await expect.poll(() => countStoredDrafts(page), { timeout: 10_000 }).toBeGreaterThan(0);
+
+  await page.reload();
+  const dialog = page.getByRole('dialog', { name: '未保存データの復旧' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button')).toHaveText(['あとで', '破棄', '復旧']);
+  await dialog.getByRole('button', { name: 'あとで' }).click();
+  await expect(page.locator('#app')).not.toHaveAttribute('inert', '');
+  await expect(page.locator('#status-info')).toContainText('N:0 M:0 P:0');
+
+  await page.reload();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: '復旧' }).click();
+  await expect(page.locator('#status-info')).toContainText('N:1 M:0 P:0');
+  await expect(page.locator('#status-version')).toContainText('*');
+});
+
+test('?file= でモデルを読み込み、狭い画面ではツールバーを折りたたむ', async ({ page }) => {
+  const json = await readFile(PILLAR_SAMPLE, 'utf8');
+  // glob はクエリ文字列にも一致してページ自体を置き換えてしまうため、パス名で判定する。
+  await page.route(
+    (url) => url.pathname === '/remote/pillar_test.json',
+    (route) => route.fulfill({ contentType: 'application/json', body: json }),
+  );
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/?file=/remote/pillar_test.json');
+  await expect(page.locator('#app')).not.toHaveAttribute('inert', '');
+  await expect(page.locator('#status-info')).toContainText('N:19 M:12 P:0');
+  await expect(page.locator('#layer-list > li')).toHaveCount(2);
+  await expect(page.locator('#status-version')).not.toContainText('*');
+
+  const toggle = page.locator('#btn-toolbar-toggle');
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#btn-add-pillar')).toBeVisible();
+  await expect(page.locator('#btn-undo')).toBeHidden();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#btn-undo')).toBeVisible();
+  await toggle.click();
+  await expect(page.locator('#btn-undo')).toBeHidden();
+});
+
+test('URL パラメータで言語とテーマを指定し、保存はファイル名を確認してダウンロードする', async ({ page }) => {
+  // File System Access API を持たないブラウザの経路（ファイル名入力）を検証する。
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true });
+  });
+  await page.goto('/?lang=en&theme=dark');
+  await expect(page.locator('#app')).not.toHaveAttribute('inert', '');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.locator('#btn-measure')).toHaveText('Measure');
+
+  await loadSample(page, PILLAR_SAMPLE, 'N:19 M:12 P:0');
+  await page.keyboard.press('Control+s');
+  const dialog = page.getByRole('dialog', { name: 'Save as' });
+  await expect(dialog.getByLabel('File name')).toHaveValue('pillar_test.json');
+  await dialog.getByLabel('File name').fill('frame v2');
+  const saved = await saveDownload(page, () => dialog.getByRole('button', { name: 'Save' }).click());
+  expect(saved.name).toBe('frame v2.json');
+  expect(JSON.parse(saved.content.toString()).layers).toHaveLength(2);
+  await expect(page.locator('#status-version')).not.toContainText('*');
+  await expect(page.locator('#status-info')).toContainText('Saved frame v2.json');
+
+  // メッセージ履歴から過去の通知を読み返せる。
+  await page.locator('#btn-message-log').click();
+  const log = page.getByRole('dialog', { name: 'Message history' });
+  await expect(log.getByRole('listitem').first()).toContainText('Saved frame v2.json');
+  await log.getByRole('button', { name: 'Close' }).click();
 });
 
 test('DeleteとUndo後に選択件数をcanvas・statusへ再同期する', async ({ page }) => {
@@ -146,9 +324,8 @@ test('DeleteとUndo後に選択件数をcanvas・statusへ再同期する', asyn
   await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
   await expect(canvas).toHaveAttribute('data-selected-count', '1');
 
-  const acceptedDelete = handleNextConfirm(page, true);
   await page.locator('#btn-delete').click();
-  await expect(acceptedDelete).resolves.toMatch(/削除|Delete/);
+  await expect(answerConfirm(page, '削除')).resolves.toMatch(/削除|Delete/);
   await expect(page.locator('#status-info')).toContainText('N:0 M:0 P:0 S:0');
   await expect(canvas).toHaveAttribute('data-selected-count', '0');
   await expect(page.locator('#btn-undo')).toHaveAttribute('title', '元に戻す: 選択要素削除');
@@ -333,10 +510,9 @@ test('重複節点を結合し、孤立節点を削除する', async ({ page }) 
   await expect(status).toContainText('1個の節点を結合し、重複した0要素を削除しました');
   await expect(page.locator('#btn-undo')).toHaveAttribute('title', '元に戻す: 重複節点結合');
 
-  const confirmed = handleNextConfirm(page, true);
   await page.locator('#edit-menu > summary').click();
   await page.locator('#btn-remove-orphans').click();
-  await expect(confirmed).resolves.toContain('節点1個を削除しますか');
+  await expect(answerConfirm(page, '削除')).resolves.toContain('節点1個を削除しますか');
   await expect(status).toContainText('N:3 M:2 P:0');
   await expect(status).toContainText('孤立節点を1個削除しました');
 
@@ -466,20 +642,42 @@ async function saveDownload(page: Page, trigger: () => Promise<void>): Promise<{
   return { name: download.suggestedFilename(), content: await readFile(path) };
 }
 
-function handleNextConfirm(page: Page, accept: boolean): Promise<string> {
-  return new Promise((resolve, reject) => {
-    page.once('dialog', async (dialog) => {
-      try {
-        const message = dialog.message();
-        expect(dialog.type()).toBe('confirm');
-        if (accept) await dialog.accept();
-        else await dialog.dismiss();
-        resolve(message);
-      } catch (error) {
-        reject(error);
-      }
-    });
-  });
+/** IndexedDB に保存された draft 件数。 */
+function countStoredDrafts(page: Page): Promise<number> {
+  return page.evaluate(
+    () =>
+      new Promise<number>((resolve) => {
+        const request = indexedDB.open('framemodeler-web');
+        request.onerror = () => resolve(0);
+        request.onsuccess = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains('drafts')) {
+            db.close();
+            resolve(0);
+            return;
+          }
+          const count = db.transaction('drafts', 'readonly').objectStore('drafts').count();
+          count.onsuccess = () => {
+            db.close();
+            resolve(count.result);
+          };
+          count.onerror = () => {
+            db.close();
+            resolve(0);
+          };
+        };
+      }),
+  );
+}
+
+/** アプリ内の確認ダイアログを待ち、指定ボタンで答えてから本文を返す。 */
+async function answerConfirm(page: Page, buttonName: string): Promise<string> {
+  const dialog = page.getByRole('dialog', { name: '確認' });
+  await expect(dialog).toBeVisible();
+  const message = (await dialog.locator('.dialog-message').textContent()) ?? '';
+  await dialog.getByRole('button', { name: buttonName, exact: true }).click();
+  await expect(dialog).toBeHidden();
+  return message;
 }
 
 async function clearSelection(canvas: Locator): Promise<void> {

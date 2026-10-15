@@ -99,6 +99,9 @@ export class InputController {
     } catch {
       // 古いブラウザやsynthetic eventでも入力処理自体は継続する。
     }
+    // preventDefault するとブラウザは canvas へフォーカスを移さない。Tab でスナップ候補を
+    // 切り替えられるよう明示的にフォーカスする（テスト用の疑似canvasでは focus が無い）。
+    if (typeof this.canvas.focus === 'function') this.canvas.focus({ preventScroll: true });
 
     if (e.button === 0 && this.host.hasHandler) {
       const now = Date.now();

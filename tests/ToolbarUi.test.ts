@@ -196,6 +196,7 @@ describe('ToolController shortcuts', () => {
 describe('CoordinateEntryController', () => {
   function setup(anchor: Point3D | null = null): {
     clicks: Point3D[];
+    notices: string[];
     elements: Record<'x' | 'y' | 'z' | 'distance' | 'angle', HTMLInputElement>;
     buttons: Record<'commit' | 'polarCommit', HTMLButtonElement>;
   } {
@@ -218,8 +219,11 @@ describe('CoordinateEntryController', () => {
       angle: byId<HTMLInputElement>('angle'),
     };
     const buttons = { commit: byId<HTMLButtonElement>('commit'), polarCommit: byId<HTMLButtonElement>('polar') };
-    new CoordinateEntryController(cadView, doc, { ...elements, ...buttons }).connect();
-    return { clicks, elements, buttons };
+    const notices: string[] = [];
+    new CoordinateEntryController(cadView, doc, { ...elements, ...buttons }, (message) =>
+      notices.push(message()),
+    ).connect();
+    return { clicks, notices, elements, buttons };
   }
 
   it('sends typed coordinates to the active tool by button or Enter', () => {
@@ -249,11 +253,23 @@ describe('CoordinateEntryController', () => {
   });
 
   it('requires a first point for distance and angle input', () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-    const { clicks, buttons } = setup(null);
+    const { clicks, elements, buttons, notices } = setup(null);
     buttons.polarCommit.click();
-    expect(alertSpy).toHaveBeenCalledWith('先に1点目を指定してください。');
+    expect(elements.distance.validationMessage).toBe('先に1点目を指定してください。');
+    expect(notices).toEqual(['先に1点目を指定してください。']);
     expect(clicks).toEqual([]);
+  });
+
+  it('fills an empty Z with the shown layer elevation instead of ignoring the input', () => {
+    doc.addLayer(new Layer(3500, '2F'));
+    doc.shownLayer = doc.layers[0];
+    const { clicks, elements, buttons } = setup(null);
+    elements.x.value = '100';
+    elements.y.value = '200';
+    elements.z.value = '';
+    buttons.commit.click();
+    expect(elements.z.value).toBe('3500');
+    expect(clicks).toEqual([new Point3D(100, 200, 3500)]);
   });
 
   it('converts distance and angle from the first point on the shown layer', () => {

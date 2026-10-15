@@ -194,7 +194,8 @@ describe('ObjectSnapEngine', () => {
     });
     expect(getObjectSnapCandidateKind(xAxis)).toBe('axis-x');
     expect(xAxis.kind).toBe('none');
-    expect(xAxis.position).toEqual(new Point3D(34, 20, 500));
+    // 拘束で決まらないXはスナップ幅(10)へ丸める。
+    expect(xAxis.position).toEqual(new Point3D(30, 20, 500));
 
     const yAxis = resolve({
       pointer: { x: 13, y: 44 },
@@ -204,7 +205,46 @@ describe('ObjectSnapEngine', () => {
       tolerancePx: 5,
     });
     expect(getObjectSnapCandidateKind(yAxis)).toBe('axis-y');
-    expect(yAxis.position).toEqual(new Point3D(10, 44, 500));
+    expect(yAxis.position).toEqual(new Point3D(10, 40, 500));
+  });
+
+  it('rounds constraint candidates to the snap grid instead of keeping raw cursor coordinates', () => {
+    const anchor = new Point3D(0, 0, 0);
+    const yAxis = resolve({
+      pointer: { x: 0.4, y: 836.6013071895424 },
+      position: new Point3D(0.4, 836.6013071895424, 0),
+      constraints: { anchor, kinds: ['axis-y'] },
+    });
+    expect(getObjectSnapCandidateKind(yAxis)).toBe('axis-y');
+    expect(yAxis.position).toEqual(new Point3D(0, 840, 0));
+
+    // 直交拘束は anchor からの距離を丸め、拘束線上に留める。
+    const orthogonal = resolve({
+      pointer: { x: 10, y: -8 },
+      position: new Point3D(10, -8, 0),
+      constraints: { anchor, kinds: ['orthogonal'], orthogonalTo: new Point3D(1, 1, 0) },
+      tolerancePx: 5,
+    });
+    expect(getObjectSnapCandidateKind(orthogonal)).toBe('orthogonal');
+    expect(orthogonal.position.x).toBeCloseTo(10 / Math.SQRT2);
+    expect(orthogonal.position.y).toBeCloseTo(-10 / Math.SQRT2);
+
+    // anchor に潰れる（零長になる）候補は作らず、グリッドへフォールバックする。
+    const collapsed = resolve({
+      pointer: { x: 3, y: -2 },
+      position: new Point3D(3, -2, 0),
+      constraints: { anchor, kinds: ['orthogonal'], orthogonalTo: new Point3D(1, 1, 0) },
+    });
+    expect(getObjectSnapCandidateKind(collapsed)).toBe('grid');
+
+    // スナップ幅が無効なら丸めない。
+    const unrounded = resolve({
+      pointer: { x: 0.4, y: 836.6 },
+      position: new Point3D(0.4, 836.6, 0),
+      gridSpacing: 0,
+      constraints: { anchor, kinds: ['axis-y'] },
+    });
+    expect(unrounded.position).toEqual(new Point3D(0, 836.6, 0));
   });
 
   it('keeps screen horizontal/vertical distinct from world axes in a rotated view', () => {
@@ -232,6 +272,7 @@ describe('ObjectSnapEngine', () => {
     const result = resolve({
       pointer: { x: 10, y: -8 },
       position: new Point3D(10, -8, 0),
+      gridSpacing: 0,
       constraints: {
         anchor: new Point3D(0, 0, 0),
         kinds: ['orthogonal'],

@@ -2,7 +2,6 @@ import type { CadView } from '../CadView';
 import { Document } from '../../data/Document';
 import { Floor, FloorDirection } from '../../data/Floor';
 import { Point3D } from '../../math/Point3D';
-import { t } from '../../i18n';
 import { TwoClickAddHandler } from './TwoClickAddHandler';
 import { createRectPoints, planNodes } from './geometry';
 import { AddElementsCommand, UpdatePropertiesCommand } from '../../commands/DocumentCommands';
@@ -24,9 +23,9 @@ export class AddFloorHandler extends TwoClickAddHandler<Point3D> {
 
     if (doc.getPlaneOf(nodes)) {
       view.setOperationStatus('duplicateElement');
-      alert(t('msg.floorExists'));
     } else {
       const floor = new Floor(nodes);
+      floor.section = this.defaultSection('floor');
       doc.execute(new AddElementsCommand([...additions, floor], '床追加'));
       if (this.showDialog) this.showDialog(floor);
     }

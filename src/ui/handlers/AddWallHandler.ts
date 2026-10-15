@@ -1,10 +1,10 @@
 import type { CadView } from '../CadView';
 import { Document } from '../../data/Document';
+import type { DocumentDataKind } from '../../data/DocumentData';
 import { Node } from '../../data/Node';
 import { Plane } from '../../data/Plane';
 import { Wall } from '../../data/Wall';
 import { Point3D } from '../../math/Point3D';
-import { t } from '../../i18n';
 import { TwoClickAddHandler } from './TwoClickAddHandler';
 import { createQuadPoints, planNodes } from './geometry';
 import { AddElementsCommand } from '../../commands/DocumentCommands';
@@ -12,20 +12,21 @@ import { AddElementsCommand } from '../../commands/DocumentCommands';
 /**
  * 壁系（壁/耐力壁）追加ハンドラの基底:
  * 2クリックで下端2点→直上2点の四角形を生成する。
- * 生成クラスと重複時メッセージのみサブクラスで差し替える。
+ * 生成クラスと種別のみサブクラスで差し替える。
  */
 export abstract class AddQuadPlaneHandler extends TwoClickAddHandler<Point3D> {
   /** 生成する平面要素を返す */
   protected abstract createPlane(nodes: Node[]): Plane;
-  /** 重複時の alert 文言 */
-  protected abstract duplicateMessage(): string;
+  /** 既定断面の参照に使う種別 */
+  protected abstract get planeKind(): DocumentDataKind;
 
   protected acquireAnchor(view: CadView, pos: Point3D): Point3D | null {
-    // 直上に何かあるか確認
+    // 直上に節点・部材・上階レイヤーのいずれかがあるか確認
     if (Document.instance.getPosAbove(pos)) {
       return pos.clone();
     }
     view.setOperationStatus('noPointAbove');
+    this.retryAfterLayerAbove(view, pos);
     return null;
   }
 
@@ -38,16 +39,19 @@ export abstract class AddQuadPlaneHandler extends TwoClickAddHandler<Point3D> {
     const { points, aboveExists } = createQuadPoints(pos, anchor);
 
     if (!aboveExists) {
+      // 2点目の直上だけ無い場合は1点目を保持したまま上階レイヤーの作成を求め、作成後に同じ2点目で確定する。
+      this.anchor = anchor;
       view.setOperationStatus('noPointAbove');
+      this.retryAfterLayerAbove(view, pos);
       return;
     }
     const { nodes, additions } = planNodes(points);
 
     if (doc.getPlaneOf(nodes)) {
       view.setOperationStatus('duplicateElement');
-      alert(this.duplicateMessage());
     } else {
       const plane = this.createPlane(nodes);
+      plane.section = this.defaultSection(this.planeKind);
       doc.execute(new AddElementsCommand([...additions, plane], '壁要素追加'));
       if (this.showDialog) this.showDialog(plane);
     }
@@ -65,7 +69,7 @@ export class AddWallHandler extends AddQuadPlaneHandler {
     return new Wall(nodes);
   }
 
-  protected duplicateMessage(): string {
-    return t('msg.wallExists');
+  protected get planeKind(): DocumentDataKind {
+    return 'wall';
   }
 }

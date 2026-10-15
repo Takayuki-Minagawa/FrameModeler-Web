@@ -1,7 +1,9 @@
 import type { Document } from '../data/Document';
-import { clearDraft, clearDraftFamily, loadDraft, saveDraft } from '../history/DraftStore';
+import { clearDraft, clearDraftFamily, loadDraft, rotateDraftIdentity, saveDraft } from '../history/DraftStore';
 import { DocumentHistory, type DocumentSnapshot, type HistoryState } from '../history/DocumentHistory';
 import { exportDocumentSnapshot, importDocumentSnapshot } from '../io/DocumentSnapshotCodec';
+
+export type DraftRestoreChoice = 'restore' | 'discard' | 'later';
 
 export interface AppControllerOptions {
   document: Document;
@@ -145,10 +147,19 @@ export class AppController {
     }, 750);
   }
 
-  async offerDraftRestore(confirmRestore: (savedAt: number) => boolean): Promise<boolean> {
+  /**
+   * 前回の未保存 draft を提示する。'restore' で復旧、'discard' で系列ごと破棄、
+   * 'later' では何もせず次回も再提示する（破棄は利用者の明示操作だけで行う）。
+   * boolean は後方互換（true=restore, false=discard）。
+   */
+  async offerDraftRestore(
+    confirmRestore: (savedAt: number) => DraftRestoreChoice | boolean | Promise<DraftRestoreChoice | boolean>,
+  ): Promise<boolean> {
     const draft = await loadDraft();
     if (!draft) return false;
-    if (confirmRestore(draft.savedAt)) {
+    const answer = await confirmRestore(draft.savedAt);
+    const choice: DraftRestoreChoice = answer === true ? 'restore' : answer === false ? 'discard' : answer;
+    if (choice === 'restore') {
       this.restoreSnapshot(draft, false);
       this.history.reset(false);
       this.historyBaseline = this.history.capture();
@@ -157,7 +168,13 @@ export class AppController {
       this.scheduleDraftUpdate();
       return true;
     }
-    await clearDraftFamily(draft.tabId);
+    if (choice === 'discard') {
+      await clearDraftFamily(draft.tabId);
+    } else {
+      // 保留した draft と同じ family に居続けると、次の自動保存や clearDraft で上書き・削除されてしまう。
+      // 新しい family へ移り、保留した draft は次回起動時の全 family 走査で再提示する。
+      rotateDraftIdentity();
+    }
     return false;
   }
 }

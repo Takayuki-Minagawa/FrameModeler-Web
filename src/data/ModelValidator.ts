@@ -19,12 +19,18 @@ export interface ModelValidationOptions {
 }
 
 export class ModelValidationError extends Error {
+  /** path を含まない生の理由。UI 層で利用者向けの文言へ変換するために保持する。 */
+  readonly detail: string;
+  /** 違反した要素。候補リストの index は Document の並びと一致しないため、UI はこちらを優先する。 */
+  target: DocumentData | null = null;
+
   constructor(
     message: string,
     readonly path: string,
   ) {
     super(`${path}: ${message}`);
     this.name = 'ModelValidationError';
+    this.detail = message;
   }
 }
 
@@ -64,11 +70,16 @@ export class ModelValidator {
 
     dataList.forEach((data, index) => {
       const path = `data[${index}]`;
-      this.requireBoolean(data.select, `${path}.select`);
-      if (data instanceof Member) this.validateMember(data, nodeSet, path);
-      if (data instanceof Plane) this.validatePlane(data, nodeSet, path);
-      if (data instanceof Support) this.validateSupport(data, nodeSet, path);
-      if (data instanceof Constraint) this.validateConstraint(data, nodeSet, path);
+      try {
+        this.requireBoolean(data.select, `${path}.select`);
+        if (data instanceof Member) this.validateMember(data, nodeSet, path);
+        if (data instanceof Plane) this.validatePlane(data, nodeSet, path);
+        if (data instanceof Support) this.validateSupport(data, nodeSet, path);
+        if (data instanceof Constraint) this.validateConstraint(data, nodeSet, path);
+      } catch (error) {
+        if (error instanceof ModelValidationError && !error.target) error.target = data;
+        throw error;
+      }
     });
 
     if (validateNumbers) this.validateAssignedNumbers(dataList);

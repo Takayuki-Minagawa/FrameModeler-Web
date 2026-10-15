@@ -2,7 +2,6 @@ import type { CadView } from '../CadView';
 import { Document } from '../../data/Document';
 import { Beam } from '../../data/Beam';
 import { Point3D } from '../../math/Point3D';
-import { t } from '../../i18n';
 import { TwoClickAddHandler } from './TwoClickAddHandler';
 import { planNodes } from './geometry';
 import { AddElementsCommand } from '../../commands/DocumentCommands';
@@ -23,10 +22,11 @@ export class AddBeamHandler extends TwoClickAddHandler<Point3D> {
     }
 
     if (doc.getMemberOf(nodeI, nodeJ)) {
+      // 既存部材の有無はステータスバーで知らせ、作図の流れを止めるダイアログは出さない。
       view.setOperationStatus('duplicateElement');
-      alert(t('msg.memberExists'));
     } else {
       const beam = new Beam(nodeI, nodeJ);
+      beam.section = this.defaultSection('beam');
       doc.execute(new AddElementsCommand([...additions, beam], '梁追加'));
       if (this.showDialog) this.showDialog(beam);
     }

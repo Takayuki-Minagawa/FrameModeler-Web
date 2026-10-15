@@ -30,7 +30,8 @@ const enum DirtyFlag {
 }
 
 /** 作図ハンドラからステータスバーへ渡す、翻訳非依存の操作状態。 */
-export type CadOperationStatus = 'firstPointSelected' | 'noPointAbove' | 'coincidentPoints' | 'duplicateElement';
+export type CadOperationStatus =
+  'firstPointSelected' | 'noPointAbove' | 'layerLocked' | 'coincidentPoints' | 'duplicateElement';
 
 /** 平面図 / 立面（正面・側面）/ 3D のどの投影で表示しているか。 */
 export type CadViewMode = 'plan' | 'elevation' | '3d';

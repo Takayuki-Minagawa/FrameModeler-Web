@@ -4,6 +4,8 @@ import { Document } from '../../data/Document';
 import { Node } from '../../data/Node';
 import { Point3D } from '../../math/Point3D';
 import { MoveNodesCommand } from '../../commands/DocumentCommands';
+import { t } from '../../i18n';
+import { reportModelError } from './errors';
 
 /** 移動ハンドラ: SelectionHandlerを拡張し、選択ノードの移動を行う */
 export class MoveNodeHandler extends SelectionHandler {
@@ -68,7 +70,8 @@ export class MoveNodeHandler extends SelectionHandler {
     try {
       Document.instance.execute(new MoveNodesCommand(finalPositions));
     } catch (error) {
-      alert((error as Error).message);
+      // 「壁 2 が平面でなくなるため移動できません」のように要素と理由で説明し、該当要素を選択する。
+      reportModelError(error, view, (detail) => t('msg.moveFailed', { detail }));
     } finally {
       this.moving = false;
       this.originalPositions.clear();

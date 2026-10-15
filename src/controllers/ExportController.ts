@@ -5,6 +5,7 @@ import { CSV_BOM, elementsToCsv, nodesToCsv, summaryToCsv } from '../io/CsvExpor
 import { downloadBlob, downloadText, exportFilename } from '../io/download';
 import { exportDxf } from '../io/DxfExporter';
 import type { CadView } from '../ui/CadView';
+import { showMessageDialog } from '../ui/dialogs/MessageDialog';
 import { showModelSummaryDialog } from '../ui/dialogs/ModelSummaryDialog';
 
 export interface ExportControllerOptions {
@@ -86,7 +87,7 @@ export class ExportController {
     try {
       await action();
     } catch (error) {
-      alert(t('msg.exportFailed', { message: (error as Error).message }));
+      void showMessageDialog(t('msg.exportFailed', { message: (error as Error).message }), { level: 'error' });
     }
   }
 

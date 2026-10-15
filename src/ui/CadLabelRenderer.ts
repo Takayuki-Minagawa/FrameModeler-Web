@@ -3,6 +3,21 @@ import type { Point3D } from '../math/Point3D';
 
 type ProjectPoint = (point: Point3D) => { x: number; y: number } | null;
 
+/**
+ * 同じ位置に描かれるラベル同士（節点番号と柱の断面名など）が重ならないよう、
+ * 種別ごとに CSS pixel で少しずらす。節点番号は左上、番号は上、断面・属性は下へ寄せる。
+ */
+export const LABEL_OFFSETS_PX: Readonly<Record<DisplayLabelDescriptor['kind'], { dx: number; dy: number }>> = {
+  nodeNumber: { dx: -8, dy: -10 },
+  memberNumber: { dx: 0, dy: -9 },
+  planeNumber: { dx: 0, dy: -9 },
+  section: { dx: 8, dy: 9 },
+  floorDirection: { dx: 0, dy: 21 },
+  weight: { dx: 0, dy: 33 },
+  storyHeight: { dx: 0, dy: 0 },
+  localAxis: { dx: 0, dy: 0 },
+};
+
 /** Three.js canvas上へ要素情報をCSS pixelで重ねる軽量ラベルrenderer。 */
 export class CadLabelRenderer {
   private readonly layer: HTMLDivElement | null;
@@ -28,8 +43,9 @@ export class CadLabelRenderer {
       const label = this.layer.ownerDocument.createElement('span');
       label.className = `cad-label cad-label-${descriptor.kind}`;
       label.textContent = descriptor.text;
-      label.style.left = `${position.x}px`;
-      label.style.top = `${position.y}px`;
+      const offset = LABEL_OFFSETS_PX[descriptor.kind];
+      label.style.left = `${position.x + offset.dx}px`;
+      label.style.top = `${position.y + offset.dy}px`;
 
       if (descriptor.kind === 'localAxis' && descriptor.direction) {
         const tip = project(descriptor.position.add(descriptor.direction.scale(250)));

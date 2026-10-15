@@ -4,6 +4,7 @@ import { Member } from './Member';
 import { Plane } from './Plane';
 import { Point3D } from '../math/Point3D';
 import { Point2D } from '../math/Point2D';
+import { roundPoint } from '../math/round';
 import { Layer } from './Layer';
 import { typeOrderIndex, categoryOf, CAD_ID_OFFSET, type NumberCategory } from './typeRegistry';
 import type { ImportMetadata, ImportSourceElementInfo, ImportSourceNodeInfo } from './ImportMetadata';
@@ -387,9 +388,42 @@ export class Document {
     return this.getOrCreateNode(abovePos);
   }
 
-  /** 直上の位置を検索（Node優先、無ければ部材交点）（D-10） */
+  /**
+   * 直上の位置を検索する（D-10）。同一XYの上方Node、鉛直線が交わる上方部材、
+   * 次に高いレイヤーの高さのうち、最も近いものを返す。直上に何も無く上階レイヤーも
+   * 無い場合だけ null になる。
+   */
   getPosAbove(p: Point3D): Point3D | null {
-    return this.findNodeAbove(p) ?? this.findMemberIntersectionAbove(p);
+    const candidates = [this.findNodeAbove(p), this.findMemberIntersectionAbove(p), this.findLayerPositionAbove(p)];
+    let best: Point3D | null = null;
+    for (const candidate of candidates) {
+      if (candidate && (!best || candidate.z < best.z)) best = candidate;
+    }
+    return best;
+  }
+
+  /** 指定高さより上にある最も近いレイヤー。 */
+  layerAbove(z: number): Layer | null {
+    let best: Layer | null = null;
+    for (const layer of this._layers) {
+      if (layer.posZ > z + LAYER_Z_TOLERANCE && (!best || layer.posZ < best.posZ)) best = layer;
+    }
+    return best;
+  }
+
+  /** 直上に節点・部材が無いとき、上階レイヤーの高さへ節点位置を補完する（柱・壁の作図順序を自由にする）。 */
+  private findLayerPositionAbove(p: Point3D): Point3D | null {
+    const layer = this.layerAbove(p.z);
+    return layer ? new Point3D(p.x, p.y, layer.posZ) : null;
+  }
+
+  /** 指定レイヤーと同じ高さの節点と、それを参照する全要素。レイヤーと一緒に削除する候補。 */
+  dataOnLayerElevation(layer: Layer): DocumentData[] {
+    const nodes = new Set(this.nodeList.filter((node) => Math.abs(node.pos.z - layer.posZ) <= LAYER_Z_TOLERANCE));
+    if (nodes.size === 0) return [];
+    return this.dataList.filter((data) =>
+      data instanceof Node ? nodes.has(data) : data.referencedNodes.some((node) => nodes.has(node)),
+    );
   }
 
   /** 同一XYで最も近い上方のNode位置 */
@@ -425,7 +459,8 @@ export class Document {
         if (d1len > d2len) {
           const t = d2len / d1len;
           const dir = m.posJ.sub(m.posI);
-          const intersect = m.posI.add(dir.scale(t));
+          // 線分補間の浮動小数誤差 (840.0000000000001 など) を節点座標に残さない。
+          const intersect = roundPoint(m.posI.add(dir.scale(t)));
           const dist = intersect.z - p.z;
           if (dist > 0 && dist < minDist) {
             abovePos = intersect;
@@ -484,6 +519,8 @@ export class Document {
     }
     if (this._shownLayer === layer) return;
     this._shownLayer = layer;
+    // transaction 中は finishTransaction がまとめて1回だけ通知する。
+    if (this.transactionDepth > 0) return;
     this.notifyLayerViewChanged();
   }
 
@@ -665,6 +702,8 @@ export class Document {
 }
 
 const NODE_REFERENCED_REASON = '他のデータから参照されているノードは削除できません';
+/** レイヤー高さと節点高さを同一とみなす許容差 (mm)。 */
+export const LAYER_Z_TOLERANCE = 1e-6;
 
 function dataMatchesSnapshot(snapshot: DataSnapshot): boolean {
   return snapshot.data.number === snapshot.number && stateValuesEqual(snapshot.data.captureState(), snapshot.state);
