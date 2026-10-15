@@ -145,7 +145,7 @@ export function addCloseButtonRow(container: HTMLElement): HTMLButtonElement {
 }
 
 /**
- * ESC・オーバーレイクリックで閉じられるモーダルとして overlay を表示する共通基盤。
+ * ESC で閉じられるモーダルとして overlay を表示する共通基盤。外側クリックでは閉じない。
  * dismiss(result) は (a) ESCリスナ除去 (b) overlay除去 (c) resolve を必ずセットで行い、
  * リスナ漏れ・Promise未解決リークを防ぐ。
  */
@@ -167,6 +167,18 @@ export function showModalBase<T>(
       e.preventDefault();
       e.stopPropagation();
       dismiss(defaultResult);
+      return;
+    }
+
+    // ダイアログ内の入力欄では、ブラウザ標準の全選択 (Ctrl/Cmd+A) を確実に通す。
+    // 一部環境ではアプリ側のショートカット処理より前に既定動作が失われるため明示的に選択する。
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'a') {
+      const target = e.target;
+      if (dialog?.contains(target as Node) && isTextEntry(target)) {
+        e.preventDefault();
+        e.stopPropagation();
+        target.select();
+      }
       return;
     }
 
@@ -210,9 +222,8 @@ export function showModalBase<T>(
     resolveFunc = resolve;
   });
 
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) dismiss(defaultResult);
-  });
+  // 外側クリックでは閉じない。確定か取消かが画面上で判別できない閉じ方を避け、
+  // ツールバーの入力欄を誤って押しても編集中の内容を失わないようにする。
   document.addEventListener('keydown', onKeydown, true);
 
   document.body.appendChild(overlay);
@@ -228,7 +239,7 @@ export function showModalBase<T>(
  * OK/キャンセル付きモーダルダイアログの共通ライフサイクル。
  * - overlay を document.body に append。
  * - OKクリック時 onOk() が true を返したら dismiss(true)、false なら閉じない。
- * - Cancelクリック / ESC / オーバーレイクリックで dismiss(false)。
+ * - Cancelクリック / ESC で dismiss(false)。
  * @returns OKで確定したら true、キャンセル/閉じたら false を解決する Promise。
  */
 export function wireDialog(
@@ -272,7 +283,7 @@ export function wireDialog(
 
 /**
  * 閉じるボタンのみのモーダル（Help用）。
- * 閉じるボタン / ESC / オーバーレイクリックで閉じる。
+ * 閉じるボタン / ESC で閉じる。
  */
 export function showModal(overlay: HTMLDivElement, closeBtn: HTMLButtonElement): Promise<boolean> {
   const { promise, dismiss } = showModalBase(overlay, false);
@@ -351,5 +362,15 @@ function focusInitialElement(dialog: HTMLElement | null): void {
   const preferred = dialog.querySelector<HTMLElement>(
     '[autofocus], input:not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled]):not([readonly])',
   );
-  (preferred ?? getFocusableElements(dialog)[0] ?? dialog).focus();
+  const target = preferred ?? getFocusableElements(dialog)[0] ?? dialog;
+  target.focus();
+  // 既定値 (「新規レイヤー」「G1」など) を選択状態にして、そのまま上書き入力できるようにする。
+  if (isTextEntry(target)) target.select();
+}
+
+/** 文字列を編集できる入力欄（select() が意味を持つ要素）。 */
+function isTextEntry(target: EventTarget | null): target is HTMLInputElement | HTMLTextAreaElement {
+  if (target instanceof HTMLTextAreaElement) return !target.readOnly;
+  if (!(target instanceof HTMLInputElement) || target.readOnly) return false;
+  return ['text', 'number', 'search', 'url', 'tel', 'email', 'password'].includes(target.type);
 }

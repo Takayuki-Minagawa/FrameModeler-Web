@@ -2,6 +2,7 @@ import type { Member } from '../data/Member';
 import type { Node } from '../data/Node';
 import type { MessageKey } from '../i18n';
 import { Point3D } from '../math/Point3D';
+import { roundCoordinate, roundToStep } from '../math/round';
 
 /** ステータス表示や将来のglyph描画で利用するスナップ種別。 */
 export type ObjectSnapKind = 'none' | 'node' | 'endpoint' | 'midpoint' | 'intersection' | 'grid';
@@ -315,10 +316,12 @@ function addConstraintCandidates(candidates: SnapCandidate[], request: ObjectSna
 
   const enabled = new Set(constraints.kinds ?? CONSTRAINT_ORDER);
   const anchor = new Point3D(constraints.anchor.x, constraints.anchor.y, request.workPlaneZ);
+  const grid = request.gridSpacing;
   let order = startOrder;
   const add = (kind: ObjectSnapConstraintKind, position: Point3D | null): void => {
     if (!enabled.has(kind) || !position || !isFinitePoint(position)) return;
-    const normalized = position.clone();
+    // 拘束で決まらない自由な成分は生のカーソル位置のままにせず、グリッドスナップと同じ幅へ丸める。
+    const normalized = quantizeConstraintPosition(kind, anchor, position, grid);
     normalized.z = request.workPlaneZ;
     const equivalent = candidates.find(
       (candidate) =>
@@ -370,6 +373,36 @@ function addConstraintCandidates(candidates: SnapCandidate[], request: ObjectSna
         break;
     }
   }
+}
+
+/**
+ * 拘束線上の点をスナップ幅へ丸める。X/Y軸拘束は自由な座標を絶対グリッドへ、
+ * 画面水平・鉛直と直交拘束は anchor からの距離を丸めて拘束線上に留める。
+ */
+function quantizeConstraintPosition(
+  kind: ObjectSnapConstraintKind,
+  anchor: Point3D,
+  position: Point3D,
+  gridSpacing: number,
+): Point3D {
+  const result = position.clone();
+  if (!Number.isFinite(gridSpacing) || gridSpacing <= 0) return result;
+  if (kind === 'axis-x') {
+    result.x = roundToStep(position.x, gridSpacing);
+    return result;
+  }
+  if (kind === 'axis-y') {
+    result.y = roundToStep(position.y, gridSpacing);
+    return result;
+  }
+  const dx = position.x - anchor.x;
+  const dy = position.y - anchor.y;
+  const length = Math.hypot(dx, dy);
+  if (length <= INTERSECTION_EPSILON) return result;
+  const snappedLength = roundToStep(length, gridSpacing);
+  result.x = roundCoordinate(anchor.x + (dx / length) * snappedLength);
+  result.y = roundCoordinate(anchor.y + (dy / length) * snappedLength);
+  return result;
 }
 
 function orthogonalProjection(anchor: Point3D, position: Point3D, reference: Point3D | undefined): Point3D | null {

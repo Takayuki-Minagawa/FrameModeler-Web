@@ -7,6 +7,11 @@ vi.mock('../src/io/download', async (importOriginal) => ({
   downloadBlob: vi.fn(),
   downloadText: vi.fn(),
 }));
+vi.mock('../src/ui/dialogs/MessageDialog', () => ({
+  showMessageDialog: vi.fn(async () => undefined),
+  showConfirmDialog: vi.fn(async () => true),
+  showChoiceDialog: vi.fn(async () => null),
+}));
 
 import { ExportController } from '../src/controllers/ExportController';
 import { Beam } from '../src/data/Beam';
@@ -19,10 +24,12 @@ import { CSV_BOM } from '../src/io/CsvExporter';
 import { downloadBlob, downloadText } from '../src/io/download';
 import { Point3D } from '../src/math/Point3D';
 import type { CadView, CadViewMode } from '../src/ui/CadView';
+import { showMessageDialog } from '../src/ui/dialogs/MessageDialog';
 
 const doc = Document.instance;
 const downloadTextMock = vi.mocked(downloadText);
 const downloadBlobMock = vi.mocked(downloadBlob);
+const messageDialogMock = vi.mocked(showMessageDialog);
 
 const BUTTONS = ['btn-summary', 'btn-export-png', 'btn-export-dxf', 'btn-export-nodes-csv', 'btn-export-elements-csv'];
 
@@ -153,7 +160,7 @@ describe('ExportController', () => {
   it('saves the captured view as PNG and reports capture failures', async () => {
     buildModel();
     const harness = createHarness();
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    messageDialogMock.mockClear();
 
     harness.click('btn-export-png');
     await vi.waitFor(() => expect(downloadBlobMock).toHaveBeenCalledTimes(1));
@@ -163,7 +170,9 @@ describe('ExportController', () => {
 
     harness.captureImage.mockRejectedValueOnce(new Error('context lost'));
     harness.click('btn-export-png');
-    await vi.waitFor(() => expect(alertSpy).toHaveBeenCalledWith('出力に失敗しました: context lost'));
+    await vi.waitFor(() =>
+      expect(messageDialogMock).toHaveBeenCalledWith('出力に失敗しました: context lost', { level: 'error' }),
+    );
     expect(downloadBlobMock).toHaveBeenCalledTimes(1);
   });
 

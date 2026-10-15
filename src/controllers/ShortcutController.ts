@@ -89,7 +89,8 @@ export class ShortcutController {
         return false;
       };
     }
-    if (key === 'Delete') return () => actions.deleteSelection();
+    // MacBook などでは Delete キー単体が Backspace になるため、両方を削除に割り当てる。
+    if (key === 'Delete' || key === 'Backspace') return () => actions.deleteSelection();
     if (key === 'Home' || key === 'f') return () => actions.fit();
     // 候補を切り替えられなかったTabは通常のフォーカス移動として扱い、canvasにフォーカスを閉じ込めない。
     if (key === 'Tab' && this.root.activeElement === canvas) return () => actions.cycleSnap(event.shiftKey ? -1 : 1);

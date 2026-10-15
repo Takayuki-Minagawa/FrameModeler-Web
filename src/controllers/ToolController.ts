@@ -1,5 +1,5 @@
-import type { DocumentData } from '../data/DocumentData';
-import type { HistoryMessageKey } from '../i18n';
+import type { DocumentData, DocumentDataKind } from '../data/DocumentData';
+import type { HistoryMessageKey, MessageKey } from '../i18n';
 import { SelectionFilter } from '../selection/SelectionFilter';
 import type { CadView } from '../ui/CadView';
 import { AddBeamHandler } from '../ui/handlers/AddBeamHandler';
@@ -8,7 +8,7 @@ import { AddFloorHandler } from '../ui/handlers/AddFloorHandler';
 import { AddNodeHandler } from '../ui/handlers/AddNodeHandler';
 import { AddPillarHandler } from '../ui/handlers/AddPillarHandler';
 import { AddWallHandler } from '../ui/handlers/AddWallHandler';
-import type { ICadMouseHandler } from '../ui/handlers/ICadMouseHandler';
+import type { ICadMouseHandler, LayerAboveRequest } from '../ui/handlers/ICadMouseHandler';
 import { MeasureHandler } from '../ui/handlers/MeasureHandler';
 import { MoveNodeHandler } from '../ui/handlers/MoveNodeHandler';
 import { SelectionHandler } from '../ui/handlers/SelectionHandler';
@@ -28,6 +28,30 @@ export const TOOL_BUTTON_IDS = [
 
 export type ToolButtonId = (typeof TOOL_BUTTON_IDS)[number];
 
+/** ツール名のステータス表示などに使う、ボタンIDと文言キーの対応。 */
+export const TOOL_LABEL_KEYS: Readonly<Record<ToolButtonId, MessageKey>> = {
+  'btn-select': 'select',
+  'btn-move': 'move',
+  'btn-add-node': 'node',
+  'btn-add-beam': 'beam',
+  'btn-add-pillar': 'pillar',
+  'btn-add-floor': 'floor',
+  'btn-add-wall': 'wall',
+  'btn-add-bearwall': 'bearwall',
+  'btn-measure': 'measure',
+};
+
+export interface ToolControllerHooks {
+  /** 要素作成直後にプロパティダイアログを開くか。省略時は常に開く。 */
+  shouldOpenProperties?: () => boolean;
+  /** 新規要素の既定断面。 */
+  defaultSection?: (kind: DocumentDataKind) => string;
+  /** 上階レイヤーが無いときの作成依頼。 */
+  requestLayerAbove?: LayerAboveRequest;
+  /** ツールが切り替わったとき。 */
+  onToolChanged?: (id: ToolButtonId) => void;
+}
+
 /** 作図ツールの生成、切替、途中操作破棄をmainから分離する。 */
 export class ToolController {
   readonly selectionFilter = new SelectionFilter();
@@ -38,6 +62,7 @@ export class ToolController {
     private readonly cadView: CadView,
     private readonly showDataDialog: (data: DocumentData) => void,
     private readonly root: Document = document,
+    private readonly hooks: ToolControllerHooks = {},
   ) {
     this.factories = {
       'btn-select': () => new SelectionHandler(this.selectionFilter),
@@ -68,6 +93,7 @@ export class ToolController {
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
     });
+    this.hooks.onToolChanged?.(id);
   }
 
   /** ツールバーの並び順（1始まり）でツールを切り替える。数字キーのショートカット用。 */
@@ -102,7 +128,15 @@ export class ToolController {
 
   private createHandler(id: ToolButtonId): ICadMouseHandler {
     const handler = this.factories[id]();
-    handler.setDialogCallback?.(this.showDataDialog);
+    const { shouldOpenProperties, defaultSection, requestLayerAbove } = this.hooks;
+    // 選択ツールのダブルクリック編集は常に開く。作成直後の自動表示だけ設定で抑止できる。
+    const isCreationTool = id !== 'btn-select' && id !== 'btn-move';
+    handler.setDialogCallback?.((data) => {
+      if (isCreationTool && shouldOpenProperties && !shouldOpenProperties()) return;
+      this.showDataDialog(data);
+    });
+    if (defaultSection) handler.setDefaultSectionProvider?.(defaultSection);
+    if (requestLayerAbove) handler.setLayerAboveRequest?.(requestLayerAbove);
     return handler;
   }
 }

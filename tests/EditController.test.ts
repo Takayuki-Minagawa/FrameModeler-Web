@@ -4,8 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/ui/dialogs/ArrayCopyDialog', () => ({ showArrayCopyDialog: vi.fn() }));
 vi.mock('../src/ui/dialogs/MergeNodesDialog', () => ({ showMergeNodesDialog: vi.fn() }));
+vi.mock('../src/ui/dialogs/MessageDialog', () => ({
+  showMessageDialog: vi.fn(async () => undefined),
+  showConfirmDialog: vi.fn(async () => true),
+  showChoiceDialog: vi.fn(async () => null),
+}));
 
-import { EditController } from '../src/controllers/EditController';
+import { EditController, type EditSettings } from '../src/controllers/EditController';
 import { Beam } from '../src/data/Beam';
 import { Document } from '../src/data/Document';
 import type { DocumentData } from '../src/data/DocumentData';
@@ -19,10 +24,13 @@ import { SelectionFilter } from '../src/selection/SelectionFilter';
 import type { CadView, CadViewMode } from '../src/ui/CadView';
 import { showArrayCopyDialog } from '../src/ui/dialogs/ArrayCopyDialog';
 import { showMergeNodesDialog } from '../src/ui/dialogs/MergeNodesDialog';
+import { showConfirmDialog, showMessageDialog } from '../src/ui/dialogs/MessageDialog';
 
 const doc = Document.instance;
 const arrayCopyDialog = vi.mocked(showArrayCopyDialog);
 const mergeNodesDialog = vi.mocked(showMergeNodesDialog);
+const confirmDialog = vi.mocked(showConfirmDialog);
+const messageDialog = vi.mocked(showMessageDialog);
 
 interface Harness {
   controller: EditController;
@@ -33,7 +41,7 @@ interface Harness {
   setViewMode(mode: CadViewMode): void;
 }
 
-function createHarness(): Harness {
+function createHarness(settings?: EditSettings): Harness {
   const events: string[] = [];
   const notices: string[] = [];
   const selectionFilter = new SelectionFilter();
@@ -57,6 +65,7 @@ function createHarness(): Harness {
     cancelOperation: () => events.push('cancel'),
     refreshDocument: () => events.push('refresh'),
     notify: (message) => notices.push(message()),
+    settings,
     root: document,
   });
   controller.connect();
@@ -101,6 +110,10 @@ beforeEach(() => {
   setLocale('ja');
   arrayCopyDialog.mockReset();
   mergeNodesDialog.mockReset();
+  confirmDialog.mockReset();
+  confirmDialog.mockResolvedValue(true);
+  messageDialog.mockReset();
+  messageDialog.mockResolvedValue(undefined);
   document.body.innerHTML = `
     <button id="btn-delete"></button>
     <button id="btn-select-all"></button>
@@ -195,51 +208,76 @@ describe('EditController delete', () => {
   it('does nothing without a selection and asks before deleting', async () => {
     const { beam } = buildFrame();
     const harness = createHarness();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    confirmDialog.mockResolvedValue(false);
 
     await harness.controller.deleteSelection();
-    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(confirmDialog).not.toHaveBeenCalled();
     expect(harness.events).toEqual(['cancel']);
 
     beam.select = true;
     await harness.controller.deleteSelection();
-    expect(confirmSpy).toHaveBeenCalledWith('選択した1要素を削除しますか？');
+    expect(confirmDialog).toHaveBeenCalledWith('選択した1要素を削除しますか？', { okLabel: '削除', danger: true });
     expect(doc.allDataList).toContain(beam);
 
-    confirmSpy.mockReturnValue(true);
+    confirmDialog.mockResolvedValue(true);
     await harness.controller.deleteSelection();
     expect(doc.allDataList).not.toContain(beam);
     expect(harness.events.slice(-2)).toEqual(['track:history.deleteSelection', 'refresh']);
+    expect(harness.notices.at(-1)).toBe('1要素を削除しました');
+  });
+
+  it('deletes nodes that the removed elements leave orphaned, and can be told not to', async () => {
+    const a = node(0, 0);
+    const b = node(1000, 0);
+    const c = node(2000, 0);
+    const shared = new Beam(b, c);
+    doc.addMany([a, b, c, new Beam(a, b), shared]);
+    const harness = createHarness();
+    confirmDialog.mockResolvedValue(true);
+
+    doc.memberList[0].select = true; // a-b: a は孤立するが b は shared から参照される
+    await harness.controller.deleteSelection();
+    expect(confirmDialog).toHaveBeenLastCalledWith(
+      '選択した1要素を削除しますか？\n削除で孤立する節点 1 個も同時に削除します。',
+      { okLabel: '削除', danger: true },
+    );
+    expect(doc.nodeList).toEqual([b, c]);
+    expect(harness.notices.at(-1)).toBe('1要素と孤立した節点1個を削除しました');
+
+    // 設定で確認と孤立節点の削除を止めると、確認無しで要素だけを消す。
+    const quiet = createHarness({ confirmDelete: () => false, removeOrphansOnDelete: () => false });
+    confirmDialog.mockClear();
+    shared.select = true;
+    await quiet.controller.deleteSelection();
+    expect(confirmDialog).not.toHaveBeenCalled();
+    expect(doc.nodeList).toEqual([b, c]);
+    expect(doc.memberList).toHaveLength(0);
   });
 
   it('explains which elements still reference a selected node, in the current language', async () => {
     const { top } = buildFrame();
     const harness = createHarness();
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     top[0].select = true;
 
     await harness.controller.deleteSelection();
-    expect(alertSpy.mock.calls[0][0]).toContain('節点 2 は 梁 0 から参照されています');
-    expect(alertSpy.mock.calls[0][0]).toContain('節点 2 は 柱 1 から参照されています');
-    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(messageDialog.mock.calls[0][0]).toContain('節点 2 は 梁 0 から参照されています');
+    expect(messageDialog.mock.calls[0][0]).toContain('節点 2 は 柱 1 から参照されています');
+    expect(confirmDialog).not.toHaveBeenCalled();
     expect(doc.nodeList).toHaveLength(4);
 
     setLocale('en');
     await harness.controller.deleteSelection();
-    expect(alertSpy.mock.calls[1][0]).toContain('Node 2 is referenced by Beam 0');
+    expect(messageDialog.mock.calls[1][0]).toContain('Node 2 is referenced by Beam 0');
   });
 
   it('reports a failed delete without refreshing', async () => {
     const { upper, beam } = buildFrame();
     const harness = createHarness();
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     doc.updateLayer(upper, { locked: true });
     beam.select = true;
 
     await harness.controller.deleteSelection();
-    expect(alertSpy.mock.calls[0][0]).toMatch(/^削除できませんでした:/);
+    expect(messageDialog.mock.calls[0][0]).toMatch(/^削除できませんでした:/);
     expect(doc.allDataList).toContain(beam);
     expect(harness.events).not.toContain('refresh');
   });
@@ -249,10 +287,9 @@ describe('EditController array copy', () => {
   it('requires a selection before opening the dialog', async () => {
     buildFrame();
     const harness = createHarness();
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
     await harness.controller.arrayCopy();
-    expect(alertSpy).toHaveBeenCalledWith('要素が選択されていません。');
+    expect(harness.notices).toEqual(['要素が選択されていません。']);
     expect(arrayCopyDialog).not.toHaveBeenCalled();
   });
 
@@ -282,7 +319,6 @@ describe('EditController array copy', () => {
   it('keeps the model unchanged when the dialog is cancelled or the copy is rejected', async () => {
     const { beam, upper } = buildFrame();
     const harness = createHarness();
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     beam.select = true;
 
     arrayCopyDialog.mockResolvedValueOnce(null);
@@ -293,7 +329,7 @@ describe('EditController array copy', () => {
     doc.updateLayer(upper, { locked: true });
     arrayCopyDialog.mockResolvedValueOnce({ offset: new Point3D(0, 4000, 0), count: 1 });
     await harness.controller.arrayCopy();
-    expect(alertSpy.mock.calls[0][0]).toMatch(/^複写できませんでした:/);
+    expect(messageDialog.mock.calls[0][0]).toMatch(/^複写できませんでした:/);
     expect(doc.allDataList).toHaveLength(7);
   });
 });
@@ -330,19 +366,22 @@ describe('EditController model cleanup', () => {
     const orphan = node(500, 500);
     doc.addMany([a, b, orphan, new Beam(a, b)]);
     const harness = createHarness();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    confirmDialog.mockResolvedValue(false);
 
     await harness.controller.removeOrphanNodes();
-    expect(confirmSpy).toHaveBeenCalledWith('どの要素からも参照されていない節点1個を削除しますか？');
+    expect(confirmDialog).toHaveBeenCalledWith('どの要素からも参照されていない節点1個を削除しますか？', {
+      okLabel: '削除',
+      danger: true,
+    });
     expect(doc.nodeList).toHaveLength(3);
 
-    confirmSpy.mockReturnValue(true);
+    confirmDialog.mockResolvedValue(true);
     document.querySelector<HTMLButtonElement>('#btn-remove-orphans')!.click();
     await vi.waitFor(() => expect(harness.notices.at(-1)).toBe('孤立節点を1個削除しました'));
     expect(doc.nodeList).toHaveLength(2);
 
     await harness.controller.removeOrphanNodes();
     expect(harness.notices.at(-1)).toBe('孤立節点はありません');
-    expect(confirmSpy).toHaveBeenCalledTimes(2);
+    expect(confirmDialog).toHaveBeenCalledTimes(2);
   });
 });

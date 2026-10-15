@@ -1,6 +1,9 @@
 import type { CadView } from '../CadView';
 import type { Point3D } from '../../math/Point3D';
-import type { DocumentData } from '../../data/DocumentData';
+import type { DocumentData, DocumentDataKind } from '../../data/DocumentData';
+
+/** 直上に節点・部材・上階レイヤーが無いとき、上階レイヤーの作成を利用者へ求める。作成できたら true。 */
+export type LayerAboveRequest = (currentZ: number) => Promise<boolean>;
 
 /** CadView上のマウス操作ハンドラ・インタフェース */
 export interface ICadMouseHandler {
@@ -16,6 +19,10 @@ export interface ICadMouseHandler {
   onEndDrag?(view: CadView, pos: Point3D, event: MouseEvent, dragDistancePx?: number): void;
   /** ダイアログ表示コールバックの注入。実装は任意 */
   setDialogCallback?(cb: (data: DocumentData) => void): void;
+  /** 新規要素へ既定で与える断面名（直前に使った断面など）の注入。実装は任意 */
+  setDefaultSectionProvider?(provider: (kind: DocumentDataKind) => string): void;
+  /** 上階レイヤーが無いときに作成を求めるコールバックの注入。実装は任意 */
+  setLayerAboveRequest?(request: LayerAboveRequest): void;
   /** 別ツールへ切り替わる直前に呼ばれる。途中状態の破棄などに使う。実装は任意 */
   onDeactivate?(view: CadView): void;
   /** 軸・直交拘束と距離/角度入力に使う現在の1点目。 */

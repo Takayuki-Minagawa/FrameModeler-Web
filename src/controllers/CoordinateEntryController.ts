@@ -20,6 +20,8 @@ export class CoordinateEntryController {
     private readonly cadView: CadView,
     private readonly document: Document,
     private readonly elements: CoordinateEntryElements,
+    /** ステータスバーなどへの短い通知。省略時は入力欄の validation message だけで知らせる。 */
+    private readonly notify?: (message: () => string) => void,
   ) {}
 
   connect(): void {
@@ -31,6 +33,9 @@ export class CoordinateEntryController {
   }
 
   commitCoordinate(): void {
+    const { z } = this.elements;
+    // Z 欄が空のときは現在レイヤーの高さ（レイヤーが無ければ 0）で補完し、無反応にしない。
+    if (z.value.trim() === '') z.value = String(this.document.shownLayer?.posZ ?? 0);
     const inputs = [this.elements.x, this.elements.y, this.elements.z];
     const values = inputs.map((input) => input.valueAsNumber);
     const invalid = inputs.find((_, index) => !Number.isFinite(values[index]));
@@ -48,7 +53,9 @@ export class CoordinateEntryController {
     const { x, y, z, distance, angle } = this.elements;
     const anchor = this.cadView.constraintAnchor;
     if (!anchor) {
-      alert(t('msg.firstPointRequired'));
+      distance.setCustomValidity(t('msg.firstPointRequired'));
+      distance.reportValidity();
+      this.notify?.(() => t('msg.firstPointRequired'));
       return;
     }
     try {

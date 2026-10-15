@@ -75,7 +75,9 @@ describe('side-effect-free import plans', () => {
     unsubscribeModel();
     unsubscribeLayerView();
     expect(document.allDataList).toHaveLength(0);
-    expect(document.layers).toHaveLength(0);
+    // 新規作成は既定レイヤー「1F : 0」を1つ持った状態になる。
+    expect(document.layers.map((layer) => [layer.name, layer.posZ])).toEqual([['1F', 0]]);
+    expect(document.shownLayer).toBe(document.layers[0]);
     expect(modelEvents).toEqual(['layers']);
     expect(layerViewEvents).toBe(1);
   });

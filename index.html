@@ -11,7 +11,25 @@
     <div id="app">
       <!-- ツールバー -->
       <header id="toolbar" role="toolbar" data-i18n-aria-label="aria.toolbar" aria-label="作図ツールバー">
-        <div class="toolbar-group" role="group" data-i18n-aria-label="aria.fileActions" aria-label="ファイル操作">
+        <button
+          id="btn-toolbar-toggle"
+          type="button"
+          class="toolbar-toggle"
+          aria-controls="toolbar"
+          aria-expanded="false"
+          data-i18n-title="title.toolbarToggle"
+          data-i18n-aria-label="title.toolbarToggle"
+          aria-label="ツールバーの表示切替"
+        >
+          ☰
+        </button>
+        <div
+          class="toolbar-group"
+          role="group"
+          data-essential
+          data-i18n-aria-label="aria.fileActions"
+          aria-label="ファイル操作"
+        >
           <button id="btn-new" data-i18n="new" data-i18n-title="title.new">新規</button>
           <button id="btn-open" data-i18n="open" data-i18n-title="title.open">開く</button>
           <button id="btn-save" data-i18n="save" data-i18n-title="title.save">保存</button>
@@ -49,7 +67,13 @@
           </details>
         </div>
         <div class="toolbar-separator" role="separator" aria-orientation="vertical"></div>
-        <div class="toolbar-group" role="group" data-i18n-aria-label="aria.drawingTools" aria-label="作図ツール">
+        <div
+          class="toolbar-group"
+          role="group"
+          data-essential
+          data-i18n-aria-label="aria.drawingTools"
+          aria-label="作図ツール"
+        >
           <button
             id="btn-select"
             class="tool-btn active"
@@ -117,6 +141,7 @@
           <button id="btn-view-front" type="button" data-i18n="view.front">正面</button>
           <button id="btn-view-right" type="button" data-i18n="view.right">側面</button>
           <button id="btn-view-isometric" type="button" data-i18n="view.isometric">アイソメ</button>
+          <button id="btn-fit" type="button" data-i18n="view.fit" data-i18n-title="title.fit">全体表示</button>
         </div>
         <div
           class="toolbar-group"
@@ -156,6 +181,7 @@
               step="any"
               aria-label="X座標"
               data-i18n-aria-label="coordinate.x"
+              data-i18n-title="title.coordinateEnter"
           /></label>
           <label
             >Y
@@ -166,6 +192,7 @@
               step="any"
               aria-label="Y座標"
               data-i18n-aria-label="coordinate.y"
+              data-i18n-title="title.coordinateEnter"
           /></label>
           <label
             >Z
@@ -176,6 +203,8 @@
               step="any"
               aria-label="Z座標"
               data-i18n-aria-label="coordinate.z"
+              data-i18n-title="title.coordinateZ"
+              data-i18n-placeholder="coordinate.zPlaceholder"
           /></label>
           <button id="btn-coordinate-commit" data-i18n="coordinate.commit" data-i18n-title="title.coordinateCommit">
             入力
@@ -315,6 +344,33 @@
         </div>
         <div class="toolbar-separator" role="separator" aria-orientation="vertical"></div>
         <div class="toolbar-group" role="group" data-i18n-aria-label="aria.appSettings" aria-label="ヘルプと表示設定">
+          <details class="toolbar-menu" id="settings-menu">
+            <summary data-i18n="settings.menu">設定</summary>
+            <fieldset class="toolbar-popover" data-i18n-aria-label="settings.menu" aria-label="設定">
+              <label
+                ><input type="checkbox" data-app-flag="openPropertiesOnCreate" /><span
+                  data-i18n="settings.openPropertiesOnCreate"
+                  >作成時にプロパティを開く</span
+                ></label
+              >
+              <label
+                ><input type="checkbox" data-app-flag="confirmDelete" /><span data-i18n="settings.confirmDelete"
+                  >削除前に確認する</span
+                ></label
+              >
+              <label
+                ><input type="checkbox" data-app-flag="removeOrphansOnDelete" /><span
+                  data-i18n="settings.removeOrphansOnDelete"
+                  >削除時に孤立する節点も削除</span
+                ></label
+              >
+              <label
+                ><input type="checkbox" data-app-flag="fitOnViewChange" /><span data-i18n="settings.fitOnViewChange"
+                  >ビュー切替時に全体表示</span
+                ></label
+              >
+            </fieldset>
+          </details>
           <button
             id="btn-help"
             data-i18n-title="title.help"
@@ -414,6 +470,15 @@
         <span id="status-version" aria-live="polite"></span>
         <span id="status-coord">(0.00, 0.00, 0.00)</span>
         <span id="status-info" role="status" aria-live="polite"></span>
+        <button
+          id="btn-message-log"
+          type="button"
+          data-i18n="messageLog.button"
+          data-i18n-title="title.messageLog"
+          title="メッセージ履歴"
+        >
+          履歴
+        </button>
       </footer>
     </div>
 

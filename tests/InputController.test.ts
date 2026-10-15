@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InputController, type InputHost } from '../src/ui/InputController';
 
 class FakeCanvas extends EventTarget {
@@ -74,6 +74,16 @@ function dispatchClick(canvas: FakeCanvas, x: number): void {
 }
 
 describe('InputController pointer gestures', () => {
+  it('moves keyboard focus to the canvas on pointerdown so Tab can cycle snap candidates', () => {
+    const canvas = new FakeCanvas();
+    const focus = vi.fn();
+    Object.assign(canvas, { focus });
+    const controller = new InputController(canvas as unknown as HTMLCanvasElement, host(false));
+    canvas.dispatchEvent(pointerEvent('pointerdown'));
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    controller.dispose();
+  });
+
   it('passes both rapid clicks to drawing tools without converting the second click', () => {
     const canvas = new FakeCanvas();
     const target = host(false);

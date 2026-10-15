@@ -1,7 +1,8 @@
-import type { ICadMouseHandler } from './ICadMouseHandler';
+import type { ICadMouseHandler, LayerAboveRequest } from './ICadMouseHandler';
 import type { CadView } from '../CadView';
-import type { DocumentData } from '../../data/DocumentData';
+import type { DocumentData, DocumentDataKind } from '../../data/DocumentData';
 import { Point3D } from '../../math/Point3D';
+import { reportModelError } from './errors';
 
 /**
  * 2点クリックで要素を追加するハンドラの抽象基底（テンプレートメソッド）。
@@ -17,9 +18,19 @@ import { Point3D } from '../../math/Point3D';
 export abstract class TwoClickAddHandler<A> implements ICadMouseHandler {
   protected anchor: A | null = null;
   protected showDialog: ((data: DocumentData) => void) | null = null;
+  protected sectionProvider: ((kind: DocumentDataKind) => string) | null = null;
+  protected layerAboveRequest: LayerAboveRequest | null = null;
 
   setDialogCallback(cb: (data: DocumentData) => void): void {
     this.showDialog = cb;
+  }
+
+  setDefaultSectionProvider(provider: (kind: DocumentDataKind) => string): void {
+    this.sectionProvider = provider;
+  }
+
+  setLayerAboveRequest(request: LayerAboveRequest): void {
+    this.layerAboveRequest = request;
   }
 
   /** 1クリック目: アンカーを取得（取得できなければ null を返し、1点目を保持しない） */
@@ -31,7 +42,7 @@ export abstract class TwoClickAddHandler<A> implements ICadMouseHandler {
   /** 1点目保持中のプレビュー描画 */
   protected abstract drawPreview(view: CadView, anchor: A, pos: Point3D): void;
 
-  onClick(view: CadView, pos: Point3D, _event: MouseEvent): void {
+  onClick(view: CadView, pos: Point3D, event: MouseEvent): void {
     if (this.anchor === null) {
       const a = this.acquireAnchor(view, pos);
       if (a !== null) {
@@ -49,11 +60,12 @@ export abstract class TwoClickAddHandler<A> implements ICadMouseHandler {
     try {
       this.commit(view, anchor, pos);
     } catch (error) {
-      alert((error as Error).message);
+      reportModelError(error, view);
     } finally {
       view.renderElements();
       view.renderPreview();
     }
+    void event;
   }
 
   onDoubleClick(_view: CadView, _pos: Point3D, _event: MouseEvent): void {}
@@ -78,5 +90,21 @@ export abstract class TwoClickAddHandler<A> implements ICadMouseHandler {
     view.setOperationStatus(null);
     view.clearPreview();
     view.renderPreview();
+  }
+
+  /** 新規要素の既定断面。直前に使った断面名が無ければ空文字。 */
+  protected defaultSection(kind: DocumentDataKind): string {
+    return this.sectionProvider?.(kind) ?? '';
+  }
+
+  /**
+   * 上階レイヤーが無く直上位置を決められないとき、レイヤー作成を求めてから同じ点で操作をやり直す。
+   * ツールが切り替わっていたり既に1点目が入っていれば、やり直さない。
+   */
+  protected retryAfterLayerAbove(view: CadView, pos: Point3D): void {
+    if (!this.layerAboveRequest) return;
+    void this.layerAboveRequest(pos.z).then((created) => {
+      if (created && view.handler === this && this.anchor === null) this.onClick(view, pos, new MouseEvent('click'));
+    });
   }
 }

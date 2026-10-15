@@ -3,6 +3,7 @@ import { t, type MessageKey } from '../i18n';
 import type { Point3D } from '../math/Point3D';
 import type { CadMeasurement, CadOperationStatus } from './CadView';
 import type { WorkPlaneIntersectionError } from './CameraController';
+import { messageLog, type MessageLog } from './MessageLog';
 import { getObjectSnapKindInfo, type ObjectSnapCandidateKind } from './ObjectSnapEngine';
 
 export interface StatusBarElements {
@@ -35,12 +36,21 @@ export class StatusBar {
   /** 表示中に言語を切り替えても追随できるよう、文言ではなく生成関数を保持する。 */
   private notice: (() => string) | null = null;
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 現在のツール名（文言キー）。null なら表示しない。 */
+  private toolLabelKey: MessageKey | null = null;
 
   constructor(
     private readonly elements: StatusBarElements,
     private readonly document: Document,
     private readonly version: string,
+    private readonly log: MessageLog = messageLog,
   ) {}
+
+  /** ステータスバーに常時表示する現在ツール。 */
+  setTool(labelKey: MessageKey | null): void {
+    this.toolLabelKey = labelKey;
+    this.refresh();
+  }
 
   setCoordinate(position: Point3D): void {
     this.elements.coordinate.textContent = `(${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`;
@@ -52,6 +62,10 @@ export class StatusBar {
   }
 
   setOperationStatus(status: CadOperationStatus | null): void {
+    // 「直上の節点が無い」などの失敗理由は次の操作で消えるため、後から読めるよう履歴に残す。
+    if (status && status !== 'firstPointSelected' && status !== this.operationStatus) {
+      this.log.record('warning', t(OPERATION_STATUS_KEYS[status]));
+    }
     this.operationStatus = status;
     this.refresh();
   }
@@ -79,6 +93,7 @@ export class StatusBar {
   /** 操作結果などの短い通知を一定時間だけ表示する。 */
   showNotice(message: () => string): void {
     if (this.noticeTimer !== null) clearTimeout(this.noticeTimer);
+    this.log.record('info', message());
     this.notice = message;
     this.noticeTimer = setTimeout(() => {
       this.noticeTimer = null;
@@ -97,6 +112,7 @@ export class StatusBar {
     this.setDirty(this.dirty);
     const { nodeList, memberList, planeList } = this.document;
     const details = [
+      this.toolLabelKey ? `${t('status.tool')}: ${t(this.toolLabelKey)}` : '',
       this.notice?.() ?? '',
       this.operationStatus ? t(OPERATION_STATUS_KEYS[this.operationStatus]) : '',
       this.measurement ? formatMeasurement(this.measurement) : '',

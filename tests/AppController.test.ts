@@ -57,6 +57,28 @@ describe('AppController draft recovery', () => {
     expect(refreshDocument).toHaveBeenCalledTimes(accepted ? 1 : 0);
   });
 
+  it('keeps the draft family untouched when the user answers later', async () => {
+    const document = Document.instance;
+    document.init();
+    const draft: StoredDraft = {
+      ...exportDocumentSnapshot(document),
+      savedAt: 100,
+      formatVersion: 2,
+      draftKey: 'active:crashed-tab:generation:2',
+      tabId: 'crashed-tab',
+      generation: 2,
+    };
+    draftStoreMocks.loadDraft.mockResolvedValue(draft);
+    const refreshDocument = vi.fn();
+    const controller = new AppController({ document, cancelOperation: vi.fn(), refreshDocument });
+
+    await expect(controller.offerDraftRestore(async () => 'later' as const)).resolves.toBe(false);
+
+    expect(draftStoreMocks.clearDraftFamily).not.toHaveBeenCalled();
+    expect(draftStoreMocks.clearDraft).not.toHaveBeenCalled();
+    expect(refreshDocument).not.toHaveBeenCalled();
+  });
+
   it('rolls back the complete document and does not record history when a tracked change throws', async () => {
     const document = Document.instance;
     document.init();

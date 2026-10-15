@@ -19,12 +19,16 @@ export interface ModelValidationOptions {
 }
 
 export class ModelValidationError extends Error {
+  /** path を含まない生の理由。UI 層で利用者向けの文言へ変換するために保持する。 */
+  readonly detail: string;
+
   constructor(
     message: string,
     readonly path: string,
   ) {
     super(`${path}: ${message}`);
     this.name = 'ModelValidationError';
+    this.detail = message;
   }
 }
 

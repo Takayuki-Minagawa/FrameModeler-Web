@@ -74,8 +74,9 @@ describe('CadLabelRenderer', () => {
     renderer.render(descriptors, (point) => ({ x: point.x, y: point.y }));
 
     const labels = parent.children[0].children;
+    // 部材番号は点の 9px 上へずらして、同じ位置の断面名などと重ならないようにする。
     expect(labels.map((label) => [label.textContent, label.style.left, label.style.top])).toEqual([
-      ['M1', '10px', '20px'],
+      ['M1', '10px', '11px'],
       ['x', '260px', '20px'],
       ['y', '10px', '270px'],
     ]);

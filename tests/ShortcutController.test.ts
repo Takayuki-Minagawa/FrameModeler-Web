@@ -61,6 +61,14 @@ describe('ShortcutController', () => {
   it('maps plain keys for delete, fit and tools', () => {
     expect(press({ key: 'Delete' }).defaultPrevented).toBe(true);
     expect(actions.deleteSelection).toHaveBeenCalledOnce();
+    // MacBook の Delete キーは Backspace を送るため、同じく削除に割り当てる。
+    expect(press({ key: 'Backspace' }).defaultPrevented).toBe(true);
+    expect(actions.deleteSelection).toHaveBeenCalledTimes(2);
+    // 入力欄の編集中は文字削除を妨げない。
+    const text = document.querySelector<HTMLInputElement>('#text')!;
+    text.focus();
+    expect(press({ key: 'Backspace' }, text).defaultPrevented).toBe(false);
+    expect(actions.deleteSelection).toHaveBeenCalledTimes(2);
 
     press({ key: 'Home' });
     press({ key: 'F' });

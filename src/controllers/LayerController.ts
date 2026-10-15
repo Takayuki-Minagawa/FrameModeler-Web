@@ -3,6 +3,7 @@ import type { Document } from '../data/Document';
 import { Layer } from '../data/Layer';
 import type { CadView } from '../ui/CadView';
 import { showLayerDialog } from '../ui/dialogs/LayerDialog';
+import { showChoiceDialog, showConfirmDialog, showMessageDialog } from '../ui/dialogs/MessageDialog';
 import { subscribeLocaleChanged, t, type HistoryMessageKey } from '../i18n';
 
 type TrackChange = <T>(label: HistoryMessageKey, action: () => T | Promise<T>) => Promise<T>;
@@ -17,6 +18,12 @@ export interface LayerControllerOptions {
   copyContents: (source: Layer, target: Layer) => void;
   root?: globalThis.Document;
 }
+
+/** 階高の既定値 (mm)。隣接レイヤーから求められないときに使う。 */
+export const DEFAULT_STORY_HEIGHT = 3000;
+const Z_TOLERANCE = 1e-6;
+
+type LayerDeleteChoice = 'withElements' | 'keepElements';
 
 /** レイヤー一覧、stable ID、表示/ロック/隔離、複製と上下階コピーを管理する。 */
 export class LayerController {
@@ -59,6 +66,41 @@ export class LayerController {
     this.options.cadView.render();
   }
 
+  /**
+   * 柱・壁の直上に何も無く上階レイヤーも無いとき、階高を指定して上階レイヤーを作る。
+   * 作成できたら true。利用者が取り消したら false。
+   */
+  async requestLayerAbove(currentZ: number): Promise<boolean> {
+    const layers = this.options.document.layers;
+    const suggestion = new Layer(currentZ + this.typicalStoryHeight(), this.nextLayerName());
+    const layer = await showLayerDialog(suggestion, {
+      mode: 'add',
+      title: t('dialog.layerAbove'),
+      description: t('layer.aboveDescription', { z: currentZ }),
+    });
+    if (!layer) return false;
+    if (layer.posZ <= currentZ) {
+      await showMessageDialog(t('msg.layerAboveMustBeHigher', { z: currentZ }), { level: 'error' });
+      return false;
+    }
+    const shown = this.options.document.shownLayer;
+    // 柱・壁の配置をこの後に続けるため、run() と違って作図中の操作は取り消さない。
+    // 作業階も変えないので、既存の anchor / preview はそのまま有効。
+    try {
+      await this.options.trackChange('history.addLayer', () => {
+        if (!this.options.document.execute(new AddLayerCommand(layer))) throw new Error(t('msg.duplicateLayer'));
+        if (shown && layers.includes(shown)) this.options.document.shownLayer = shown;
+      });
+      this.render();
+      this.options.cadView.renderElements();
+    } catch (error) {
+      await showMessageDialog(t('msg.layerOperationFailed', { message: (error as Error).message }), {
+        level: 'error',
+      });
+    }
+    return this.options.document.layers.includes(layer);
+  }
+
   private createLayerItem(layer: Layer): HTMLLIElement {
     const item = this.root.createElement('li');
     item.dataset.layerId = layer.id;
@@ -66,8 +108,15 @@ export class LayerController {
 
     const label = this.root.createElement('span');
     label.className = 'layer-label';
-    label.textContent = formatLayerLabel(layer);
+    label.textContent = layer.name;
+    label.title = formatLayerLabel(layer);
     item.appendChild(label);
+
+    const height = this.root.createElement('span');
+    height.className = 'layer-height';
+    height.textContent = formatLayerHeight(layer);
+    height.title = t('zPosition');
+    item.appendChild(height);
 
     const controls = this.root.createElement('span');
     controls.className = 'layer-item-controls';
@@ -94,7 +143,8 @@ export class LayerController {
   }
 
   private applyItemState(item: HTMLLIElement, layer: Layer): void {
-    const active = layer === this.options.document.shownLayer;
+    const { document: model } = this.options;
+    const active = layer === model.shownLayer;
     item.classList.toggle('active', active);
     item.classList.toggle('layer-hidden', !layer.visible);
     item.classList.toggle('layer-locked', layer.locked);
@@ -103,7 +153,13 @@ export class LayerController {
       'aria-description',
       `${t(layer.visible ? 'layer.state.visible' : 'layer.state.hidden')}, ${t(layer.locked ? 'layer.state.locked' : 'layer.state.editable')}`,
     );
-    item.tabIndex = active || (!this.options.document.shownLayer && this.options.document.layers[0] === layer) ? 0 : -1;
+    item.tabIndex = active || (!model.shownLayer && model.layers[0] === layer) ? 0 : -1;
+
+    // 表示・ロック・隔離の現在状態を支援技術からも読めるよう aria-pressed で示す。
+    const isolated = layer.visible && model.layers.every((other) => other === layer || !other.visible);
+    item.querySelector('[data-action="visibility"]')?.setAttribute('aria-pressed', String(layer.visible));
+    item.querySelector('[data-action="lock"]')?.setAttribute('aria-pressed', String(layer.locked));
+    item.querySelector('[data-action="isolate"]')?.setAttribute('aria-pressed', String(isolated));
   }
 
   private handleListClick(event: MouseEvent): void {
@@ -152,7 +208,10 @@ export class LayerController {
 
   private async add(): Promise<void> {
     this.options.cancelOperation();
-    const layer = await showLayerDialog();
+    const layers = this.options.document.layers;
+    const top = layers[layers.length - 1];
+    const suggestion = new Layer(top ? top.posZ + this.typicalStoryHeight() : 0, this.nextLayerName());
+    const layer = await showLayerDialog(suggestion, { mode: 'add' });
     if (!layer) return;
     await this.run('history.addLayer', () => {
       if (!this.options.document.execute(new AddLayerCommand(layer))) throw new Error(t('msg.duplicateLayer'));
@@ -163,10 +222,10 @@ export class LayerController {
   private async edit(layer: Layer): Promise<void> {
     this.options.cancelOperation();
     if (layer.locked) {
-      alert(t('msg.layerLockedEdit'));
+      await showMessageDialog(t('msg.layerLockedEdit'));
       return;
     }
-    const edited = await showLayerDialog(layer);
+    const edited = await showLayerDialog(layer, { mode: 'edit' });
     if (!edited) return;
     await this.run('history.editLayer', () => {
       this.options.document.execute(
@@ -180,19 +239,44 @@ export class LayerController {
     });
   }
 
+  /**
+   * レイヤー削除。この高さの節点と関連要素があれば「要素も削除」「要素は残す」を選ばせ、
+   * 残す場合はどの階からも見えない要素が生まれることを明示する。
+   */
   private async remove(): Promise<void> {
     this.options.cancelOperation();
-    const layer = this.options.document.shownLayer;
+    const { document: model } = this.options;
+    const layer = model.shownLayer;
     if (!layer) return;
     if (layer.locked) {
-      alert(t('msg.layerLockedDelete'));
+      await showMessageDialog(t('msg.layerLockedDelete'));
       return;
     }
-    const count = this.options.document.allDataList.filter((data) => data.existsOn(layer)).length;
-    if (!confirm(t('msg.confirmDeleteLayer', { name: layer.name, count }))) return;
+    const related = model.dataOnLayerElevation(layer);
+    let choice: LayerDeleteChoice | null = 'keepElements';
+    if (related.length === 0) {
+      if (!(await showConfirmDialog(t('msg.confirmDeleteEmptyLayer', { name: layer.name }), { danger: true }))) return;
+    } else {
+      choice = await showChoiceDialog<LayerDeleteChoice>(
+        t('msg.confirmDeleteLayer', { name: layer.name, count: related.length }),
+        [
+          { label: t('layer.deleteKeepElements'), value: 'keepElements' },
+          { label: t('layer.deleteWithElements'), value: 'withElements', primary: true, danger: true },
+        ],
+        { title: t('title.removeLayer') },
+      );
+      if (!choice) return;
+      if (choice === 'withElements' && related.some((data) => model.isDataLocked(data))) {
+        await showMessageDialog(t('msg.layerDeleteLockedElements'), { level: 'error' });
+        return;
+      }
+    }
     await this.run('history.removeLayer', () => {
-      this.options.document.execute(
-        new UpdateLayersCommand('レイヤー削除', (document) => void document.removeLayer(layer)),
+      model.execute(
+        new UpdateLayersCommand('レイヤー削除', (document) => {
+          if (choice === 'withElements') document.removeMany(related);
+          document.removeLayer(layer);
+        }),
       );
     });
   }
@@ -200,11 +284,11 @@ export class LayerController {
   private async duplicate(): Promise<void> {
     const source = this.options.document.shownLayer;
     if (!source) return;
-    const suggestion = new Layer(this.suggestAdjacentZ(source, 1), `${source.name} copy`, {
+    const suggestion = new Layer(this.suggestDuplicateZ(source), `${source.name} copy`, {
       visible: source.visible,
       locked: source.locked,
     });
-    const target = await showLayerDialog(suggestion);
+    const target = await showLayerDialog(suggestion, { mode: 'add', title: t('dialog.layerDuplicate') });
     if (!target) return;
     await this.run('history.duplicateLayer', () => {
       this.options.document.execute(
@@ -235,11 +319,11 @@ export class LayerController {
     const index = this.options.document.layers.indexOf(source);
     const target = this.options.document.layers[index + direction];
     if (!target) {
-      alert(t('msg.noAdjacentLayer'));
+      await showMessageDialog(t('msg.noAdjacentLayer'));
       return;
     }
     if (target.locked) {
-      alert(t('msg.targetLayerLocked'));
+      await showMessageDialog(t('msg.targetLayerLocked'));
       return;
     }
     await this.run('history.copyLayerElements', () => {
@@ -294,7 +378,9 @@ export class LayerController {
       this.render();
       this.options.cadView.renderElements();
     } catch (error) {
-      alert(t('msg.layerOperationFailed', { message: (error as Error).message }));
+      await showMessageDialog(t('msg.layerOperationFailed', { message: (error as Error).message }), {
+        level: 'error',
+      });
     }
   }
 
@@ -317,7 +403,12 @@ export class LayerController {
       const layer = this.options.document.layers[index];
       if (!layer) return;
       const label = item.querySelector<HTMLElement>('.layer-label');
-      if (label) label.textContent = formatLayerLabel(layer);
+      if (label) {
+        label.textContent = layer.name;
+        label.title = formatLayerLabel(layer);
+      }
+      const height = item.querySelector<HTMLElement>('.layer-height');
+      if (height) height.textContent = formatLayerHeight(layer);
       const visibility = item.querySelector<HTMLButtonElement>('[data-action="visibility"]');
       if (visibility) {
         visibility.textContent = layer.visible ? '◉' : '○';
@@ -343,13 +434,32 @@ export class LayerController {
     return this.options.document.layers.find((layer) => layer.id === id) ?? null;
   }
 
-  private suggestAdjacentZ(source: Layer, direction: -1 | 1): number {
+  /** 直前の階高（最上階と直下階の差）。レイヤーが1つ以下なら既定値。 */
+  private typicalStoryHeight(): number {
     const layers = this.options.document.layers;
-    const index = layers.indexOf(source);
-    const neighbor = layers[index + direction];
-    const other = neighbor ?? layers[index - direction];
-    const height = other ? Math.abs(other.posZ - source.posZ) : 3000;
-    return source.posZ + direction * (height || 3000);
+    if (layers.length < 2) return DEFAULT_STORY_HEIGHT;
+    const height = layers[layers.length - 1].posZ - layers[layers.length - 2].posZ;
+    return height > Z_TOLERANCE ? height : DEFAULT_STORY_HEIGHT;
+  }
+
+  /** 「3F」のように、階数の次の番号から名前を提案する。 */
+  private nextLayerName(): string {
+    const used = new Set(this.options.document.layers.map((layer) => layer.name));
+    let index = this.options.document.layers.length + 1;
+    while (used.has(`${index}F`)) index++;
+    return `${index}F`;
+  }
+
+  /** 複製先の既定高さ。既存レイヤーと重複しない高さ（最上階 + 階高）を提案する。 */
+  private suggestDuplicateZ(source: Layer): number {
+    const layers = this.options.document.layers;
+    const height = this.typicalStoryHeight();
+    let z = source.posZ + height;
+    const occupied = (value: number): boolean => layers.some((layer) => Math.abs(layer.posZ - value) <= Z_TOLERANCE);
+    const top = layers[layers.length - 1]?.posZ ?? source.posZ;
+    if (occupied(z)) z = top + height;
+    while (occupied(z)) z += height;
+    return z;
   }
 }
 
@@ -361,4 +471,8 @@ function setActionLabel(button: HTMLButtonElement, label: string): void {
 /** data層のLayerへ表示責務を戻さないためのUI formatter。 */
 export function formatLayerLabel(layer: Layer): string {
   return `${layer.name} : ${layer.posZ}`;
+}
+
+export function formatLayerHeight(layer: Layer): string {
+  return `${layer.posZ}`;
 }

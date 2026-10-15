@@ -8,12 +8,13 @@ import type { Document } from '../data/Document';
 import type { DocumentData } from '../data/DocumentData';
 import { repeatedOffsetTransforms } from '../data/ElementCopy';
 import { Node } from '../data/Node';
-import { findOrphanNodes } from '../data/NodeMerge';
+import { findNodesOrphanedBy, findOrphanNodes } from '../data/NodeMerge';
 import { kindLabel, t } from '../i18n';
 import type { SelectionFilter, SelectionKind } from '../selection/SelectionFilter';
 import type { CadView } from '../ui/CadView';
 import { showArrayCopyDialog, type ArrayCopyInput } from '../ui/dialogs/ArrayCopyDialog';
 import { showMergeNodesDialog } from '../ui/dialogs/MergeNodesDialog';
+import { showConfirmDialog, showMessageDialog } from '../ui/dialogs/MessageDialog';
 import type { TrackChange } from './PropertyEditController';
 
 export interface EditControllerOptions {
@@ -25,8 +26,22 @@ export interface EditControllerOptions {
   refreshDocument: (fit: boolean) => void;
   /** 操作結果の短い通知（ステータスバーなど）。 */
   notify: (message: () => string) => void;
+  /** 利用者設定。省略時は確認あり・孤立節点も削除。 */
+  settings?: EditSettings;
   root?: globalThis.Document;
 }
+
+export interface EditSettings {
+  /** 削除前に確認ダイアログを出すか。Undo があるため省略できる。 */
+  confirmDelete(): boolean;
+  /** 削除で孤立する節点も同時に削除するか。 */
+  removeOrphansOnDelete(): boolean;
+}
+
+const DEFAULT_EDIT_SETTINGS: EditSettings = {
+  confirmDelete: () => true,
+  removeOrphansOnDelete: () => true,
+};
 
 /** 選択操作と、選択要素に対する編集（削除・配列複写・モデル整理）をまとめる。 */
 export class EditController {
@@ -82,7 +97,7 @@ export class EditController {
   }
 
   async deleteSelection(): Promise<void> {
-    const { document: doc, trackChange, cancelOperation, refreshDocument } = this.options;
+    const { document: doc, trackChange, cancelOperation, refreshDocument, notify } = this.options;
     cancelOperation();
     const selected = doc.allDataList.filter((data) => data.select);
     if (selected.length === 0) return;
@@ -98,16 +113,30 @@ export class EditController {
           ),
       );
     if (blocked.length > 0) {
-      alert(t('msg.deleteBlocked', { details: blocked.join('\n') }));
+      await showMessageDialog(t('msg.deleteBlocked', { details: blocked.join('\n') }), { level: 'error' });
       return;
     }
-    if (!confirm(t('msg.confirmDelete', { count: selected.length }))) return;
+    const settings = this.options.settings ?? DEFAULT_EDIT_SETTINGS;
+    // 床を消しても頂点節点だけが残る、といった手戻りを防ぐため、孤立する節点も同じ Command で削除する。
+    const orphans = settings.removeOrphansOnDelete() ? findNodesOrphanedBy(doc, selected) : [];
+    if (settings.confirmDelete()) {
+      const question =
+        t('msg.confirmDelete', { count: selected.length }) +
+        (orphans.length > 0 ? '\n' + t('msg.confirmDeleteOrphans', { count: orphans.length }) : '');
+      if (!(await showConfirmDialog(question, { okLabel: t('delete'), danger: true }))) return;
+    }
 
     try {
-      await trackChange('history.deleteSelection', () => doc.execute(new DeleteSelectionCommand(selected)));
+      const removals = [...selected, ...orphans];
+      await trackChange('history.deleteSelection', () => doc.execute(new DeleteSelectionCommand(removals)));
       refreshDocument(false);
+      notify(() =>
+        orphans.length > 0
+          ? t('msg.deletedWithOrphans', { count: selected.length, orphans: orphans.length })
+          : t('msg.deleted', { count: selected.length }),
+      );
     } catch (error) {
-      alert(t('msg.deleteFailed', { message: (error as Error).message }));
+      await showMessageDialog(t('msg.deleteFailed', { message: (error as Error).message }), { level: 'error' });
     }
   }
 
@@ -117,7 +146,7 @@ export class EditController {
     cancelOperation();
     const selected = doc.allDataList.filter((data) => data.select);
     if (selected.length === 0) {
-      alert(t('msg.nothingSelected'));
+      notify(() => t('msg.nothingSelected'));
       return;
     }
     const input = await showArrayCopyDialog(this.lastArrayCopy);
@@ -142,7 +171,7 @@ export class EditController {
           : t('msg.copyNothing'),
       );
     } catch (error) {
-      alert(t('msg.copyFailed', { message: (error as Error).message }));
+      await showMessageDialog(t('msg.copyFailed', { message: (error as Error).message }), { level: 'error' });
     }
   }
 
@@ -161,7 +190,7 @@ export class EditController {
       const removed = plan.redundantElements.length;
       notify(() => (merged > 0 ? t('msg.mergeResult', { nodes: merged, elements: removed }) : t('msg.mergeNothing')));
     } catch (error) {
-      alert(t('msg.mergeFailed', { message: (error as Error).message }));
+      await showMessageDialog(t('msg.mergeFailed', { message: (error as Error).message }), { level: 'error' });
     }
   }
 
@@ -174,14 +203,16 @@ export class EditController {
       notify(() => t('msg.noOrphans'));
       return;
     }
-    if (!confirm(t('msg.confirmRemoveOrphans', { count }))) return;
+    if (!(await showConfirmDialog(t('msg.confirmRemoveOrphans', { count }), { okLabel: t('delete'), danger: true }))) {
+      return;
+    }
 
     try {
       const removed = await trackChange('history.removeOrphanNodes', () => doc.execute(new RemoveOrphanNodesCommand()));
       refreshDocument(false);
       notify(() => t('msg.orphansRemoved', { count: removed.length }));
     } catch (error) {
-      alert(t('msg.deleteFailed', { message: (error as Error).message }));
+      await showMessageDialog(t('msg.deleteFailed', { message: (error as Error).message }), { level: 'error' });
     }
   }
 

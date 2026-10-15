@@ -2,7 +2,9 @@ import { cloneWithNodes } from './DataClone';
 import { stateValuesEqual } from './DataState';
 import type { Document } from './Document';
 import type { DocumentData } from './DocumentData';
+import { Member } from './Member';
 import { Node } from './Node';
+import { Plane } from './Plane';
 import { Point3D } from '../math/Point3D';
 
 /** 複製先に既存Nodeがあるとみなす座標許容差（mm）。 */
@@ -30,7 +32,9 @@ export function repeatedOffsetTransforms(offset: Point3D, count: number): Array<
  *
  * - 複製先座標に既存Node（または先行する複製で作ったNode）があれば再利用する。
  * - 同一座標の別Node（零長ばねなど）は1対1で対応させ、1つのNodeへ潰さない。
- * - 同じ種別・同じ参照Node・同じ属性の要素が既にあれば追加しない。
+ * - 梁・柱・面材は、同じ種別で同じ節点を結ぶ要素が既にあれば断面が違っても追加しない
+ *   （検証の「同じ端点を結ぶ同種部材」警告と同じ基準）。
+ * - トラス・ばね・支点・拘束は並列配置が正当なため、属性まで同じ場合だけ追加しない。
  */
 export function planElementCopies(document: Document, request: ElementCopyRequest): DocumentData[] {
   const elements = uniqueInOrder(request.elements.filter((element) => !(element instanceof Node)));
@@ -107,6 +111,11 @@ class NodePositionIndex {
   }
 }
 
+/** 節点の組だけで同一性が決まる CAD 幾何要素（梁・柱・床・壁・耐力壁）。 */
+function isGeometryElement(data: DocumentData): boolean {
+  return (data instanceof Member && (data.kind === 'beam' || data.kind === 'pillar')) || data instanceof Plane;
+}
+
 function cellOf(value: number): number {
   return Math.floor(value / (COPY_NODE_TOLERANCE * 2));
 }
@@ -137,12 +146,16 @@ class ElementEquivalenceIndex {
   hasEquivalent(candidate: DocumentData): boolean {
     const bucket = this.buckets.get(this.keyOf(candidate));
     if (!bucket) return false;
+    if (isGeometryElement(candidate)) return true;
     const state = candidate.captureState();
     return bucket.some((data) => stateValuesEqual(data.captureState(), state));
   }
 
   private keyOf(data: DocumentData): string {
-    return `${data.kind}:${data.referencedNodes.map((node) => this.idOf(node)).join(',')}`;
+    const ids = data.referencedNodes.map((node) => this.idOf(node));
+    // 幾何要素は端点の向きや頂点の開始位置が違っても同じ要素とみなす。
+    if (isGeometryElement(data)) ids.sort((a, b) => a - b);
+    return `${data.kind}:${ids.join(',')}`;
   }
 
   private idOf(node: Node): number {

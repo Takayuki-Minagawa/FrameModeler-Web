@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../src/ui/dialogs/MessageDialog', () => ({
+  showMessageDialog: vi.fn(async () => undefined),
+  showConfirmDialog: vi.fn(async () => true),
+  showChoiceDialog: vi.fn(async () => null),
+}));
+
 import { Document } from '../src/data/Document';
+import { showMessageDialog } from '../src/ui/dialogs/MessageDialog';
 import { Floor, FloorDirection } from '../src/data/Floor';
 import { Node } from '../src/data/Node';
 import { Point3D } from '../src/math/Point3D';
@@ -93,7 +101,8 @@ describe('drawing handler atomic commits', () => {
   });
 
   it('reports a degenerate floor without leaving planned nodes behind', () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const dialog = vi.mocked(showMessageDialog);
+    dialog.mockClear();
     const handler = new AddFloorHandler();
     const cadView = view();
 
@@ -101,8 +110,8 @@ describe('drawing handler atomic commits', () => {
     handler.onClick(cadView, new Point3D(1000, 0, 0), event);
 
     expect(doc.allDataList).toHaveLength(0);
-    expect(alertSpy).toHaveBeenCalledOnce();
-    alertSpy.mockRestore();
+    expect(dialog).toHaveBeenCalledOnce();
+    expect(dialog.mock.calls[0][1]).toEqual({ level: 'error' });
   });
 
   it('confirms a direct floor-direction mutation through Document.update', () => {
